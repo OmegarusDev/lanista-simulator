@@ -30,16 +30,29 @@ export const space = {
   xxl: 32,
 } as const;
 
-/** Palatino type scale (px) — use with font stack in ui.ts */
+/**
+ * Palatino type scale (design px) — use with font stack in ui.ts.
+ * Hierarchy: banner > display > title > label > body > meta > eyebrow.
+ * Floors are phone-readable at design≈CSS (scale≈1); avoid one-off sizes.
+ */
 export const typeScale = {
-  eyebrow: 10,
-  meta: 11,
-  body: 13,
-  label: 14,
-  title: 16,
-  display: 22,
-  banner: 34,
+  eyebrow: 12,
+  meta: 13,
+  body: 15,
+  label: 16,
+  title: 18,
+  display: 26,
+  banner: 38,
 } as const;
+
+/** Shrink floors — fitted labels / captions must not go below these. */
+export const typeMin = {
+  fit: 12,
+  caption: 12,
+} as const;
+
+/** Comfortable thumb target in design px (mobile / narrow). */
+export const touchTarget = 44;
 
 export const fontStack = '"Palatino Linotype", Palatino, Georgia, serif';
 
@@ -92,17 +105,17 @@ export const zBand = {
 
 /** Fight chrome geometry defaults (landscape reference). Prefer fightStageLayout(). */
 export const fightLayout = {
-  topBandH: 44,
+  topBandH: 48,
   /** Team eyebrow + chip row */
-  rosterLabelH: 12,
-  rosterH: 36,
-  bottomCtrlH: 32,
-  bottomPad: 6,
-  inspectW: 224,
-  inspectMaxH: 300,
+  rosterLabelH: 14,
+  rosterH: 40,
+  bottomCtrlH: 40,
+  bottomPad: 8,
+  inspectW: 240,
+  inspectMaxH: 320,
   inspectPad: 12,
   chipGap: 6,
-  hitRadius: 22,
+  hitRadius: 26,
 } as const;
 
 export function teamAccent(team: 0 | 1): string {

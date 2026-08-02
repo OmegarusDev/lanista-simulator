@@ -22,6 +22,8 @@ describe('fightStageLayout', () => {
     );
     expect(stage.rosterY).toBeLessThan(stage.bottomCtrlY);
     expect(stage.bottomCtrlY + stage.bottomCtrlH).toBeLessThanOrEqual(844);
+    expect(stage.bottomCtrlH).toBeGreaterThanOrEqual(44);
+    expect(stage.rosterH).toBeGreaterThanOrEqual(44);
   });
 
   it('zooms mobile portrait so the world is wider than the stage', () => {
@@ -96,6 +98,10 @@ describe('sandboxLayout', () => {
     expect(L.leftPanel.y).toBeLessThan(L.rightPanel.y);
     expect(L.leftPanel.w).toBeCloseTo(L.rightPanel.w);
     expect(L.presetRects.length).toBe(4);
+    expect(L.titleBtn.h).toBeGreaterThanOrEqual(44);
+    for (const r of L.presetRects) {
+      expect(r.h).toBeGreaterThanOrEqual(44);
+    }
   });
 
   it('keeps side-by-side panels in wide landscape', () => {

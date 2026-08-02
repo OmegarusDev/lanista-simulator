@@ -5,7 +5,7 @@ import {
   orientationOf,
   type Orientation,
 } from '../shell/canvas';
-import { space } from './theme';
+import { space, touchTarget } from './theme';
 import type { Rect } from './ui';
 
 export type { Orientation };
@@ -126,14 +126,14 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
   const orientation = orientationOf(dw, dh);
   const portrait = orientation === 'portrait';
 
-  // Slim chrome a notch so the arena band (and landscape overlays) run taller.
-  const topBandH = portrait ? 46 : 44;
-  const rosterLabelH = 12;
-  const rosterH = portrait ? 40 : 36;
+  // Readable chrome + ~44px touch rows; arena still claims the middle band.
+  const topBandH = portrait ? 52 : 48;
+  const rosterLabelH = 14;
+  const rosterH = portrait ? touchTarget : 40;
   const bottomRows = 1 as const;
-  const rowH = portrait ? 38 : 32;
+  const rowH = portrait ? touchTarget : 40;
   const bottomCtrlH = rowH;
-  const bottomPad = portrait ? 8 : 6;
+  const bottomPad = portrait ? 10 : 8;
   const chipGap = 6;
   const chromeBottomH =
     rosterLabelH + rosterH + space.sm + bottomCtrlH + bottomPad;
@@ -156,11 +156,11 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
     world = fitWorldInRect({ x: 0, y: 0, w: dw, h: dh }, zoom);
   }
 
-  const inspectPad = portrait ? 12 : 12;
-  const inspectW = Math.min(224, dw - inspectPad * 2);
+  const inspectPad = 12;
+  const inspectW = Math.min(240, dw - inspectPad * 2);
   const inspectMaxH = portrait
-    ? Math.min(280, Math.max(160, rosterBandTop - topBandH - space.md))
-    : 300;
+    ? Math.min(300, Math.max(180, rosterBandTop - topBandH - space.md))
+    : 320;
 
   return {
     orientation,
@@ -172,7 +172,7 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
     bottomCtrlH,
     bottomPad,
     chipGap,
-    hitRadius: 22,
+    hitRadius: 26,
     inspectW,
     inspectMaxH,
     inspectPad,
@@ -233,9 +233,9 @@ export function titleLayout(w?: number, h?: number): TitleLayout {
   const portrait = orientation === 'portrait';
   const { bw, bh } = primaryButtonSize(dw, dh);
   const cx = dw / 2;
-  const brandY = portrait ? Math.min(dh * 0.2, 160) : 120;
-  const taglineY = brandY + (portrait ? 36 : 32);
-  let y = taglineY + (portrait ? 48 : 68);
+  const brandY = portrait ? Math.min(dh * 0.2, 168) : 128;
+  const taglineY = brandY + (portrait ? 40 : 36);
+  let y = taglineY + (portrait ? 52 : 72);
   const gap = space.md + (portrait ? 4 : 0);
   const buttons: Rect[] = [];
   for (let i = 0; i < 3; i++) {
@@ -269,18 +269,18 @@ export function flowHeaderLayout(w?: number, h?: number): FlowHeaderLayout {
   if (portrait) {
     return {
       pad,
-      titleY: 32,
-      metaY: 52,
-      rightTitleY: 74,
-      rightMetaY: 92,
+      titleY: 36,
+      metaY: 58,
+      rightTitleY: 82,
+      rightMetaY: 102,
     };
   }
   return {
     pad,
-    titleY: 36,
-    metaY: 58,
-    rightTitleY: 36,
-    rightMetaY: 58,
+    titleY: 40,
+    metaY: 64,
+    rightTitleY: 40,
+    rightMetaY: 64,
   };
 }
 
@@ -357,20 +357,20 @@ export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxL
   const stacked = orientation === 'portrait' || dw < 780;
   const pad = shellPad(dw);
 
-  const titleBtn: Rect = { x: pad, y: pad, w: 40, h: 36 };
-  const brandY = stacked ? 28 : 34;
-  const subtitleY = brandY + 20;
-  const historicalLabelY = subtitleY + 18;
+  const titleBtn: Rect = { x: pad, y: pad, w: touchTarget, h: touchTarget };
+  const brandY = stacked ? 32 : 38;
+  const subtitleY = brandY + 22;
+  const historicalLabelY = subtitleY + 20;
 
   // Two-line full armatura names (e.g. "Murmillo" / "vs Thraex") need taller cells.
-  const presetH = 40;
-  const presetGap = 6;
+  const presetH = touchTarget;
+  const presetGap = 8;
   const presetCols = stacked ? 2 : Math.min(3, Math.max(1, presetCount));
   const presetCellW = (dw - pad * 2 - presetGap * (presetCols - 1)) / presetCols;
   const presetRows = Math.ceil(presetCount / presetCols);
   const presetArea: Rect = {
     x: pad,
-    y: historicalLabelY + 8,
+    y: historicalLabelY + 10,
     w: dw - pad * 2,
     h: presetRows * presetH + Math.max(0, presetRows - 1) * presetGap,
   };
@@ -379,48 +379,49 @@ export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxL
   const presetsBottom =
     presetRects.length > 0
       ? Math.max(...presetRects.map((r) => r.y + r.h))
-      : historicalLabelY + 36;
+      : historicalLabelY + 40;
 
   let leftPanel: Rect;
   let rightPanel: Rect;
   let center: SandboxLayout['center'];
 
   if (stacked) {
-    const ctrlY = presetsBottom + 16;
+    const ctrlY = presetsBottom + 18;
     const midX = dw / 2;
+    const sizeH = 40;
     center = {
-      size1: { x: midX - 78, y: ctrlY, w: 70, h: 32 },
-      size2: { x: midX + 8, y: ctrlY, w: 70, h: 32 },
-      vsY: ctrlY + 28,
-      seedY: ctrlY + 44,
-      reroll: { x: midX - 50, y: ctrlY + 52, w: 100, h: 28 },
-      fight: { x: midX - 90, y: ctrlY + 88, w: 180, h: 56 },
+      size1: { x: midX - 86, y: ctrlY, w: 78, h: sizeH },
+      size2: { x: midX + 8, y: ctrlY, w: 78, h: sizeH },
+      vsY: ctrlY + 34,
+      seedY: ctrlY + 52,
+      reroll: { x: midX - 56, y: ctrlY + 62, w: 112, h: 36 },
+      fight: { x: midX - 100, y: ctrlY + 108, w: 200, h: 56 },
     };
-    const panelY = ctrlY + 156;
-    const panelH = Math.max(200, (dh - panelY - 28 - 8) / 2);
+    const panelY = ctrlY + 180;
+    const panelH = Math.max(200, (dh - panelY - 32 - 8) / 2);
     leftPanel = { x: pad, y: panelY, w: dw - pad * 2, h: panelH };
     rightPanel = {
       x: pad,
       y: panelY + panelH + 8,
       w: dw - pad * 2,
-      h: Math.max(180, dh - (panelY + panelH + 8) - 28),
+      h: Math.max(180, dh - (panelY + panelH + 8) - 32),
     };
   } else {
-    const panelY = presetsBottom + 14;
+    const panelY = presetsBottom + 16;
     const sideW = Math.min(350, (dw - 200) / 2);
     const leftX = pad;
     const rightX = dw - pad - sideW;
-    const panelH = dh - panelY - 36;
+    const panelH = dh - panelY - 40;
     leftPanel = { x: leftX, y: panelY, w: sideW, h: panelH };
     rightPanel = { x: rightX, y: panelY, w: sideW, h: panelH };
     const midX = dw / 2;
     center = {
-      size1: { x: midX - 78, y: panelY + 32, w: 70, h: 30 },
-      size2: { x: midX + 8, y: panelY + 32, w: 70, h: 30 },
+      size1: { x: midX - 86, y: panelY + 32, w: 78, h: 40 },
+      size2: { x: midX + 8, y: panelY + 32, w: 78, h: 40 },
       vsY: panelY + 112,
-      seedY: panelY + 150,
-      reroll: { x: midX - 50, y: panelY + 160, w: 100, h: 28 },
-      fight: { x: midX - 90, y: panelY + 200, w: 180, h: 56 },
+      seedY: panelY + 152,
+      reroll: { x: midX - 56, y: panelY + 164, w: 112, h: 36 },
+      fight: { x: midX - 100, y: panelY + 212, w: 200, h: 56 },
     };
   }
 

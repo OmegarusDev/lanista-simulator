@@ -7,6 +7,7 @@ import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
 import { drawArmaturaPreview } from '../../view/gladiatorDraw';
 import { sandboxLayout } from '../../view/layout';
+import { typeMin, typeScale } from '../../view/theme';
 import { button, buttonChrome, label, labelFitted, panel, type Rect } from '../../view/ui';
 
 export interface SandboxConfig {
@@ -89,25 +90,25 @@ export class SandboxScene {
     ctx.fillRect(0, 0, w, h);
 
     label(ctx, 'LANISTA', w / 2, L.brandY, {
-      size: L.stacked ? 26 : 32,
+      size: L.stacked ? typeScale.display : 32,
       align: 'center',
       color: colors.parchment,
     });
     label(ctx, 'Instant Match', w / 2, L.subtitleY, {
-      size: 13,
+      size: typeScale.body,
       align: 'center',
       color: colors.muted,
     });
 
     let action: SandboxAction = { type: 'NONE' };
 
-    if (button(ctx, L.titleBtn, '←', input.pointer, { size: 20 })) {
+    if (button(ctx, L.titleBtn, '←', input.pointer, { size: typeScale.title })) {
       this.synth.play('ui');
       action = { type: 'BACK' };
     }
 
     label(ctx, 'Historical', w / 2, L.historicalLabelY, {
-      size: 11,
+      size: typeScale.meta,
       align: 'center',
       color: colors.muted,
     });
@@ -124,10 +125,10 @@ export class SandboxScene {
         color: colors.buttonText,
         yOffset: pressed ? 1 : 0,
         // Prefer filling the preset cell; width-bound names still shrink cleanly.
-        padX: 4,
-        padY: 2,
-        min: 10,
-        max: 22,
+        padX: 6,
+        padY: 4,
+        min: typeMin.fit,
+        max: typeScale.title,
       });
       if (clicked) {
         const config = this.configFromPreset(p.id);
@@ -143,13 +144,13 @@ export class SandboxScene {
     panel(ctx, L.leftPanel);
     panel(ctx, L.rightPanel);
 
-    label(ctx, 'BLUE', L.leftPanel.x + L.leftPanel.w / 2, L.leftPanel.y + 22, {
-      size: 16,
+    label(ctx, 'BLUE', L.leftPanel.x + L.leftPanel.w / 2, L.leftPanel.y + 24, {
+      size: typeScale.title,
       align: 'center',
       color: colors.ally,
     });
-    label(ctx, 'RED', L.rightPanel.x + L.rightPanel.w / 2, L.rightPanel.y + 22, {
-      size: 16,
+    label(ctx, 'RED', L.rightPanel.x + L.rightPanel.w / 2, L.rightPanel.y + 24, {
+      size: typeScale.title,
       align: 'center',
       color: colors.foe,
     });
@@ -166,14 +167,14 @@ export class SandboxScene {
 
     if (!L.stacked) {
       label(ctx, 'VS', w / 2, c.vsY, {
-        size: 42,
+        size: typeScale.banner,
         align: 'center',
         color: colors.parchment,
       });
     }
 
     label(ctx, `Seed ${this.seed}`, w / 2, c.seedY, {
-      size: 12,
+      size: typeScale.meta,
       align: 'center',
       color: colors.muted,
     });
@@ -181,7 +182,7 @@ export class SandboxScene {
       this.seed = (Math.random() * 0xffffffff) >>> 0;
       this.synth.play('ui');
     }
-    if (button(ctx, c.fight, 'Fight', input.pointer, { size: 20 })) {
+    if (button(ctx, c.fight, 'Fight', input.pointer, { size: typeScale.title })) {
       this.synth.play('ui');
       action = { type: 'START', config: this.makeConfig() };
     }
@@ -190,7 +191,7 @@ export class SandboxScene {
     this.drawTeamSide(ctx, input, 1, L.rightPanel.x, L.rightPanel.y, L.rightPanel.w, L.rightPanel.h);
 
     label(ctx, 'Space/Enter fight · R reroll seed', w / 2, L.footerY, {
-      size: 11,
+      size: typeScale.meta,
       align: 'center',
       color: colors.muted,
     });
@@ -234,11 +235,11 @@ export class SandboxScene {
     const facing = team === 0 ? 0 : Math.PI;
     const narrow = w < 300;
 
-    const slotY = y + 36;
+    const slotY = y + 40;
     if (this.teamSize === 2) {
       const slotW = Math.min(148, (w - 32 - 8) / 2);
       for (let s = 0; s < 2; s++) {
-        const r: Rect = { x: x + 16 + s * (slotW + 8), y: slotY, w: slotW, h: 54 };
+        const r: Rect = { x: x + 16 + s * (slotW + 8), y: slotY, w: slotW, h: 56 };
         const pick = slots[s]!;
         const active = edit === s;
         const { pressed, clicked } = buttonChrome(ctx, r, input.pointer, {
@@ -248,7 +249,7 @@ export class SandboxScene {
         const gy = r.y + 22 + (pressed ? 1 : 0);
         if (pick === 'RANDOM') {
           label(ctx, '?', r.x + 28, gy + 6, {
-            size: 22,
+            size: typeScale.display,
             align: 'center',
             color: colors.buttonText,
           });
@@ -260,7 +261,7 @@ export class SandboxScene {
           });
         }
         label(ctx, `Fighter ${s + 1}`, r.x + r.w / 2 + (narrow ? 0 : 20), r.y + 18 + (pressed ? 1 : 0), {
-          size: 11,
+          size: typeScale.meta,
           align: 'center',
           color: colors.muted,
         });
@@ -268,8 +269,12 @@ export class SandboxScene {
           ctx,
           pick === 'RANDOM' ? 'Random' : ARMATURAE[pick].name,
           r.x + r.w / 2 + (narrow ? 0 : 20),
-          r.y + 36 + (pressed ? 1 : 0),
-          { size: narrow ? 11 : 13, align: 'center', color: colors.buttonText },
+          r.y + 38 + (pressed ? 1 : 0),
+          {
+            size: narrow ? typeScale.meta : typeScale.body,
+            align: 'center',
+            color: colors.buttonText,
+          },
         );
         if (clicked) {
           if (team === 0) this.editSlot0 = s;
@@ -280,11 +285,11 @@ export class SandboxScene {
       }
     } else {
       const pick = slots[0]!;
-      const r: Rect = { x: x + 16, y: slotY, w: w - 32, h: 54 };
+      const r: Rect = { x: x + 16, y: slotY, w: w - 32, h: 56 };
       buttonChrome(ctx, r, input.pointer, { active: true, accent });
       if (pick === 'RANDOM') {
         label(ctx, '?', r.x + 40, r.y + 34, {
-          size: 24,
+          size: typeScale.display,
           align: 'center',
           color: colors.buttonText,
         });
@@ -296,26 +301,26 @@ export class SandboxScene {
         });
       }
       label(ctx, pick === 'RANDOM' ? 'Random' : ARMATURAE[pick].name, r.x + r.w / 2 + 20, r.y + 34, {
-        size: 16,
+        size: typeScale.title,
         align: 'center',
         color: colors.buttonText,
       });
       edit = 0;
     }
 
-    label(ctx, 'Armatura', x + w / 2, y + 110, {
-      size: 12,
+    label(ctx, 'Armatura', x + w / 2, y + 116, {
+      size: typeScale.meta,
       align: 'center',
       color: colors.muted,
     });
 
     const current = slots[edit]!;
     const gridX = x + 14;
-    const gridY = y + 122;
+    const gridY = y + 128;
     const cols = narrow ? 2 : 3;
     const gap = 6;
     const cellW = (w - 28 - gap * (cols - 1)) / cols;
-    const cellH = Math.min(78, Math.max(64, (panelH - 130) / Math.ceil(PICK_OPTS.length / cols) - gap));
+    const cellH = Math.min(84, Math.max(68, (panelH - 140) / Math.ceil(PICK_OPTS.length / cols) - gap));
 
     PICK_OPTS.forEach((id, i) => {
       const col = i % cols;
@@ -334,12 +339,12 @@ export class SandboxScene {
       const cy = r.y + (pressed ? 1 : 0);
       if (id === 'RANDOM') {
         label(ctx, '?', r.x + r.w / 2, cy + cellH * 0.42, {
-          size: 26,
+          size: typeScale.display,
           align: 'center',
           color: colors.buttonText,
         });
         label(ctx, 'Random', r.x + r.w / 2, cy + cellH * 0.78, {
-          size: 12,
+          size: typeScale.meta,
           align: 'center',
           color: colors.muted,
         });
@@ -350,7 +355,7 @@ export class SandboxScene {
           scale: 0.7,
         });
         label(ctx, ARMATURAE[id].name, r.x + r.w / 2, cy + cellH * 0.8, {
-          size: 11,
+          size: typeScale.meta,
           align: 'center',
           color: colors.buttonText,
         });

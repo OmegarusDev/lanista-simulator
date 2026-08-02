@@ -37,12 +37,12 @@ export class TitleScene {
     ctx.fillRect(0, 0, w, h);
 
     label(ctx, 'LANISTA', w / 2, layout.brandY, {
-      size: layout.orientation === 'portrait' || w < 520 ? 40 : 48,
+      size: layout.orientation === 'portrait' || w < 520 ? 44 : 52,
       align: 'center',
       color: colors.parchment,
     });
     label(ctx, 'A season of sand and steel', w / 2, layout.taglineY, {
-      size: typeScale.body,
+      size: typeScale.label,
       align: 'center',
       color: colors.muted,
     });
@@ -55,7 +55,7 @@ export class TitleScene {
     for (let i = 0; i < 3; i++) {
       const r = layout.buttons[i]!;
       const disabled = types[i] === 'CONTINUE' && !canContinue;
-      if (button(ctx, r, labels[i]!, input.pointer, { disabled })) {
+      if (button(ctx, r, labels[i]!, input.pointer, { disabled, size: typeScale.title })) {
         this.synth.play('ui');
         action = { type: types[i]! };
       }
@@ -67,7 +67,7 @@ export class TitleScene {
       w / 2,
       layout.footerY,
       {
-        size: typeScale.meta,
+        size: typeScale.body,
         align: 'center',
         color: colors.muted,
       },

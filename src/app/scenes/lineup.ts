@@ -8,7 +8,7 @@ import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
 import { isPortrait, shellPad } from '../../view/layout';
 import { button, label, panel, rosterChip } from '../../view/ui';
-import { space, typeScale } from '../../view/theme';
+import { space, touchTarget, typeScale } from '../../view/theme';
 
 export type LineupAction =
   | { type: 'NONE' }
@@ -43,25 +43,27 @@ export class LineupScene {
     ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, w, h);
 
-    label(ctx, 'Lineup', pad, 36, { size: typeScale.display, color: colors.parchment });
-    label(ctx, `${offer.name} · ${offer.teamSize}v${offer.teamSize}`, pad, 58, {
+    label(ctx, 'Lineup', pad, 40, { size: typeScale.display, color: colors.parchment });
+    label(ctx, `${offer.name} · ${offer.teamSize}v${offer.teamSize}`, pad, 64, {
       variant: 'eyebrow',
     });
-    label(ctx, offer.blurb, pad, 78, { size: typeScale.body, color: colors.muted });
+    label(ctx, offer.blurb, pad, 86, { size: typeScale.body, color: colors.muted });
 
     const opp = offer.opponents.map((id) => ARMATURAE[id].name).join(', ');
-    label(ctx, `Opponents: ${opp}`, pad, 98, { size: typeScale.meta, color: colors.muted });
+    label(ctx, `Opponents: ${opp}`, pad, 108, { size: typeScale.meta, color: colors.muted });
 
     // Slot tabs — wrap on narrow widths
-    const slotW = portrait ? Math.min(140, (w - pad * 2 - space.sm) / Math.min(2, offer.teamSize)) : 140;
+    const slotW = portrait ? Math.min(150, (w - pad * 2 - space.sm) / Math.min(2, offer.teamSize)) : 150;
+    const slotH = portrait ? touchTarget : 40;
+    const slotStep = slotH + 8;
     offer.playerSlots.forEach((slot, i) => {
       const col = portrait ? i % 2 : i;
       const row = portrait ? Math.floor(i / 2) : 0;
       const r = {
         x: pad + col * (slotW + space.sm),
-        y: 118 + row * 44,
+        y: 128 + row * slotStep,
         w: slotW,
-        h: 36,
+        h: slotH,
       };
       const filled = this.slots[i];
       const g = filled != null ? state.roster.find((x) => x.id === filled) : null;
@@ -77,8 +79,8 @@ export class LineupScene {
     });
 
     const slotRows = portrait ? Math.ceil(offer.teamSize / 2) : 1;
-    const panelY = 118 + slotRows * 44 + 10;
-    const panelH = Math.max(180, h - panelY - 70);
+    const panelY = 128 + slotRows * slotStep + 12;
+    const panelH = Math.max(180, h - panelY - 78);
     panel(ctx, { x: pad, y: panelY, w: w - pad * 2, h: panelH }, 'Eligible for this slot');
 
     const pool = fightableRoster(state);
@@ -90,13 +92,13 @@ export class LineupScene {
 
     let action: LineupAction = { type: 'NONE' };
 
-    const chipW = portrait ? Math.min(200, w - pad * 2 - 32) : 200;
-    const chipH = 44;
+    const chipW = portrait ? Math.min(210, w - pad * 2 - 32) : 210;
+    const chipH = touchTarget;
     const area = {
       x: pad + 16,
-      y: panelY + 42,
+      y: panelY + 44,
       w: w - pad * 2 - 32,
-      h: panelH - 50,
+      h: panelH - 52,
     };
     const cols = Math.max(1, Math.floor((area.w + space.sm) / (chipW + space.sm)));
     candidates.forEach((g, i) => {
@@ -104,7 +106,7 @@ export class LineupScene {
       const row = Math.floor(i / cols);
       const r = {
         x: area.x + col * (chipW + 20),
-        y: area.y + row * 70,
+        y: area.y + row * 74,
         w: chipW,
         h: chipH,
       };
@@ -137,9 +139,9 @@ export class LineupScene {
     }
 
     const filledCount = this.slots.filter((id) => id != null).length;
-    label(ctx, `Filled ${filledCount} / ${offer.teamSize}`, pad, h - 64, { variant: 'meta' });
+    label(ctx, `Filled ${filledCount} / ${offer.teamSize}`, pad, h - 72, { variant: 'meta' });
 
-    if (button(ctx, { x: pad, y: h - 52, w: 100, h: 36 }, 'Back', input.pointer)) {
+    if (button(ctx, { x: pad, y: h - 56, w: 112, h: 40 }, 'Back', input.pointer)) {
       this.synth.play('ui');
       action = { type: 'BACK' };
     }
@@ -149,10 +151,10 @@ export class LineupScene {
     if (
       button(
         ctx,
-        { x: w - pad - 136, y: h - 52, w: 136, h: 36 },
+        { x: w - pad - 148, y: h - 56, w: 148, h: 40 },
         'Enter Arena',
         input.pointer,
-        { disabled: !ready },
+        { disabled: !ready, size: typeScale.label },
       )
     ) {
       this.synth.play('ui');

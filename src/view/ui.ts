@@ -7,6 +7,7 @@ import {
   stroke,
   surface,
   teamAccent,
+  typeMin,
   typeScale,
 } from './theme';
 
@@ -107,9 +108,9 @@ export function fitFontSize(
   opts?: { min?: number; max?: number; weight?: string; lineGapRatio?: number },
 ): number {
   const n = lines.length;
-  if (n === 0 || maxW <= 0 || maxH <= 0) return opts?.min ?? 8;
-  const min = opts?.min ?? 8;
-  const maxCap = opts?.max ?? 28;
+  if (n === 0 || maxW <= 0 || maxH <= 0) return opts?.min ?? typeMin.fit;
+  const min = opts?.min ?? typeMin.fit;
+  const maxCap = opts?.max ?? typeScale.display;
   const weight = opts?.weight ?? '600';
   const gapRatio = opts?.lineGapRatio ?? 0.18;
 
@@ -281,7 +282,7 @@ export function segmentedControl(
       hairline(ctx, sr.x, r.y + 4, sr.x, r.y + r.h - 4, 'rgba(0,0,0,0.35)');
     }
     ctx.fillStyle = active ? surface.buttonText : surface.muted;
-    ctx.font = `600 ${typeScale.meta}px ${fontStack}`;
+    ctx.font = `600 ${typeScale.label}px ${fontStack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(options[i]!, sr.x + sr.w / 2, sr.y + sr.h / 2);
@@ -331,20 +332,19 @@ export function rosterChip(
 
   const textX = r.x + space.md + 2;
   const midY = r.y + r.h / 2 + (pressed ? 1 : 0);
-  label(ctx, opts.tag, textX, midY - 4, {
+  label(ctx, opts.tag, textX, midY - 5, {
     variant: 'value',
     size: typeScale.body,
     color: opts.muted ? surface.muted : surface.parchment,
   });
-  label(ctx, opts.name, textX, midY + 10, {
+  label(ctx, opts.name, textX, midY + 12, {
     variant: 'meta',
-    size: 9,
     color: surface.muted,
   });
 
-  // Tiny HP fragment on the right
-  const barW = 28;
-  const barH = 4;
+  // HP fragment on the right
+  const barW = Math.min(32, Math.max(22, r.w * 0.22));
+  const barH = 5;
   const bx = r.x + r.w - barW - space.sm;
   const by = midY - 2;
   bar(ctx, bx, by, barW, barH, opts.hpRatio, opts.muted ? surface.muted : colors.hp);
@@ -384,17 +384,17 @@ export function inspectCard(ctx: CanvasRenderingContext2D, r: Rect, opts: Inspec
   const x = r.x + pad + 6;
 
   label(ctx, opts.title, x, y + 2, { variant: 'title' });
-  y += 18;
+  y += 22;
   label(ctx, opts.subtitle, x, y, { variant: 'meta' });
-  y += 14;
-  hairline(ctx, x, y, r.x + r.w - pad, y);
   y += 16;
+  hairline(ctx, x, y, r.x + r.w - pad, y);
+  y += 18;
 
   label(ctx, opts.stateLine, x, y, {
     variant: 'value',
     color: surface.parchment,
   });
-  y += 18;
+  y += 20;
 
   for (const row of opts.lines) {
     label(ctx, row.label, x, y, { variant: 'meta' });
@@ -402,45 +402,44 @@ export function inspectCard(ctx: CanvasRenderingContext2D, r: Rect, opts: Inspec
       variant: 'value',
       align: 'right',
     });
-    y += 15;
+    y += 18;
   }
 
   if (opts.debugLines && opts.debugLines.length > 0) {
     y += 6;
     // Distinct DEV block inside inspect
-    const dh = 12 + opts.debugLines.length * 13;
+    const dh = 14 + opts.debugLines.length * 15;
     ctx.fillStyle = 'rgba(58, 69, 80, 0.55)';
     ctx.strokeStyle = colors.debugBorder;
     ctx.lineWidth = stroke.hairline;
     roundRect(ctx, x - 4, y - 4, r.w - pad * 2 - 2, dh, radius.sm);
     ctx.fill();
     ctx.stroke();
-    label(ctx, 'FEEL', x, y + 8, {
+    label(ctx, 'FEEL', x, y + 10, {
       variant: 'eyebrow',
       color: colors.debugText,
     });
-    y += 18;
+    y += 20;
     for (const line of opts.debugLines) {
       label(ctx, line, x, y, {
-        variant: 'meta',
-        size: 10,
+        variant: 'eyebrow',
         color: colors.debugText,
       });
-      y += 13;
+      y += 15;
     }
   }
 }
 
 /** Corner badge when feel-debug is on. */
 export function debugBadge(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  const r: Rect = { x, y, w: 44, h: 18 };
+  const r: Rect = { x, y, w: 48, h: 20 };
   ctx.fillStyle = colors.debug;
   ctx.strokeStyle = colors.debugBorder;
   ctx.lineWidth = stroke.hairline;
   roundRect(ctx, r.x, r.y, r.w, r.h, radius.sm);
   ctx.fill();
   ctx.stroke();
-  label(ctx, 'FEEL', r.x + r.w / 2, r.y + 13, {
+  label(ctx, 'FEEL', r.x + r.w / 2, r.y + 14, {
     variant: 'eyebrow',
     align: 'center',
     color: colors.debugText,

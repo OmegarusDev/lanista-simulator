@@ -8,7 +8,7 @@ import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
 import { buttonRow, flowHeaderLayout, isPortrait } from '../../view/layout';
 import { button, label, panel, rosterChip } from '../../view/ui';
-import { space, typeScale } from '../../view/theme';
+import { space, touchTarget, typeScale } from '../../view/theme';
 
 export type LudusAction =
   | { type: 'NONE' }
@@ -60,20 +60,20 @@ export class LudusScene {
 
     let action: LudusAction = { type: 'NONE' };
 
-    const rosterTop = portrait ? hdr.rightMetaY + 16 : 80;
-    const chipW = portrait ? Math.min(150, (w - pad * 2 - 8) / 2) : 140;
-    const chipH = 40;
+    const rosterTop = portrait ? hdr.rightMetaY + 18 : 88;
+    const chipW = portrait ? Math.min(160, (w - pad * 2 - 8) / 2) : 150;
+    const chipH = touchTarget;
     const gap = 8;
     const cols = Math.max(1, Math.floor((w - pad * 2 + gap) / (chipW + gap)));
     const rows = Math.ceil(Math.max(1, state.roster.length) / cols);
-    const rosterH = Math.max(160, 40 + rows * (chipH + gap + 18) + 20);
+    const rosterH = Math.max(180, 44 + rows * (chipH + gap + 20) + 24);
     panel(ctx, { x: pad, y: rosterTop, w: w - pad * 2, h: rosterH }, 'Roster');
 
     const area = {
       x: pad + 16,
-      y: rosterTop + 38,
+      y: rosterTop + 42,
       w: w - pad * 2 - 32,
-      h: rosterH - 50,
+      h: rosterH - 54,
     };
     // Re-space rows with meta label room under each chip
     state.roster.forEach((g, i) => {
@@ -81,7 +81,7 @@ export class LudusScene {
       const col = i % cols;
       const r = {
         x: area.x + col * (chipW + gap),
-        y: area.y + row * (chipH + gap + 18),
+        y: area.y + row * (chipH + gap + 20),
         w: chipW,
         h: chipH,
       };
@@ -104,19 +104,19 @@ export class LudusScene {
         ctx,
         `${ARMATURAE[g.armatura].short} · ${g.wins}W-${g.losses}L`,
         r.x + r.w / 2,
-        r.y + r.h + 12,
-        { size: 10, align: 'center', color: colors.muted },
+        r.y + r.h + 14,
+        { size: typeScale.eyebrow, align: 'center', color: colors.muted },
       );
     });
 
     const fit = fightableRoster(state).length;
-    const fitY = rosterTop + rosterH + 14;
+    const fitY = rosterTop + rosterH + 16;
     label(ctx, `${fit} fit to fight · Rest days ${state.restDaysLeft}`, pad + 16, fitY, {
       variant: 'meta',
     });
 
-    const by = fitY + 20;
-    const btnH = portrait ? 44 : 40;
+    const by = fitY + 22;
+    const btnH = touchTarget;
     if (portrait) {
       const row1 = buttonRow(pad, by, w - pad * 2, btnH, 2, space.sm);
       if (
@@ -236,17 +236,17 @@ export class LudusScene {
       }
     }
 
-    label(
-      ctx,
-      `Record ${state.record.wins}W-${state.record.losses}L-${state.record.draws}D`,
-      pad,
-      h - 36,
-      { variant: 'eyebrow' },
-    );
-    if (button(ctx, { x: pad, y: h - 52, w: 90, h: 28 }, 'Title', input.pointer)) {
+    if (button(ctx, { x: pad, y: h - 56, w: 100, h: 40 }, 'Title', input.pointer)) {
       this.synth.play('ui');
       action = { type: 'TITLE' };
     }
+    label(
+      ctx,
+      `Record ${state.record.wins}W-${state.record.losses}L-${state.record.draws}D`,
+      pad + 112,
+      h - 30,
+      { variant: 'eyebrow' },
+    );
 
     label(ctx, `Heal ${economy.healCost}d · select a fighter first`, w - pad, h - 20, {
       align: 'right',

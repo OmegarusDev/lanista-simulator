@@ -2,6 +2,7 @@ import { ARMATURAE, effectiveAttackArc, type ArmaturaId } from '../content/armat
 import { ARMATURA_LOOK, massScale, type ArmaturaLook } from '../content/appearance';
 import { colors } from '../content/palette';
 import type { FighterSnapshot } from '../domain/combat/types';
+import { fontStack, typeScale } from './theme';
 import { bar } from './ui';
 
 type Pose = 'idle' | 'windup' | 'strike' | 'recover' | 'guard' | 'sidestep' | 'broken' | 'fallen';
@@ -599,7 +600,7 @@ function drawBars(
   if (showSelectedName) {
     ctx.fillStyle = colors.ink;
     ctx.globalAlpha = 0.75;
-    ctx.font = '600 10px "Palatino Linotype", Palatino, Georgia, serif';
+    ctx.font = `600 ${typeScale.meta}px ${fontStack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText(f.name, f.x, by + 18);

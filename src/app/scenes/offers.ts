@@ -37,15 +37,15 @@ export class OffersScene {
     );
 
     let action: OffersAction = { type: 'NONE' };
-    const rowH = portrait ? 96 : 78;
-    const startY = portrait ? hdr.metaY + 20 : 68;
+    const rowH = portrait ? 110 : 88;
+    const startY = portrait ? hdr.metaY + 22 : 76;
 
     state.offers.forEach((o, i) => {
       const y = startY + i * rowH;
-      panel(ctx, { x: pad - 4, y, w: w - pad * 2 + 8, h: rowH - 6 });
+      panel(ctx, { x: pad - 4, y, w: w - pad * 2 + 8, h: rowH - 8 });
       const titleColor = o.eligible ? colors.parchment : colors.muted;
-      label(ctx, o.name, pad + 12, y + 22, { size: typeScale.title, color: titleColor });
-      label(ctx, `${o.kind} · ${o.teamSize}v${o.teamSize}`, pad + 12, y + 40, {
+      label(ctx, o.name, pad + 12, y + 24, { size: typeScale.title, color: titleColor });
+      label(ctx, `${o.kind} · ${o.teamSize}v${o.teamSize}`, pad + 12, y + 44, {
         variant: 'eyebrow',
         color: o.eligible ? colors.muted : colors.buttonDisabled,
       });
@@ -54,30 +54,31 @@ export class OffersScene {
         ctx,
         `${formatSlotGates(o.playerSlots)}  →  vs ${opp}  ·  ${o.purse}d / fee ${o.entryFee}`,
         pad + 12,
-        y + 58,
-        { size: 11, color: colors.muted },
+        y + 64,
+        { size: typeScale.meta, color: colors.muted },
       );
 
       if (!portrait) {
-        label(ctx, o.blurb, Math.min(420, w * 0.45), y + 22, {
-          size: 11,
+        label(ctx, o.blurb, Math.min(420, w * 0.45), y + 24, {
+          size: typeScale.meta,
           color: colors.muted,
         });
       } else {
-        label(ctx, o.blurb, pad + 12, y + 74, {
-          size: 11,
+        label(ctx, o.blurb, pad + 12, y + 84, {
+          size: typeScale.meta,
           color: colors.muted,
         });
       }
 
       const canAfford = state.denarii >= o.entryFee;
-      const btnW = 100;
+      const btnW = 108;
+      const btnH = portrait ? 44 : 40;
       const btnX = portrait ? w - pad - btnW : w - pad - btnW - 8;
-      const btnY = portrait ? y + 18 : y + 20;
+      const btnY = portrait ? y + 20 : y + 22;
       if (
         button(
           ctx,
-          { x: btnX, y: btnY, w: btnW, h: 36 },
+          { x: btnX, y: btnY, w: btnW, h: btnH },
           o.eligible ? 'Accept' : 'Locked',
           input.pointer,
           { disabled: !o.eligible || !canAfford },
@@ -91,11 +92,12 @@ export class OffersScene {
     if (state.offers.length === 0) {
       label(ctx, 'No offers today.', w / 2, h * 0.4, {
         align: 'center',
+        size: typeScale.body,
         color: colors.muted,
       });
     }
 
-    if (button(ctx, { x: pad, y: h - 48, w: 100, h: 34 }, 'Back', input.pointer)) {
+    if (button(ctx, { x: pad, y: h - 56, w: 112, h: 40 }, 'Back', input.pointer)) {
       this.synth.play('ui');
       action = { type: 'BACK' };
     }

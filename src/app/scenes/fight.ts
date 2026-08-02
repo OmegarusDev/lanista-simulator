@@ -31,7 +31,7 @@ import {
   rosterChip,
   segmentedControl,
 } from '../../view/ui';
-import { space, typeScale } from '../../view/theme';
+import { space, touchTarget, typeScale } from '../../view/theme';
 import type { SandboxConfig } from './sandbox';
 
 export type FightAction =
@@ -204,7 +204,7 @@ export class FightScene {
   }
 
   private drawTopBand(ctx: CanvasRenderingContext2D, stage: FightStageLayout): void {
-    const yTitle = stage.orientation === 'portrait' ? 28 : 26;
+    const yTitle = stage.orientation === 'portrait' ? 30 : 28;
     label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 16, yTitle, {
       size: typeScale.title,
       color: colors.parchment,
@@ -215,12 +215,12 @@ export class FightScene {
       .map((f) => `${f.team === 0 ? 'B' : 'R'}:${ARMATURAE[f.armatura].short}`)
       .join('  ·  ');
     label(ctx, lineup, stage.w / 2, yTitle, {
-      size: stage.orientation === 'portrait' ? typeScale.meta : typeScale.label,
+      size: stage.orientation === 'portrait' ? typeScale.body : typeScale.label,
       align: 'center',
       color: colors.muted,
     });
 
-    label(ctx, `seed ${this.config.seed}`, 16, yTitle + 16, {
+    label(ctx, `seed ${this.config.seed}`, 16, yTitle + 18, {
       variant: 'eyebrow',
       color: colors.muted,
     });
@@ -250,14 +250,14 @@ export class FightScene {
     let segW: number;
 
     if (stage.orientation === 'landscape') {
-      label(ctx, 'Bout', 16, y + 10, { variant: 'eyebrow' });
-      label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 16, y + 26, {
+      label(ctx, 'Bout', 16, y + 12, { variant: 'eyebrow' });
+      label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 16, y + 30, {
         variant: 'value',
-        size: typeScale.body,
+        size: typeScale.label,
       });
       hairline(ctx, 78, y + 6, 78, y + rowH - 6);
       // Speed + Pause sit on the right; bout identity stays left.
-      segW = 132;
+      segW = 148;
       segX = stage.w - pad - pauseW - gap - segW;
     } else {
       segW = stage.w - pad * 2 - pauseW - gap;
@@ -295,7 +295,7 @@ export class FightScene {
     ctx.fillRect(0, 0, stage.w, stage.h);
 
     const portrait = stage.orientation === 'portrait';
-    const btnH = portrait ? 44 : 38;
+    const btnH = touchTarget;
     const gap = space.sm;
     const items: { label: string; kind: 'resume' | 'mute' | 'restart' | 'reroll' | 'leave' }[] = [
       { label: 'Resume', kind: 'resume' },
@@ -306,8 +306,8 @@ export class FightScene {
     }
     items.push({ label: 'Leave', kind: 'leave' });
 
-    const panelW = Math.min(portrait ? 300 : 280, stage.w - space.xl * 2);
-    const panelH = space.lg + 28 + items.length * (btnH + gap) + space.md;
+    const panelW = Math.min(portrait ? 320 : 300, stage.w - space.xl * 2);
+    const panelH = space.lg + 32 + items.length * (btnH + gap) + space.md;
     const panelX = (stage.w - panelW) / 2;
     const panelY = Math.max(space.lg, (stage.h - panelH) / 2 - (portrait ? 12 : 0));
     const pr = { x: panelX, y: panelY, w: panelW, h: panelH };
@@ -315,11 +315,11 @@ export class FightScene {
 
     const btnX = panelX + space.md;
     const btnW = panelW - space.md * 2;
-    let by = panelY + space.lg + 22;
+    let by = panelY + space.lg + 26;
 
     for (const item of items) {
       const r = { x: btnX, y: by, w: btnW, h: btnH };
-      if (button(ctx, r, item.label, input.pointer)) {
+      if (button(ctx, r, item.label, input.pointer, { size: typeScale.label })) {
         this.synth.play('ui');
         if (item.kind === 'resume') {
           this.paused = false;
@@ -356,7 +356,7 @@ export class FightScene {
     const red = snaps.filter((f) => f.team === 1).sort((a, b) => a.id - b.id);
     const gap = stage.chipGap;
     const mid = stage.w / 2;
-    const labelY = stage.rosterBandTop + 10;
+    const labelY = stage.rosterBandTop + 12;
     const edge = 12;
 
     label(ctx, 'Blue', edge, labelY, { variant: 'eyebrow', color: colors.ally });
@@ -437,9 +437,9 @@ export class FightScene {
         ]
       : undefined;
     const contentH =
-      168 +
-      (debugLines ? 16 + debugLines.length * 13 : 0) +
-      (def.tipCatchRatio > 0 ? 15 : 0);
+      200 +
+      (debugLines ? 20 + debugLines.length * 15 : 0) +
+      (def.tipCatchRatio > 0 ? 18 : 0);
 
     const r = fightInspectRect(stage, preferLeft, contentH);
 
@@ -478,7 +478,8 @@ export class FightScene {
           ? 'Blue wins'
           : 'Red wins';
 
-    const bandH = 120;
+    const btnH = stage.orientation === 'portrait' ? touchTarget : 40;
+    const bandH = 136;
     const bandY =
       stage.orientation === 'portrait'
         ? stage.world.view.y + stage.world.view.h / 2 - bandH / 2
@@ -486,19 +487,23 @@ export class FightScene {
     ctx.fillStyle = 'rgba(10,8,6,0.62)';
     ctx.fillRect(0, bandY, stage.w, bandH);
 
-    label(ctx, text, stage.w / 2, bandY + 42, {
+    label(ctx, text, stage.w / 2, bandY + 44, {
       size: typeScale.banner,
       align: 'center',
       color: colors.parchment,
     });
-    label(ctx, 'Session', stage.w / 2, bandY + 62, {
+    label(ctx, 'Session', stage.w / 2, bandY + 66, {
       variant: 'eyebrow',
       align: 'center',
     });
 
-    const by = bandY + 74;
+    const by = bandY + 78;
     if (this.career) {
-      if (button(ctx, { x: stage.w / 2 - 70, y: by, w: 140, h: 34 }, 'Continue', input.pointer)) {
+      if (
+        button(ctx, { x: stage.w / 2 - 80, y: by, w: 160, h: btnH }, 'Continue', input.pointer, {
+          size: typeScale.label,
+        })
+      ) {
         this.synth.play('ui');
         return { type: 'CAREER_DONE', result: this.match.result, forfeited: false };
       }
@@ -508,30 +513,30 @@ export class FightScene {
     if (stage.orientation === 'portrait') {
       const gap = 8;
       const bw = (stage.w - 32 - gap * 2) / 3;
-      if (button(ctx, { x: 16, y: by, w: bw, h: 34 }, 'Restart', input.pointer)) {
+      if (button(ctx, { x: 16, y: by, w: bw, h: btnH }, 'Restart', input.pointer)) {
         this.synth.play('ui');
         return { type: 'RESTART' };
       }
-      if (button(ctx, { x: 16 + bw + gap, y: by, w: bw, h: 34 }, 'Reroll', input.pointer)) {
+      if (button(ctx, { x: 16 + bw + gap, y: by, w: bw, h: btnH }, 'Reroll', input.pointer)) {
         this.synth.play('ui');
         return { type: 'REROLL' };
       }
-      if (button(ctx, { x: 16 + (bw + gap) * 2, y: by, w: bw, h: 34 }, 'Leave', input.pointer)) {
+      if (button(ctx, { x: 16 + (bw + gap) * 2, y: by, w: bw, h: btnH }, 'Leave', input.pointer)) {
         this.synth.play('ui');
         return { type: 'EXIT' };
       }
       return action;
     }
 
-    if (button(ctx, { x: stage.w / 2 - 170, y: by, w: 100, h: 34 }, 'Restart', input.pointer)) {
+    if (button(ctx, { x: stage.w / 2 - 180, y: by, w: 108, h: btnH }, 'Restart', input.pointer)) {
       this.synth.play('ui');
       return { type: 'RESTART' };
     }
-    if (button(ctx, { x: stage.w / 2 - 50, y: by, w: 100, h: 34 }, 'Reroll', input.pointer)) {
+    if (button(ctx, { x: stage.w / 2 - 54, y: by, w: 108, h: btnH }, 'Reroll', input.pointer)) {
       this.synth.play('ui');
       return { type: 'REROLL' };
     }
-    if (button(ctx, { x: stage.w / 2 + 70, y: by, w: 100, h: 34 }, 'Leave', input.pointer)) {
+    if (button(ctx, { x: stage.w / 2 + 72, y: by, w: 108, h: btnH }, 'Leave', input.pointer)) {
       this.synth.play('ui');
       return { type: 'EXIT' };
     }
