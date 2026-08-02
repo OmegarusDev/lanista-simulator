@@ -14,22 +14,35 @@ export class Input {
     el: HTMLElement,
     toDesign: (cx: number, cy: number) => { x: number; y: number },
   ): () => void {
-    const onMove = (e: PointerEvent) => {
+    const syncPointer = (e: PointerEvent) => {
       const p = toDesign(e.clientX, e.clientY);
       this.pointer.x = p.x;
       this.pointer.y = p.y;
     };
+
+    const onMove = (e: PointerEvent) => {
+      syncPointer(e);
+    };
+
     const onDown = (e: PointerEvent) => {
-      el.setPointerCapture(e.pointerId);
-      const p = toDesign(e.clientX, e.clientY);
-      this.pointer.x = p.x;
-      this.pointer.y = p.y;
+      // Keep the page from scrolling / synthesizing extra mouse clicks on touch.
+      if (e.cancelable) e.preventDefault();
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        // Capture can fail if the pointer already released; ignore.
+      }
+      syncPointer(e);
       this.pointer.down = true;
       this.pointer.clicked = true;
     };
-    const onUp = () => {
+
+    const onUp = (e: PointerEvent) => {
+      if (e.cancelable) e.preventDefault();
+      syncPointer(e);
       this.pointer.down = false;
     };
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (!this.keys.has(e.code)) this.keyPressed.add(e.code);
       this.keys.add(e.code);
@@ -38,10 +51,15 @@ export class Input {
       this.keys.delete(e.code);
     };
 
+    // Pointer Events cover mouse, touch, and pen — prefer over separate touch/mouse APIs.
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointerup', onUp);
     el.addEventListener('pointercancel', onUp);
+    el.addEventListener('lostpointercapture', onUp);
+    // Non-passive so preventDefault can block scroll/zoom on the canvas.
+    el.addEventListener('touchstart', silenceTouch, { passive: false });
+    el.addEventListener('touchmove', silenceTouch, { passive: false });
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
@@ -50,6 +68,9 @@ export class Input {
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('lostpointercapture', onUp);
+      el.removeEventListener('touchstart', silenceTouch);
+      el.removeEventListener('touchmove', silenceTouch);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
@@ -63,4 +84,8 @@ export class Input {
   wasKeyPressed(code: string): boolean {
     return this.keyPressed.has(code);
   }
+}
+
+function silenceTouch(e: TouchEvent): void {
+  if (e.cancelable) e.preventDefault();
 }

@@ -2,7 +2,14 @@ import { colors } from '../content/palette';
 import { applyCareerFight } from '../domain/campaign/aftermath';
 import { createSeason, endDay } from '../domain/campaign/season';
 import type { AftermathSummary, MuneraOffer, SeasonState } from '../domain/campaign/types';
-import { clientToDesign, createCanvasLayout, resizeCanvas, DESIGN_W, DESIGN_H } from '../shell/canvas';
+import {
+  bindCanvasResize,
+  clientToDesign,
+  createCanvasLayout,
+  resizeCanvas,
+  DESIGN_W,
+  DESIGN_H,
+} from '../shell/canvas';
 import { Input } from '../shell/input';
 import { clearSeasonSave, loadSeason, saveSeason } from '../shell/save';
 import { Synth } from '../view/audio';
@@ -69,7 +76,8 @@ export class App {
 
   start(): void {
     this.input.attach(this.layout.canvas, (cx, cy) => clientToDesign(this.layout, cx, cy));
-    window.addEventListener('resize', () => resizeCanvas(this.layout));
+    bindCanvasResize(() => resizeCanvas(this.layout));
+    resizeCanvas(this.layout);
     this.last = performance.now();
     requestAnimationFrame(this.frame);
   }
