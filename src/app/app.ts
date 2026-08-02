@@ -6,9 +6,8 @@ import {
   bindCanvasResize,
   clientToDesign,
   createCanvasLayout,
+  getDesign,
   resizeCanvas,
-  DESIGN_W,
-  DESIGN_H,
 } from '../shell/canvas';
 import { Input } from '../shell/input';
 import { clearSeasonSave, loadSeason, saveSeason } from '../shell/save';
@@ -140,8 +139,9 @@ export class App {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    const { w, h } = getDesign();
     ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
+    ctx.fillRect(0, 0, w, h);
 
     switch (this.mode) {
       case 'title':

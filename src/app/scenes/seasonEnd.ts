@@ -3,8 +3,9 @@ import { economy } from '../../content/economy';
 import { colors } from '../../content/palette';
 import type { SeasonState } from '../../domain/campaign/types';
 import type { Input } from '../../shell/input';
-import { DESIGN_H, DESIGN_W } from '../../shell/canvas';
+import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
+import { isPortrait, primaryButtonSize, shellPad } from '../../view/layout';
 import { button, label, panel } from '../../view/ui';
 import { typeScale } from '../../view/theme';
 
@@ -14,11 +15,19 @@ export class SeasonEndScene {
   constructor(private readonly synth: Synth) {}
 
   draw(ctx: CanvasRenderingContext2D, input: Input, state: SeasonState): SeasonEndAction {
+    const { w, h } = getDesign();
+    const pad = shellPad(w);
+    const portrait = isPortrait(w, h);
+    const panelW = Math.min(400, w - pad * 2);
+    const panelH = Math.min(240, Math.max(200, h * 0.32));
+    const panelX = (w - panelW) / 2;
+    const panelY = portrait ? Math.min(h * 0.24, 180) : 150;
+
     ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
+    ctx.fillRect(0, 0, w, h);
 
     const title = state.status === 'BROKE' ? 'Ruined' : 'Season Complete';
-    label(ctx, title, DESIGN_W / 2, 80, {
+    label(ctx, title, w / 2, portrait ? 64 : 80, {
       size: typeScale.banner,
       align: 'center',
       color: colors.parchment,
@@ -26,21 +35,21 @@ export class SeasonEndScene {
     label(
       ctx,
       state.status === 'BROKE' ? 'The ludus cannot continue.' : `Day ${economy.seasonDays} closed.`,
-      DESIGN_W / 2,
-      112,
+      w / 2,
+      portrait ? 96 : 112,
       { align: 'center', variant: 'eyebrow' },
     );
 
-    panel(ctx, { x: DESIGN_W / 2 - 200, y: 150, w: 400, h: 220 });
+    panel(ctx, { x: panelX, y: panelY, w: panelW, h: panelH });
 
     label(
       ctx,
       `${state.record.wins}W – ${state.record.losses}L – ${state.record.draws}D`,
-      DESIGN_W / 2,
-      200,
+      w / 2,
+      panelY + 50,
       { align: 'center', size: typeScale.display },
     );
-    label(ctx, `${state.denarii} denarii · ${state.virtus} virtus`, DESIGN_W / 2, 240, {
+    label(ctx, `${state.denarii} denarii · ${state.virtus} virtus`, w / 2, panelY + 90, {
       align: 'center',
       size: typeScale.title,
       color: colors.muted,
@@ -53,14 +62,15 @@ export class SeasonEndScene {
       label(
         ctx,
         `Best: ${best.name} · ${ARMATURAE[best.armatura].name} (${best.wins}W)`,
-        DESIGN_W / 2,
-        290,
+        w / 2,
+        panelY + 140,
         { align: 'center', size: typeScale.body },
       );
     }
 
+    const { bw, bh } = primaryButtonSize(w, h);
     let action: SeasonEndAction = { type: 'NONE' };
-    if (button(ctx, { x: DESIGN_W / 2 - 70, y: DESIGN_H - 80, w: 140, h: 40 }, 'Title', input.pointer)) {
+    if (button(ctx, { x: w / 2 - bw / 2, y: h - 80, w: bw, h: bh }, 'Title', input.pointer)) {
       this.synth.play('ui');
       action = { type: 'TITLE' };
     }

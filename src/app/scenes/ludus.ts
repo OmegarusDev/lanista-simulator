@@ -4,10 +4,11 @@ import { colors } from '../../content/palette';
 import type { SeasonState } from '../../domain/campaign/types';
 import { fightableRoster, healGladiator, takeRestDay, upkeepCost } from '../../domain/campaign/season';
 import type { Input } from '../../shell/input';
-import { DESIGN_H, DESIGN_W } from '../../shell/canvas';
+import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
+import { buttonRow, flowHeaderLayout, isPortrait } from '../../view/layout';
 import { button, label, panel, rosterChip } from '../../view/ui';
-import { typeScale } from '../../view/theme';
+import { space, typeScale } from '../../view/theme';
 
 export type LudusAction =
   | { type: 'NONE' }
@@ -24,40 +25,63 @@ export class LudusScene {
   constructor(private readonly synth: Synth) {}
 
   draw(ctx: CanvasRenderingContext2D, input: Input, state: SeasonState): LudusAction {
+    const { w, h } = getDesign();
+    const hdr = flowHeaderLayout(w, h);
+    const pad = hdr.pad;
+    const portrait = isPortrait(w, h);
+
     ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
+    ctx.fillRect(0, 0, w, h);
 
-    label(ctx, 'LUDUS', 24, 36, { size: typeScale.display, color: colors.parchment });
-    label(ctx, `Day ${state.day} / ${economy.seasonDays}`, 24, 58, {
+    label(ctx, 'LUDUS', pad, hdr.titleY, { size: typeScale.display, color: colors.parchment });
+    label(ctx, `Day ${state.day} / ${economy.seasonDays}`, pad, hdr.metaY, {
       variant: 'eyebrow',
     });
 
-    label(ctx, `${state.denarii} denarii`, DESIGN_W - 24, 36, {
-      align: 'right',
-      size: typeScale.title,
-      color: colors.parchment,
-    });
-    label(ctx, `${state.virtus} virtus · upkeep ${upkeepCost(state)}`, DESIGN_W - 24, 58, {
-      align: 'right',
-      variant: 'eyebrow',
-    });
+    if (portrait) {
+      label(ctx, `${state.denarii} denarii`, pad, hdr.rightTitleY, {
+        size: typeScale.title,
+        color: colors.parchment,
+      });
+      label(ctx, `${state.virtus} virtus · upkeep ${upkeepCost(state)}`, pad, hdr.rightMetaY, {
+        variant: 'eyebrow',
+      });
+    } else {
+      label(ctx, `${state.denarii} denarii`, w - pad, hdr.rightTitleY, {
+        align: 'right',
+        size: typeScale.title,
+        color: colors.parchment,
+      });
+      label(ctx, `${state.virtus} virtus · upkeep ${upkeepCost(state)}`, w - pad, hdr.rightMetaY, {
+        align: 'right',
+        variant: 'eyebrow',
+      });
+    }
 
     let action: LudusAction = { type: 'NONE' };
 
-    // Roster panel
-    panel(ctx, { x: 24, y: 80, w: DESIGN_W - 48, h: 220 }, 'Roster');
-    const chips = state.roster;
-    const chipW = 140;
+    const rosterTop = portrait ? hdr.rightMetaY + 16 : 80;
+    const chipW = portrait ? Math.min(150, (w - pad * 2 - 8) / 2) : 140;
     const chipH = 40;
     const gap = 8;
-    const startX = 40;
-    const startY = 118;
-    chips.forEach((g, i) => {
-      const col = i % 4;
-      const row = Math.floor(i / 4);
+    const cols = Math.max(1, Math.floor((w - pad * 2 + gap) / (chipW + gap)));
+    const rows = Math.ceil(Math.max(1, state.roster.length) / cols);
+    const rosterH = Math.max(160, 40 + rows * (chipH + gap + 18) + 20);
+    panel(ctx, { x: pad, y: rosterTop, w: w - pad * 2, h: rosterH }, 'Roster');
+
+    const area = {
+      x: pad + 16,
+      y: rosterTop + 38,
+      w: w - pad * 2 - 32,
+      h: rosterH - 50,
+    };
+    // Re-space rows with meta label room under each chip
+    state.roster.forEach((g, i) => {
+      const row = Math.floor(i / cols);
+      const col = i % cols;
       const r = {
-        x: startX + col * (chipW + gap),
-        y: startY + row * (chipH + gap + 18),
+        x: area.x + col * (chipW + gap),
+        y: area.y + row * (chipH + gap + 18),
         w: chipW,
         h: chipH,
       };
@@ -86,70 +110,145 @@ export class LudusScene {
     });
 
     const fit = fightableRoster(state).length;
-    label(ctx, `${fit} fit to fight · Rest days ${state.restDaysLeft}`, 40, 290, {
+    const fitY = rosterTop + rosterH + 14;
+    label(ctx, `${fit} fit to fight · Rest days ${state.restDaysLeft}`, pad + 16, fitY, {
       variant: 'meta',
     });
 
-    // Actions
-    const by = 320;
-    if (button(ctx, { x: 24, y: by, w: 160, h: 40 }, 'Today\'s Munera', input.pointer, {
-      disabled: state.dayResolved || state.status !== 'ACTIVE',
-    })) {
-      this.synth.play('ui');
-      action = { type: 'MUNERA' };
-    }
-    if (button(ctx, { x: 196, y: by, w: 100, h: 40 }, 'Heal', input.pointer, {
-      disabled:
-        this.selectedId === null ||
-        state.denarii < economy.healCost ||
-        state.status !== 'ACTIVE',
-    })) {
-      if (this.selectedId !== null && healGladiator(state, this.selectedId)) {
+    const by = fitY + 20;
+    const btnH = portrait ? 44 : 40;
+    if (portrait) {
+      const row1 = buttonRow(pad, by, w - pad * 2, btnH, 2, space.sm);
+      if (
+        button(ctx, row1[0]!, "Today's Munera", input.pointer, {
+          disabled: state.dayResolved || state.status !== 'ACTIVE',
+        })
+      ) {
         this.synth.play('ui');
-        action = { type: 'HEALED' };
+        action = { type: 'MUNERA' };
+      }
+      if (
+        button(ctx, row1[1]!, 'Heal', input.pointer, {
+          disabled:
+            this.selectedId === null ||
+            state.denarii < economy.healCost ||
+            state.status !== 'ACTIVE',
+        })
+      ) {
+        if (this.selectedId !== null && healGladiator(state, this.selectedId)) {
+          this.synth.play('ui');
+          action = { type: 'HEALED' };
+        }
+      }
+      const row2 = buttonRow(pad, by + btnH + space.sm, w - pad * 2, btnH, 2, space.sm);
+      if (
+        button(ctx, row2[0]!, 'Rest Day', input.pointer, {
+          disabled: state.dayResolved || state.restDaysLeft <= 0 || state.status !== 'ACTIVE',
+        })
+      ) {
+        if (takeRestDay(state)) {
+          this.synth.play('ui');
+          action = { type: 'RESTED' };
+        }
+      }
+      if (
+        button(ctx, row2[1]!, 'End Day', input.pointer, {
+          disabled: !state.dayResolved || state.status !== 'ACTIVE',
+        })
+      ) {
+        this.synth.play('ui');
+        action = { type: 'END_DAY' };
+      }
+      const imY = by + (btnH + space.sm) * 2;
+      if (
+        button(ctx, { x: pad, y: imY, w: w - pad * 2, h: btnH }, 'Instant Match', input.pointer)
+      ) {
+        this.synth.play('ui');
+        action = { type: 'INSTANT_MATCH' };
+      }
+
+      if (state.dayResolved && state.lastAftermath) {
+        const a = state.lastAftermath;
+        label(
+          ctx,
+          `Last: ${a.offerName} — ${a.result}`,
+          pad,
+          imY + btnH + 18,
+          { size: typeScale.body, color: colors.muted },
+        );
+      }
+    } else {
+      if (
+        button(ctx, { x: pad, y: by, w: 160, h: btnH }, "Today's Munera", input.pointer, {
+          disabled: state.dayResolved || state.status !== 'ACTIVE',
+        })
+      ) {
+        this.synth.play('ui');
+        action = { type: 'MUNERA' };
+      }
+      if (
+        button(ctx, { x: pad + 172, y: by, w: 100, h: btnH }, 'Heal', input.pointer, {
+          disabled:
+            this.selectedId === null ||
+            state.denarii < economy.healCost ||
+            state.status !== 'ACTIVE',
+        })
+      ) {
+        if (this.selectedId !== null && healGladiator(state, this.selectedId)) {
+          this.synth.play('ui');
+          action = { type: 'HEALED' };
+        }
+      }
+      if (
+        button(ctx, { x: pad + 284, y: by, w: 110, h: btnH }, 'Rest Day', input.pointer, {
+          disabled: state.dayResolved || state.restDaysLeft <= 0 || state.status !== 'ACTIVE',
+        })
+      ) {
+        if (takeRestDay(state)) {
+          this.synth.play('ui');
+          action = { type: 'RESTED' };
+        }
+      }
+      if (
+        button(ctx, { x: pad + 406, y: by, w: 110, h: btnH }, 'End Day', input.pointer, {
+          disabled: !state.dayResolved || state.status !== 'ACTIVE',
+        })
+      ) {
+        this.synth.play('ui');
+        action = { type: 'END_DAY' };
+      }
+      if (
+        button(ctx, { x: w - pad - 160, y: by, w: 160, h: btnH }, 'Instant Match', input.pointer)
+      ) {
+        this.synth.play('ui');
+        action = { type: 'INSTANT_MATCH' };
+      }
+
+      if (state.dayResolved && state.lastAftermath) {
+        const a = state.lastAftermath;
+        label(
+          ctx,
+          `Last: ${a.offerName} — ${a.result} (${a.purseDelta >= 0 ? '+' : ''}${a.purseDelta}d, ${a.virtusDelta >= 0 ? '+' : ''}${a.virtusDelta}v)`,
+          pad,
+          by + 70,
+          { size: typeScale.body, color: colors.muted },
+        );
       }
     }
-    if (button(ctx, { x: 308, y: by, w: 110, h: 40 }, 'Rest Day', input.pointer, {
-      disabled: state.dayResolved || state.restDaysLeft <= 0 || state.status !== 'ACTIVE',
-    })) {
-      if (takeRestDay(state)) {
-        this.synth.play('ui');
-        action = { type: 'RESTED' };
-      }
-    }
-    if (button(ctx, { x: 430, y: by, w: 110, h: 40 }, 'End Day', input.pointer, {
-      disabled: !state.dayResolved || state.status !== 'ACTIVE',
-    })) {
-      this.synth.play('ui');
-      action = { type: 'END_DAY' };
-    }
 
-    // Persistent Instant Match
-    if (button(ctx, { x: DESIGN_W - 184, y: by, w: 160, h: 40 }, 'Instant Match', input.pointer)) {
-      this.synth.play('ui');
-      action = { type: 'INSTANT_MATCH' };
-    }
-
-    if (state.dayResolved && state.lastAftermath) {
-      const a = state.lastAftermath;
-      label(
-        ctx,
-        `Last: ${a.offerName} — ${a.result} (${a.purseDelta >= 0 ? '+' : ''}${a.purseDelta}d, ${a.virtusDelta >= 0 ? '+' : ''}${a.virtusDelta}v)`,
-        24,
-        390,
-        { size: typeScale.body, color: colors.muted },
-      );
-    }
-
-    label(ctx, `Record ${state.record.wins}W-${state.record.losses}L-${state.record.draws}D`, 24, DESIGN_H - 36, {
-      variant: 'eyebrow',
-    });
-    if (button(ctx, { x: 24, y: DESIGN_H - 52, w: 90, h: 28 }, 'Title', input.pointer)) {
+    label(
+      ctx,
+      `Record ${state.record.wins}W-${state.record.losses}L-${state.record.draws}D`,
+      pad,
+      h - 36,
+      { variant: 'eyebrow' },
+    );
+    if (button(ctx, { x: pad, y: h - 52, w: 90, h: 28 }, 'Title', input.pointer)) {
       this.synth.play('ui');
       action = { type: 'TITLE' };
     }
 
-    label(ctx, `Heal ${economy.healCost}d · select a fighter first`, DESIGN_W - 24, DESIGN_H - 20, {
+    label(ctx, `Heal ${economy.healCost}d · select a fighter first`, w - pad, h - 20, {
       align: 'right',
       variant: 'eyebrow',
     });

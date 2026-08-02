@@ -12,11 +12,12 @@
  * 5. Debug chrome must look distinct from player chrome (DEV strip, FEEL badge).
  *
  * Prefer helpers in `ui.ts` (panel, button, rosterChip, inspectCard, segmentedControl,
- * hairline, label variants). Colors live in `content/palette.ts`; spacing/type/z here.
+ * hairline, label variants). Layout geometry lives in `layout.ts`. Colors in
+ * `content/palette.ts`; spacing/type/z here.
  */
 
+import { getDesign } from '../shell/canvas';
 import { colors } from '../content/palette';
-import { DESIGN_H, DESIGN_W } from '../shell/canvas';
 
 /** 4px base spacing scale */
 export const space = {
@@ -88,7 +89,7 @@ export const zBand = {
   modal: 20,
 } as const;
 
-/** Fight chrome geometry — 960×540 */
+/** Fight chrome geometry defaults (landscape reference). Prefer fightStageLayout(). */
 export const fightLayout = {
   topBandH: 48,
   /** Team eyebrow + chip row */
@@ -103,34 +104,12 @@ export const fightLayout = {
   hitRadius: 22,
 } as const;
 
-export function fightBottomY(): number {
-  return DESIGN_H - fightLayout.bottomPad - fightLayout.bottomCtrlH;
-}
-
-/** Y of roster chip row (below team eyebrows). */
-export function fightRosterY(): number {
-  return (
-    fightBottomY() - space.sm - fightLayout.rosterH
-  );
-}
-
-export function fightRosterBandTop(): number {
-  return fightRosterY() - fightLayout.rosterLabelH;
-}
-
-export function fightChromeBottomH(): number {
-  return (
-    fightLayout.rosterLabelH +
-    fightLayout.rosterH +
-    space.sm +
-    fightLayout.bottomCtrlH +
-    fightLayout.bottomPad
-  );
-}
-
 export function teamAccent(team: 0 | 1): string {
   return team === 0 ? surface.team0 : surface.team1;
 }
 
-/** Design canvas size re-export for chrome math */
-export const canvasSize = { w: DESIGN_W, h: DESIGN_H } as const;
+/** Live design canvas size for chrome math */
+export function canvasSize(): { w: number; h: number } {
+  const d = getDesign();
+  return { w: d.w, h: d.h };
+}

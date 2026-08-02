@@ -1,8 +1,8 @@
 import { colors } from '../content/palette';
 import { combatTuning } from '../content/combat';
 import { SeededRNG } from '../domain/rng';
-import { DESIGN_H, DESIGN_W } from '../shell/canvas';
-import { fightChromeBottomH, fightLayout } from './theme';
+import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
+import type { FightStageLayout } from './layout';
 
 export interface DustParticle {
   x: number;
@@ -14,11 +14,20 @@ export interface DustParticle {
   size: number;
 }
 
-/** Seeded sand grain + crowd tick variance (stable per bout seed). */
+export interface ArenaDrawOpts {
+  seed?: number;
+  /** When set, paints vignette using live chrome bands. */
+  stage?: FightStageLayout;
+}
+
+/**
+ * Draw the sand oval in arena-world coordinates (960×540).
+ * Caller applies world→design transform before calling.
+ */
 export function drawArena(
   ctx: CanvasRenderingContext2D,
   shake = 0,
-  opts?: { seed?: number },
+  opts?: ArenaDrawOpts,
 ): void {
   ctx.save();
   if (shake > 0) {
@@ -26,7 +35,7 @@ export function drawArena(
   }
 
   ctx.fillStyle = '#2a1f18';
-  ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
+  ctx.fillRect(0, 0, ARENA_WORLD_W, ARENA_WORLD_H);
 
   // Outer stone ring
   ctx.fillStyle = '#4a3c30';
@@ -109,14 +118,29 @@ export function drawArena(
   ctx.ellipse(combatTuning.arenaCX, combatTuning.arenaCY, 36, 16, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Soft vignette over UI bands (world stays readable; chrome sits here)
-  const topH = fightLayout.topBandH;
-  const botH = fightChromeBottomH();
-  ctx.fillStyle = 'rgba(20,14,10,0.38)';
-  ctx.fillRect(0, 0, DESIGN_W, topH);
-  ctx.fillRect(0, DESIGN_H - botH, DESIGN_W, botH);
-
   ctx.restore();
+}
+
+/** Soft vignette over UI bands in design space (call after world transform restored). */
+export function drawArenaChromeVignette(
+  ctx: CanvasRenderingContext2D,
+  stage: FightStageLayout,
+): void {
+  ctx.fillStyle = 'rgba(20,14,10,0.38)';
+  ctx.fillRect(0, 0, stage.w, stage.topBandH);
+  ctx.fillRect(0, stage.h - stage.chromeBottomH, stage.w, stage.chromeBottomH);
+  if (stage.orientation === 'portrait') {
+    // Fill gaps beside the letterboxed arena with shell bg tone
+    const v = stage.world.view;
+    ctx.fillStyle = '#2a1f18';
+    if (v.y > stage.topBandH) {
+      ctx.fillRect(0, stage.topBandH, stage.w, v.y - stage.topBandH);
+    }
+    const below = v.y + v.h;
+    if (below < stage.rosterBandTop) {
+      ctx.fillRect(0, below, stage.w, stage.rosterBandTop - below);
+    }
+  }
 }
 
 function drawSandGrain(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {

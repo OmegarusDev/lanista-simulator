@@ -3,10 +3,11 @@ import { colors } from '../../content/palette';
 import { createQuickMatch, type Match } from '../../domain/combat/match';
 import { SeededRNG } from '../../domain/rng';
 import type { CombatEvent, FighterSnapshot, MatchResult } from '../../domain/combat/types';
-import { DESIGN_H, DESIGN_W } from '../../shell/canvas';
+import { ARENA_WORLD_H, ARENA_WORLD_W, getDesign } from '../../shell/canvas';
 import type { Input } from '../../shell/input';
 import {
   drawArena,
+  drawArenaChromeVignette,
   drawDust,
   spawnDust,
   stepDust,
@@ -14,6 +15,12 @@ import {
 } from '../../view/arena';
 import type { Synth } from '../../view/audio';
 import { drawGladiator } from '../../view/gladiatorDraw';
+import {
+  designToWorld,
+  fightInspectRect,
+  fightStageLayout,
+  type FightStageLayout,
+} from '../../view/layout';
 import {
   button,
   debugBadge,
@@ -23,14 +30,7 @@ import {
   rosterChip,
   segmentedControl,
 } from '../../view/ui';
-import {
-  fightBottomY,
-  fightLayout,
-  fightRosterBandTop,
-  fightRosterY,
-  space,
-  typeScale,
-} from '../../view/theme';
+import { space, typeScale } from '../../view/theme';
 import type { SandboxConfig } from './sandbox';
 
 export type FightAction =
@@ -78,8 +78,8 @@ export class FightScene {
       config.seed,
       config.team0,
       config.team1,
-      DESIGN_W,
-      DESIGN_H,
+      ARENA_WORLD_W,
+      ARENA_WORLD_H,
     );
   }
 
@@ -139,7 +139,18 @@ export class FightScene {
   }
 
   draw(ctx: CanvasRenderingContext2D, input: Input): FightAction {
-    drawArena(ctx, this.shake, { seed: this.config.seed });
+    const stage = fightStageLayout();
+    const { w, h } = getDesign();
+
+    // Shell fill behind world
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(0, 0, w, h);
+
+    const t = stage.world;
+    ctx.save();
+    ctx.translate(t.ox, t.oy);
+    ctx.scale(t.scale, t.scale);
+    drawArena(ctx, this.shake, { seed: this.config.seed, stage });
 
     const snaps = this.match.snapshots().slice().sort((a, b) => a.y - b.y);
     for (const f of snaps) {
@@ -148,30 +159,33 @@ export class FightScene {
     }
 
     drawDust(ctx, this.dust);
+    ctx.restore();
 
-    // —— Chrome bands ——
-    this.drawTopBand(ctx);
-    let action = this.drawBottomChrome(ctx, input);
-    this.drawRoster(ctx, input, snaps);
-    this.drawInspect(ctx, snaps);
+    drawArenaChromeVignette(ctx, stage);
+
+    // —— Chrome bands (design space) ——
+    this.drawTopBand(ctx, stage);
+    let action = this.drawBottomChrome(ctx, input, stage);
+    this.drawRoster(ctx, input, snaps, stage);
+    this.drawInspect(ctx, snaps, stage);
 
     if (this.debugFeel) {
-      debugBadge(ctx, DESIGN_W - 56, 8);
+      debugBadge(ctx, stage.w - 56, 8);
     }
 
     if (this.finished) {
-      action = this.drawEndBanner(ctx, input, action);
+      action = this.drawEndBanner(ctx, input, action, stage);
     } else {
       // Arena click-to-select after chrome consumed clicks
-      this.handleArenaPick(input, snaps);
+      this.handleArenaPick(input, snaps, stage);
     }
 
     return action;
   }
 
-  private drawTopBand(ctx: CanvasRenderingContext2D): void {
-    const yTitle = 26;
-    label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 20, yTitle, {
+  private drawTopBand(ctx: CanvasRenderingContext2D, stage: FightStageLayout): void {
+    const yTitle = stage.orientation === 'portrait' ? 28 : 26;
+    label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 16, yTitle, {
       size: typeScale.title,
       color: colors.parchment,
     });
@@ -180,14 +194,13 @@ export class FightScene {
       .snapshots()
       .map((f) => `${f.team === 0 ? 'B' : 'R'}:${ARMATURAE[f.armatura].short}`)
       .join('  ·  ');
-    label(ctx, lineup, DESIGN_W / 2, yTitle, {
-      size: typeScale.label,
+    label(ctx, lineup, stage.w / 2, yTitle, {
+      size: stage.orientation === 'portrait' ? typeScale.meta : typeScale.label,
       align: 'center',
       color: colors.muted,
     });
 
-    // Seed demoted — small, right of matchup
-    label(ctx, `seed ${this.config.seed}`, 20, 42, {
+    label(ctx, `seed ${this.config.seed}`, 16, yTitle + 16, {
       variant: 'eyebrow',
       color: colors.muted,
     });
@@ -201,38 +214,83 @@ export class FightScene {
     return { type: 'CAREER_DONE', result: 'TEAM1', forfeited: true };
   }
 
-  private drawBottomChrome(ctx: CanvasRenderingContext2D, input: Input): FightAction {
-    const y = fightBottomY();
+  private drawBottomChrome(
+    ctx: CanvasRenderingContext2D,
+    input: Input,
+    stage: FightStageLayout,
+  ): FightAction {
+    const y = stage.bottomCtrlY;
     let action: FightAction = { type: 'NONE' };
+    const pad = 12;
+    const rowH = stage.orientation === 'portrait' ? 40 : 34;
 
-    // Session group (left)
-    if (button(ctx, { x: 16, y, w: 72, h: 34 }, 'Leave', input.pointer)) {
+    if (stage.bottomRows === 2) {
+      // Portrait: session row, then playback row
+      const sessionN = this.career ? 1 : 3;
+      const labels = this.career ? ['Leave'] : ['Leave', 'Restart', 'Reroll'];
+      const rowW = stage.w - pad * 2;
+      const gap = 8;
+      const bw = (rowW - gap * (sessionN - 1)) / sessionN;
+      for (let i = 0; i < sessionN; i++) {
+        const r = { x: pad + i * (bw + gap), y, w: bw, h: rowH };
+        if (button(ctx, r, labels[i]!, input.pointer)) {
+          this.synth.play('ui');
+          if (i === 0) action = this.careerLeave();
+          else if (i === 1) action = { type: 'RESTART' };
+          else action = { type: 'REROLL' };
+        }
+      }
+
+      const y2 = y + rowH + space.sm;
+      const speedIdx = SPEEDS.indexOf(this.speed as (typeof SPEEDS)[number]);
+      const segW = stage.w - pad * 2 - 96 - gap;
+      const picked = segmentedControl(
+        ctx,
+        { x: pad, y: y2, w: segW, h: rowH },
+        ['1×', '2×', '4×'],
+        speedIdx >= 0 ? speedIdx : 0,
+        input.pointer,
+      );
+      if (picked !== null) this.speed = SPEEDS[picked]!;
+      if (
+        button(
+          ctx,
+          { x: pad + segW + gap, y: y2, w: 96, h: rowH },
+          this.synth.isMuted ? 'Unmute' : 'Mute',
+          input.pointer,
+        )
+      ) {
+        this.synth.toggleMute();
+      }
+      return action;
+    }
+
+    // Landscape: single control row
+    if (button(ctx, { x: 16, y, w: 72, h: rowH }, 'Leave', input.pointer)) {
       this.synth.play('ui');
       action = this.careerLeave();
     }
     if (!this.career) {
-      if (button(ctx, { x: 94, y, w: 80, h: 34 }, 'Restart', input.pointer)) {
+      if (button(ctx, { x: 94, y, w: 80, h: rowH }, 'Restart', input.pointer)) {
         this.synth.play('ui');
         action = { type: 'RESTART' };
       }
-      if (button(ctx, { x: 180, y, w: 74, h: 34 }, 'Reroll', input.pointer)) {
+      if (button(ctx, { x: 180, y, w: 74, h: rowH }, 'Reroll', input.pointer)) {
         this.synth.play('ui');
         action = { type: 'REROLL' };
       }
     }
 
-    hairline(ctx, 266, y + 6, 266, y + 28);
+    hairline(ctx, 266, y + 6, 266, y + rowH - 6);
 
-    // Bout meta
-    label(ctx, 'Bout', 278, y + 12, { variant: 'eyebrow' });
-    label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 278, y + 28, {
+    label(ctx, 'Bout', 278, y + 10, { variant: 'eyebrow' });
+    label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 278, y + 26, {
       variant: 'value',
       size: typeScale.body,
     });
 
-    // Playback segmented + mute (right)
     const speedIdx = SPEEDS.indexOf(this.speed as (typeof SPEEDS)[number]);
-    const segR = { x: DESIGN_W - 248, y, w: 132, h: 34 };
+    const segR = { x: stage.w - 248, y, w: 132, h: rowH };
     const picked = segmentedControl(
       ctx,
       segR,
@@ -247,7 +305,7 @@ export class FightScene {
     if (
       button(
         ctx,
-        { x: DESIGN_W - 104, y, w: 88, h: 34 },
+        { x: stage.w - 104, y, w: 88, h: rowH },
         this.synth.isMuted ? 'Unmute' : 'Mute',
         input.pointer,
       )
@@ -262,28 +320,36 @@ export class FightScene {
     ctx: CanvasRenderingContext2D,
     input: Input,
     snaps: FighterSnapshot[],
+    stage: FightStageLayout,
   ): void {
-    const y = fightRosterY();
-    const h = fightLayout.rosterH;
+    const y = stage.rosterY;
+    const h = stage.rosterH;
     const blue = snaps.filter((f) => f.team === 0).sort((a, b) => a.id - b.id);
     const red = snaps.filter((f) => f.team === 1).sort((a, b) => a.id - b.id);
-    const gap = fightLayout.chipGap;
-    const mid = DESIGN_W / 2;
-    const labelY = fightRosterBandTop() + 10;
+    const gap = stage.chipGap;
+    const mid = stage.w / 2;
+    const labelY = stage.rosterBandTop + 10;
+    const edge = 12;
 
-    label(ctx, 'Blue', 16, labelY, { variant: 'eyebrow', color: colors.ally });
-    label(ctx, 'Red', DESIGN_W - 16, labelY, {
+    label(ctx, 'Blue', edge, labelY, { variant: 'eyebrow', color: colors.ally });
+    label(ctx, 'Red', stage.w - edge, labelY, {
       variant: 'eyebrow',
       align: 'right',
       color: colors.foe,
     });
 
-    const leftBudget = mid - 24 - gap;
-    const rightBudget = mid - 24 - gap;
-    const chipWBlue = Math.min(150, (leftBudget - gap * Math.max(0, blue.length - 1)) / Math.max(1, blue.length));
-    const chipWRed = Math.min(150, (rightBudget - gap * Math.max(0, red.length - 1)) / Math.max(1, red.length));
+    const leftBudget = mid - edge - gap;
+    const rightBudget = mid - edge - gap;
+    const chipWBlue = Math.min(
+      150,
+      (leftBudget - gap * Math.max(0, blue.length - 1)) / Math.max(1, blue.length),
+    );
+    const chipWRed = Math.min(
+      150,
+      (rightBudget - gap * Math.max(0, red.length - 1)) / Math.max(1, red.length),
+    );
 
-    let bx = 16;
+    let bx = edge;
     for (const f of blue) {
       const r = { x: bx, y, w: chipWBlue, h };
       if (
@@ -302,7 +368,7 @@ export class FightScene {
       bx += chipWBlue + gap;
     }
 
-    let rx = DESIGN_W - 16 - chipWRed * red.length - gap * Math.max(0, red.length - 1);
+    let rx = stage.w - edge - chipWRed * red.length - gap * Math.max(0, red.length - 1);
     for (const f of red) {
       const r = { x: rx, y, w: chipWRed, h };
       if (
@@ -324,17 +390,17 @@ export class FightScene {
     hairline(ctx, mid, y + 4, mid, y + h - 4);
   }
 
-  private drawInspect(ctx: CanvasRenderingContext2D, snaps: FighterSnapshot[]): void {
+  private drawInspect(
+    ctx: CanvasRenderingContext2D,
+    snaps: FighterSnapshot[],
+    stage: FightStageLayout,
+  ): void {
     if (this.selectedId === null) return;
     const f = snaps.find((s) => s.id === this.selectedId);
     if (!f) return;
 
     const def = ARMATURAE[f.armatura];
-    const w = fightLayout.inspectW;
-    // Prefer opposite side of fighter
-    const dockLeft = f.x > DESIGN_W / 2;
-    const x = dockLeft ? fightLayout.inspectPad : DESIGN_W - fightLayout.inspectPad - w;
-    const y = fightLayout.topBandH + space.sm;
+    const preferLeft = f.x > ARENA_WORLD_W / 2;
     const debugLines = this.debugFeel
       ? [
           `${f.intention}  d*${f.desiredDist.toFixed(0)}`,
@@ -342,10 +408,12 @@ export class FightScene {
           `fw ${f.footwork}`,
         ]
       : undefined;
-    const h =
+    const contentH =
       168 +
       (debugLines ? 16 + debugLines.length * 13 : 0) +
       (def.tipCatchRatio > 0 ? 15 : 0);
+
+    const r = fightInspectRect(stage, preferLeft, contentH);
 
     const lines: { label: string; value: string }[] = [
       { label: 'HP', value: `${Math.ceil(f.hp)} / ${f.maxHp}` },
@@ -359,24 +427,21 @@ export class FightScene {
       lines.push({ label: 'Tip-catch', value: `${Math.round(def.tipCatchRatio * 100)}% reach` });
     }
 
-    inspectCard(
-      ctx,
-      { x, y, w, h: Math.min(h, fightLayout.inspectMaxH) },
-      {
-        title: f.name,
-        subtitle: `${def.name} · ${f.team === 0 ? 'Blue' : 'Red'}`,
-        team: f.team,
-        stateLine: fighterStateLine(f),
-        lines,
-        debugLines,
-      },
-    );
+    inspectCard(ctx, r, {
+      title: f.name,
+      subtitle: `${def.name} · ${f.team === 0 ? 'Blue' : 'Red'}`,
+      team: f.team,
+      stateLine: fighterStateLine(f),
+      lines,
+      debugLines,
+    });
   }
 
   private drawEndBanner(
     ctx: CanvasRenderingContext2D,
     input: Input,
     action: FightAction,
+    stage: FightStageLayout,
   ): FightAction {
     const text =
       this.match.result === 'DRAW'
@@ -385,73 +450,105 @@ export class FightScene {
           ? 'Blue wins'
           : 'Red wins';
 
-    const bandY = DESIGN_H * 0.34;
+    const bandH = 120;
+    const bandY =
+      stage.orientation === 'portrait'
+        ? stage.world.view.y + stage.world.view.h / 2 - bandH / 2
+        : stage.h * 0.34;
     ctx.fillStyle = 'rgba(10,8,6,0.62)';
-    ctx.fillRect(0, bandY, DESIGN_W, 120);
+    ctx.fillRect(0, bandY, stage.w, bandH);
 
-    label(ctx, text, DESIGN_W / 2, bandY + 42, {
+    label(ctx, text, stage.w / 2, bandY + 42, {
       size: typeScale.banner,
       align: 'center',
       color: colors.parchment,
     });
-    label(ctx, 'Session', DESIGN_W / 2, bandY + 62, {
+    label(ctx, 'Session', stage.w / 2, bandY + 62, {
       variant: 'eyebrow',
       align: 'center',
     });
 
     const by = bandY + 74;
     if (this.career) {
-      if (button(ctx, { x: DESIGN_W / 2 - 70, y: by, w: 140, h: 34 }, 'Continue', input.pointer)) {
+      if (button(ctx, { x: stage.w / 2 - 70, y: by, w: 140, h: 34 }, 'Continue', input.pointer)) {
         this.synth.play('ui');
         return { type: 'CAREER_DONE', result: this.match.result, forfeited: false };
       }
       return action;
     }
-    if (button(ctx, { x: DESIGN_W / 2 - 170, y: by, w: 100, h: 34 }, 'Restart', input.pointer)) {
+
+    if (stage.orientation === 'portrait') {
+      const gap = 8;
+      const bw = (stage.w - 32 - gap * 2) / 3;
+      if (button(ctx, { x: 16, y: by, w: bw, h: 34 }, 'Restart', input.pointer)) {
+        this.synth.play('ui');
+        return { type: 'RESTART' };
+      }
+      if (button(ctx, { x: 16 + bw + gap, y: by, w: bw, h: 34 }, 'Reroll', input.pointer)) {
+        this.synth.play('ui');
+        return { type: 'REROLL' };
+      }
+      if (button(ctx, { x: 16 + (bw + gap) * 2, y: by, w: bw, h: 34 }, 'Leave', input.pointer)) {
+        this.synth.play('ui');
+        return { type: 'EXIT' };
+      }
+      return action;
+    }
+
+    if (button(ctx, { x: stage.w / 2 - 170, y: by, w: 100, h: 34 }, 'Restart', input.pointer)) {
       this.synth.play('ui');
       return { type: 'RESTART' };
     }
-    if (button(ctx, { x: DESIGN_W / 2 - 50, y: by, w: 100, h: 34 }, 'Reroll', input.pointer)) {
+    if (button(ctx, { x: stage.w / 2 - 50, y: by, w: 100, h: 34 }, 'Reroll', input.pointer)) {
       this.synth.play('ui');
       return { type: 'REROLL' };
     }
-    if (button(ctx, { x: DESIGN_W / 2 + 70, y: by, w: 100, h: 34 }, 'Leave', input.pointer)) {
+    if (button(ctx, { x: stage.w / 2 + 70, y: by, w: 100, h: 34 }, 'Leave', input.pointer)) {
       this.synth.play('ui');
       return { type: 'EXIT' };
     }
     return action;
   }
 
-  private handleArenaPick(input: Input, snaps: FighterSnapshot[]): void {
+  private handleArenaPick(
+    input: Input,
+    snaps: FighterSnapshot[],
+    stage: FightStageLayout,
+  ): void {
     if (!input.pointer.clicked) return;
-    // Ignore clicks in chrome bands
     const py = input.pointer.y;
-    if (py < fightLayout.topBandH || py >= fightRosterBandTop() - 2) {
+    const px = input.pointer.x;
+
+    // Ignore clicks in chrome bands
+    if (py < stage.topBandH || py >= stage.rosterBandTop - 2) {
       input.pointer.clicked = false;
       return;
     }
+
     // Ignore inspect panel area when open
     if (this.selectedId !== null) {
       const f = snaps.find((s) => s.id === this.selectedId);
       if (f) {
-        const w = fightLayout.inspectW;
-        const dockLeft = f.x > DESIGN_W / 2;
-        const ix = dockLeft ? fightLayout.inspectPad : DESIGN_W - fightLayout.inspectPad - w;
-        const iy = fightLayout.topBandH + space.sm;
-        const ih = fightLayout.inspectMaxH;
-        if (
-          input.pointer.x >= ix &&
-          input.pointer.x <= ix + w &&
-          input.pointer.y >= iy &&
-          input.pointer.y <= iy + ih
-        ) {
+        const preferLeft = f.x > ARENA_WORLD_W / 2;
+        const ir = fightInspectRect(stage, preferLeft, stage.inspectMaxH);
+        if (px >= ir.x && px <= ir.x + ir.w && py >= ir.y && py <= ir.y + ir.h) {
           input.pointer.clicked = false;
           return;
         }
       }
     }
 
-    const hit = pickFighterAt(snaps, input.pointer.x, input.pointer.y);
+    // Only pick inside the arena view; map to world space
+    const v = stage.world.view;
+    if (px < v.x || px > v.x + v.w || py < v.y || py > v.y + v.h) {
+      this.selectedId = null;
+      input.pointer.clicked = false;
+      return;
+    }
+
+    const world = designToWorld(px, py, stage.world);
+    const hitR = stage.hitRadius / Math.max(0.001, stage.world.scale);
+    const hit = pickFighterAt(snaps, world.x, world.y, hitR);
     if (hit) {
       this.toggleSelect(hit.id);
       this.synth.play('ui');
@@ -529,9 +626,10 @@ function pickFighterAt(
   snaps: FighterSnapshot[],
   x: number,
   y: number,
+  hitRadius: number,
 ): FighterSnapshot | null {
   let best: FighterSnapshot | null = null;
-  let bestD = fightLayout.hitRadius * fightLayout.hitRadius;
+  let bestD = hitRadius * hitRadius;
   for (const f of snaps) {
     const dx = f.x - x;
     const dy = f.y - y;
