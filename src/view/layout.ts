@@ -357,7 +357,7 @@ export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxL
   const stacked = orientation === 'portrait' || dw < 780;
   const pad = shellPad(dw);
 
-  const titleBtn: Rect = { x: pad, y: pad, w: 72, h: 28 };
+  const titleBtn: Rect = { x: pad, y: pad, w: 40, h: 36 };
   const brandY = stacked ? 28 : 34;
   const subtitleY = brandY + 20;
   const historicalLabelY = subtitleY + 18;
@@ -408,9 +408,9 @@ export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxL
       vsY: ctrlY + 28,
       seedY: ctrlY + 44,
       reroll: { x: midX - 50, y: ctrlY + 52, w: 100, h: 28 },
-      fight: { x: midX - 70, y: ctrlY + 88, w: 140, h: 44 },
+      fight: { x: midX - 90, y: ctrlY + 88, w: 180, h: 56 },
     };
-    const panelY = ctrlY + 144;
+    const panelY = ctrlY + 156;
     const panelH = Math.max(200, (dh - panelY - 28 - 8) / 2);
     leftPanel = { x: pad, y: panelY, w: dw - pad * 2, h: panelH };
     rightPanel = {
@@ -434,7 +434,7 @@ export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxL
       vsY: panelY + 112,
       seedY: panelY + 150,
       reroll: { x: midX - 50, y: panelY + 160, w: 100, h: 28 },
-      fight: { x: midX - 70, y: panelY + 212, w: 140, h: 44 },
+      fight: { x: midX - 90, y: panelY + 200, w: 180, h: 56 },
     };
   }
 

@@ -101,7 +101,7 @@ export class SandboxScene {
 
     let action: SandboxAction = { type: 'NONE' };
 
-    if (button(ctx, L.titleBtn, 'Title', input.pointer)) {
+    if (button(ctx, L.titleBtn, '←', input.pointer, { size: 20 })) {
       this.synth.play('ui');
       action = { type: 'BACK' };
     }
@@ -166,7 +166,7 @@ export class SandboxScene {
       this.seed = (Math.random() * 0xffffffff) >>> 0;
       this.synth.play('ui');
     }
-    if (button(ctx, c.fight, 'Fight', input.pointer)) {
+    if (button(ctx, c.fight, 'Fight', input.pointer, { size: 20 })) {
       this.synth.play('ui');
       action = { type: 'START', config: this.makeConfig() };
     }

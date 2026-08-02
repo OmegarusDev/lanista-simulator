@@ -127,11 +127,11 @@ export function button(
   r: Rect,
   text: string,
   pointer: PointerState,
-  opts?: { active?: boolean; disabled?: boolean; accent?: string },
+  opts?: { active?: boolean; disabled?: boolean; accent?: string; size?: number },
 ): boolean {
   const { pressed, clicked } = buttonChrome(ctx, r, pointer, opts);
   ctx.fillStyle = opts?.disabled ? surface.muted : surface.buttonText;
-  ctx.font = `600 ${typeScale.label}px ${fontStack}`;
+  ctx.font = `600 ${opts?.size ?? typeScale.label}px ${fontStack}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2 + (pressed ? 1 : 0));
