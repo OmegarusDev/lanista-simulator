@@ -95,6 +95,96 @@ export function label(
   ctx.fillText(text, x, y);
 }
 
+/**
+ * Largest font size where every line fits in `maxW` and the stacked block fits in `maxH`.
+ * Used by fitted multi-line button labels (e.g. Instant Match historical matchups).
+ */
+export function fitFontSize(
+  ctx: CanvasRenderingContext2D,
+  lines: readonly string[],
+  maxW: number,
+  maxH: number,
+  opts?: { min?: number; max?: number; weight?: string; lineGapRatio?: number },
+): number {
+  const n = lines.length;
+  if (n === 0 || maxW <= 0 || maxH <= 0) return opts?.min ?? 8;
+  const min = opts?.min ?? 8;
+  const maxCap = opts?.max ?? 28;
+  const weight = opts?.weight ?? '600';
+  const gapRatio = opts?.lineGapRatio ?? 0.18;
+
+  // Height budget: n * size + (n-1) * gapRatio * size
+  const heightFactor = n + Math.max(0, n - 1) * gapRatio;
+  let lo = min;
+  let hi = Math.min(maxCap, Math.floor(maxH / heightFactor));
+  if (hi < min) return min;
+
+  let best = min;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    ctx.font = `${weight} ${mid}px ${fontStack}`;
+    let fits = true;
+    for (const line of lines) {
+      if (ctx.measureText(line).width > maxW) {
+        fits = false;
+        break;
+      }
+    }
+    if (fits) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+/** Centered multi-line label sized to fill a rect (width + height). */
+export function labelFitted(
+  ctx: CanvasRenderingContext2D,
+  lines: readonly string[],
+  r: Rect,
+  opts?: {
+    color?: string;
+    weight?: string;
+    padX?: number;
+    padY?: number;
+    min?: number;
+    max?: number;
+    yOffset?: number;
+  },
+): void {
+  const n = lines.length;
+  if (n === 0) return;
+  const padX = opts?.padX ?? 5;
+  const padY = opts?.padY ?? 3;
+  const weight = opts?.weight ?? '600';
+  const gapRatio = 0.18;
+  const maxW = Math.max(1, r.w - padX * 2);
+  const maxH = Math.max(1, r.h - padY * 2);
+  const size = fitFontSize(ctx, lines, maxW, maxH, {
+    min: opts?.min,
+    max: opts?.max,
+    weight,
+    lineGapRatio: gapRatio,
+  });
+  const gap = size * gapRatio;
+  const step = size + gap;
+  const blockH = n * size + Math.max(0, n - 1) * gap;
+  const midY = r.y + r.h / 2 + (opts?.yOffset ?? 0);
+  const firstMid = midY - blockH / 2 + size / 2;
+
+  ctx.fillStyle = opts?.color ?? surface.buttonText;
+  ctx.font = `${weight} ${size}px ${fontStack}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const cx = r.x + r.w / 2;
+  for (let i = 0; i < n; i++) {
+    ctx.fillText(lines[i]!, cx, firstMid + i * step);
+  }
+}
+
 export function buttonChrome(
   ctx: CanvasRenderingContext2D,
   r: Rect,

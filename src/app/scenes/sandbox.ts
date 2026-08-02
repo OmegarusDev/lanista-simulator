@@ -7,7 +7,7 @@ import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
 import { drawArmaturaPreview } from '../../view/gladiatorDraw';
 import { sandboxLayout } from '../../view/layout';
-import { button, buttonChrome, label, panel, type Rect } from '../../view/ui';
+import { button, buttonChrome, label, labelFitted, panel, type Rect } from '../../view/ui';
 
 export interface SandboxConfig {
   /** Instant Match: 1|2. Career munera may pass 3. */
@@ -115,27 +115,20 @@ export class SandboxScene {
       const p = PAIRING_PRESETS[i]!;
       const r = L.presetRects[i]!;
       const { pressed, clicked } = buttonChrome(ctx, r, input.pointer);
-      const midX = r.x + r.w / 2;
-      const midY = r.y + r.h / 2 + (pressed ? 1 : 0);
       const vsIdx = p.label.indexOf(' vs ');
-      if (vsIdx > 0) {
-        label(ctx, p.label.slice(0, vsIdx), midX, midY - 7, {
-          size: 11,
-          align: 'center',
-          color: colors.buttonText,
-        });
-        label(ctx, `vs ${p.label.slice(vsIdx + 4)}`, midX, midY + 8, {
-          size: 11,
-          align: 'center',
-          color: colors.buttonText,
-        });
-      } else {
-        label(ctx, p.label, midX, midY, {
-          size: 11,
-          align: 'center',
-          color: colors.buttonText,
-        });
-      }
+      const lines =
+        vsIdx > 0
+          ? [p.label.slice(0, vsIdx), `vs ${p.label.slice(vsIdx + 4)}`]
+          : [p.label];
+      labelFitted(ctx, lines, r, {
+        color: colors.buttonText,
+        yOffset: pressed ? 1 : 0,
+        // Prefer filling the preset cell; width-bound names still shrink cleanly.
+        padX: 4,
+        padY: 2,
+        min: 10,
+        max: 22,
+      });
       if (clicked) {
         const config = this.configFromPreset(p.id);
         try {
