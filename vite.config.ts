@@ -15,6 +15,8 @@ function fullReloadOnSrcChange(): Plugin {
 }
 
 export default defineConfig({
+  // Project Pages URL: https://omegarusdev.github.io/lanista-simulator/
+  base: '/lanista-simulator/',
   plugins: [fullReloadOnSrcChange()],
   resolve: {
     alias: {

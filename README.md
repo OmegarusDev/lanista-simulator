@@ -1,8 +1,18 @@
+<p align="center">
+  <a href="https://omegarusdev.github.io/lanista-simulator/">
+    <img src="https://img.shields.io/badge/▶_PLAY_NOW-playable_in_browser-brightgreen?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Play Now" />
+  </a>
+</p>
+
+<p align="center"><strong>No install.</strong> Works in the browser (desktop &amp; mobile).</p>
+
 # Lanista Simulator
 
 Roman lanista roguelite — thin season management plus Canvas2D autobattler. Zero external art/audio assets.
 
-## Run
+**Play online:** [omegarusdev.github.io/lanista-simulator](https://omegarusdev.github.io/lanista-simulator/)
+
+## Run locally
 
 ```bash
 npm install
@@ -14,6 +24,7 @@ Open `http://127.0.0.1:5299` (dedicated port so it doesn’t collide with other 
 ```bash
 npm test
 npm run typecheck
+npm run build
 ```
 
 ## Flow
@@ -30,3 +41,7 @@ npm run typecheck
 Keys: `Space` fight, `Esc` leave/clear, `R`/`N` lab restart/reroll, `1`/`2`/`4` speed, `D` feel debug.
 
 **Armaturae:** Murmillo, Thraex, Retiarius, Secutor, Hoplomachus, Provocator, Dimachaerus, Scissor.
+
+## Tech
+
+Vite + TypeScript + Canvas2D. Deployed to GitHub Pages from `main` via Actions.
