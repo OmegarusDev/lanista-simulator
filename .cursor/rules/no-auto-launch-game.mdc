@@ -1,0 +1,22 @@
+---
+description: Do not auto-launch or open the game in a browser after edits; tell the user to refresh instead.
+alwaysApply: true
+---
+
+# No auto-launch of the game
+
+Do **not** agent-initiate opening the game after edits or as a smoke test.
+
+## Banned (unless the user explicitly asks to launch/open the game)
+
+- MCP `browser_navigate` to the local game URL
+- MCP `open_resource` to the dev URL
+- Shell `open` / `xdg-open` (or similar) of the local game URL
+
+## After a full edit pass
+
+Tell the user the work is done and they can refresh. Prefer mentioning `http://127.0.0.1:5299/` when relevant. Do **not** open it for them.
+
+## Allowed
+
+Vite HMR / full-reload-on-src-change may stay enabled so an already-open tab updates. Do not remove that unless it is clearly wrong. The ban is only on **agent-initiated launching/opening** of the game.

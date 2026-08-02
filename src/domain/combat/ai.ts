@@ -1,0 +1,615 @@
+import { effectiveAttackArc } from '../../content/armatura';
+import { combatTuning } from '../../content/combat';
+import type { SeededRNG } from '../rng';
+import { angleDelta, angleTo, dist, inCone } from './geometry';
+import type { Fighter } from './fighter';
+import type { Footwork, Intention } from './types';
+
+export type FootworkDecision = {
+  desiredDist: number;
+  lateralBias: -1 | 0 | 1;
+  footwork: Footwork;
+  faceMode: 'ENEMY' | 'TANGENT' | 'HOLD';
+  sideSign: number;
+  /** Optional intention pick when idle / expired */
+  intentionPick?: Intention;
+};
+
+export type CommitDecision = {
+  guard: boolean;
+  cut: boolean;
+  sidestep: boolean;
+  /** Start FEINT windup commit */
+  feintCut: boolean;
+};
+
+/**
+ * Class personality as intention weights — geometry hooks, not scripts.
+ * Secutor → PRESS, Ret → INVITE/FEINT, Thraex → ANGLE/FEINT.
+ */
+export function intentionWeights(self: Fighter): Record<Intention, number> {
+  const d = self.def();
+  const broken = self.poiseBroken || self.poiseTier === 'BROKEN';
+  const critical = self.poiseTier === 'CRITICAL';
+  return {
+    NONE: 0,
+    PRESS: broken ? 0.02 : critical ? 0.08 + d.pursueBias * 0.35 : 0.18 + d.pursueBias * 1.1,
+    YIELD:
+      0.12 +
+      d.clinchPanic * 0.55 +
+      (broken ? 1.8 : critical ? 0.85 : 0),
+    ANGLE: 0.14 + d.circleArcBonus * 2.2 + (broken ? 0.35 : 0),
+    INVITE: broken ? 0.02 : 0.1 + d.clinchPanic * 0.45 + (1 - d.pursueBias) * 0.25,
+    FEINT: broken ? 0.02 : 0.08 + d.circleArcBonus * 1.4 + d.clinchPanic * 0.2,
+    RESET: 0.06 + (broken ? 0.25 : critical ? 0.12 : 0),
+  };
+}
+
+/** Abort willingness from kit geometry (Ret high, Sec low). */
+export function abortBias(self: Fighter): number {
+  const d = self.def();
+  return Math.min(1, d.clinchPanic * 0.65 + (1 - d.pursueBias) * 0.3 + d.circleArcBonus * 0.4);
+}
+
+/**
+ * Desired measure d* from class mid-range, shifted by intention + kit bias.
+ */
+export function computeDesiredDist(
+  self: Fighter,
+  distance: number,
+  tick: number,
+): number {
+  const d = self.def();
+  const mid = (d.measureMin + d.measureMax) * 0.5;
+  const intent = self.activeIntention(tick);
+  let target = mid;
+
+  // Kit base: pursuers sit a touch inside mid; panic kits a touch outside
+  target += (d.pursueBias - d.clinchPanic * 0.5) * (d.measureMax - d.measureMin) * 0.35;
+
+  switch (intent) {
+    case 'PRESS':
+      // Long kits press to tip; short kits crowd mid-inside
+      target =
+        d.clinchPanic > 0.55
+          ? mid + (d.measureMax - mid) * 0.35
+          : d.measureMin + (mid - d.measureMin) * 0.35;
+      break;
+    case 'YIELD':
+      // Ease out inside / to measureMax — don't abandon weapon threat
+      target = mid + (d.measureMax - mid) * (0.65 + d.clinchPanic * 0.25);
+      break;
+    case 'ANGLE':
+      target = mid;
+      break;
+    case 'INVITE':
+      target = mid + (d.measureMax - mid) * 0.55;
+      break;
+    case 'FEINT':
+      target =
+        self.feintStage === 'IN'
+          ? mid - (mid - d.measureMin) * 0.45
+          : mid;
+      break;
+    case 'RESET':
+      target = mid;
+      break;
+    default:
+      break;
+  }
+
+  // Soft/critical → prefer space; broken → hard open (scramble out of the blade)
+  const tier = self.poiseTier;
+  if (tier === 'SOFT') target += (d.measureMax - mid) * 0.2;
+  if (tier === 'CRITICAL') target += (d.measureMax - mid) * 0.45;
+  if (tier === 'BROKEN' || self.poiseBroken) {
+    target = Math.max(target, d.measureMax * 1.12);
+  }
+
+  // Clinch panic when jammed — ease out, don't teleport d* to max reach
+  const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
+  if (distance < clinchDist && d.clinchPanic > 0.4) {
+    const midNow = (d.measureMin + d.measureMax) * 0.5;
+    target = Math.max(target, midNow + (d.measureMax - midNow) * d.clinchPanic * 0.85);
+  }
+
+  const cap = self.poiseBroken || tier === 'BROKEN' ? d.measureMax * 1.45 : d.measureMax * 1.25;
+  return Math.max(d.measureMin * 0.75, Math.min(cap, target));
+}
+
+export function cutUrge(self: Fighter, tick: number, enemy: Fighter): number {
+  const intent = self.activeIntention(tick);
+  let urge = 0.42;
+  switch (intent) {
+    case 'PRESS':
+      urge = 0.84;
+      break;
+    case 'YIELD':
+      urge = 0.18;
+      break;
+    case 'ANGLE':
+      urge = 0.48;
+      break;
+    case 'INVITE':
+      urge = 0.14;
+      break;
+    case 'FEINT':
+      urge = 0.6;
+      break;
+    case 'RESET':
+      urge = 0.2;
+      break;
+    default:
+      urge = 0.44 + self.def().pursueBias * 0.28;
+      break;
+  }
+  // Enemy INVITE raises our urge
+  if (enemy.activeIntention(tick) === 'INVITE') urge = Math.min(0.92, urge + 0.35);
+  // Soft/critical foe invites cuts; broken only while the punish window is open
+  const et = enemy.poiseTier;
+  if (et === 'SOFT') urge = Math.min(0.9, urge + 0.12);
+  if (et === 'CRITICAL') urge = Math.min(0.95, urge + 0.22);
+  if (et === 'BROKEN' || enemy.poiseBroken) {
+    if (self.brokenPunishContacts < combatTuning.brokenPunishMaxHits) {
+      urge = Math.min(0.95, urge + 0.28);
+    } else {
+      urge *= 0.35;
+    }
+  }
+  // Own crack → stop throwing, scramble
+  if (self.poiseBroken || self.poiseTier === 'BROKEN') urge *= 0.12;
+  else if (self.poiseTier === 'CRITICAL') urge *= 0.45;
+  return urge;
+}
+
+/**
+ * Radial / lateral intent — runs on the fast footwork clock.
+ */
+export function decideFootwork(
+  self: Fighter,
+  enemy: Fighter | null,
+  allies: Fighter[],
+  rng: SeededRNG,
+  tick: number,
+): FootworkDecision {
+  const idle: FootworkDecision = {
+    desiredDist: self.desiredDist || (self.def().measureMin + self.def().measureMax) * 0.5,
+    lateralBias: 0,
+    footwork: 'HOLD',
+    faceMode: 'ENEMY',
+    sideSign: self.orbitSide,
+  };
+  if (!self.alive || !enemy || !enemy.alive || self.stunned || self.tangled) {
+    return idle;
+  }
+
+  const d = self.def();
+  const distance = dist(self.x, self.y, enemy.x, enemy.y);
+  const toEnemy = angleTo(self.x, self.y, enemy.x, enemy.y);
+  const bearingErr = Math.abs(angleDelta(self.facing, toEnemy));
+  const atkArc = effectiveAttackArc(d, self.footwork);
+  const stamRatio = self.stamina / self.maxStamina;
+  const lowStam = stamRatio < combatTuning.lowStamina;
+  const intent = self.activeIntention(tick);
+
+  if (distance > d.measureMax * 1.2 && rng.chance(0.08)) {
+    self.orbitSide = rng.chance(0.5) ? 1 : -1;
+  }
+  const side = self.orbitSide;
+
+  const selfBroken = self.poiseBroken || self.poiseTier === 'BROKEN';
+  const selfCritical = self.poiseTier === 'CRITICAL';
+
+  let desiredDist = computeDesiredDist(self, distance, tick);
+  // Once outside foe's reach, stop yielding farther — re-enter the bout
+  // (broken fighters keep scrambling; do not clamp them back into range)
+  const foeRange = enemy.def().attackRange;
+  if (
+    !selfBroken &&
+    (intent === 'YIELD' || intent === 'INVITE') &&
+    distance > foeRange * 1.08 &&
+    desiredDist > distance
+  ) {
+    desiredDist = Math.min(desiredDist, (d.measureMin + d.measureMax) * 0.5);
+  }
+
+  let lateralBias: -1 | 0 | 1 = 0;
+  let faceMode: FootworkDecision['faceMode'] = 'ENEMY';
+
+  if (intent === 'ANGLE') {
+    lateralBias = side;
+    faceMode = 'ENEMY';
+  } else if (intent === 'INVITE' || intent === 'RESET') {
+    lateralBias = 0;
+  } else if (intent === 'PRESS') {
+    lateralBias = bearingErr > atkArc * 1.1 ? side : 0;
+  } else if (intent === 'YIELD') {
+    lateralBias = rng.chance(selfBroken || selfCritical ? 0.72 : 0.35) ? side : 0;
+  } else if (intent === 'FEINT' && self.feintStage === 'IN') {
+    lateralBias = 0;
+  } else {
+    // Neutral: circle when offline or kit likes angles
+    if (bearingErr > atkArc * 1.35 || (d.circleArcBonus > 0.15 && rng.chance(0.2))) {
+      lateralBias = side;
+    }
+  }
+
+  // Broken / critical: force lateral escape — scramble off the line
+  if (selfBroken || selfCritical) {
+    lateralBias = side;
+    if (selfBroken) faceMode = 'TANGENT';
+  }
+
+  const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
+  if (distance < clinchDist) {
+    lateralBias = side;
+    faceMode = d.clinchPanic < 0.5 || selfBroken ? 'TANGENT' : 'ENEMY';
+  }
+
+  for (const a of allies) {
+    if (a.id === self.id || !a.alive) continue;
+    if (dist(self.x, self.y, a.x, a.y) < combatTuning.bodyRadius * 2.4) {
+      lateralBias = side;
+      faceMode = 'ENEMY';
+      break;
+    }
+  }
+
+  if (lowStam && desiredDist < (d.measureMin + d.measureMax) * 0.5) {
+    desiredDist = Math.max(desiredDist, (d.measureMin + d.measureMax) * 0.55);
+  }
+
+  // Derive label from spring error for UI / attack-arc bonus
+  const err = distance - desiredDist;
+  const thresh = (d.measureMax - d.measureMin) * 0.12;
+  let footwork: Footwork = 'HOLD';
+  if (lateralBias !== 0 && Math.abs(err) < thresh * 1.5) {
+    footwork = lateralBias < 0 ? 'CIRCLE_L' : 'CIRCLE_R';
+  } else if (err > thresh) {
+    footwork = 'CLOSE';
+  } else if (err < -thresh) {
+    footwork = 'DISENGAGE';
+  }
+
+  let intentionPick: Intention | undefined;
+  // Broken stuck on PRESS → scramble; critical strongly prefers YIELD
+  if (selfBroken && (intent === 'PRESS' || intent === 'NONE')) {
+    intentionPick = 'YIELD';
+  } else if (selfCritical && intent === 'PRESS' && rng.chance(0.55)) {
+    intentionPick = 'YIELD';
+  } else if (intent === 'NONE') {
+    intentionPick = pickIdleIntention(self, enemy, distance, rng, tick);
+  }
+
+  return {
+    desiredDist,
+    lateralBias,
+    footwork,
+    faceMode,
+    sideSign: side,
+    intentionPick,
+  };
+}
+
+function pickIdleIntention(
+  self: Fighter,
+  enemy: Fighter,
+  distance: number,
+  rng: SeededRNG,
+  tick: number,
+): Intention | undefined {
+  const d = self.def();
+  const mid = (d.measureMin + d.measureMax) * 0.5;
+  const inMeasure = distance >= d.measureMin * 0.9 && distance <= d.measureMax * 1.1;
+  const stamOk = self.stamina / self.maxStamina > 0.45;
+  const onTempo = tick < self.tempoUntil;
+  const w = intentionWeights(self);
+  const selfBroken = self.poiseBroken || self.poiseTier === 'BROKEN';
+  const selfCritical = self.poiseTier === 'CRITICAL';
+  const foeBroken = enemy.poiseBroken || enemy.poiseTier === 'BROKEN';
+  const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
+
+  // Own posture cracked → scramble / breathe, never re-PRESS into the blade
+  if (selfBroken) return 'YIELD';
+  if (selfCritical && rng.chance(0.62 + w.YIELD * 0.15)) return 'YIELD';
+
+  // Long quiet exchange → RESET
+  if (self.ticksSinceContact > combatTuning.exchangeResetTicks && inMeasure) {
+    return 'RESET';
+  }
+
+  // Broken foe: short punish then ANGLE/RESET — do not farm the stun
+  if (foeBroken) {
+    if (self.brokenPunishContacts >= combatTuning.brokenPunishMaxHits || distance < clinchDist) {
+      return rng.chance(0.55) ? 'ANGLE' : 'RESET';
+    }
+    if (rng.chance(0.55 + w.PRESS * 0.2)) return 'PRESS';
+  }
+
+  // Soft / critical foe → lean PRESS (recovering, still dangerous)
+  if (enemy.poiseTier === 'SOFT' || enemy.poiseTier === 'CRITICAL') {
+    if (rng.chance(0.35 + w.PRESS * 0.25)) return 'PRESS';
+  }
+
+  // Collapse on a recovering foe, or windup we can already perceive
+  if (
+    distance > d.attackRange &&
+    enemy.action === 'ATTACK' &&
+    (enemy.phase === 'RECOVER' || (enemy.phase === 'WINDUP' && perceivesEnemyCut(self, enemy))) &&
+    rng.chance(0.3 + w.PRESS * 0.35)
+  ) {
+    return 'PRESS';
+  }
+
+  // After taking a hard stare without contact — ANGLE to break rhythm
+  if (self.ticksSinceContact > 70 && inMeasure && rng.chance(0.08 + w.ANGLE * 0.15)) {
+    return 'ANGLE';
+  }
+
+  // Mutual HOLD-ish: INVITE for kits that like it
+  if (
+    inMeasure &&
+    Math.abs(distance - mid) < (d.measureMax - d.measureMin) * 0.35 &&
+    self.footwork === 'HOLD' &&
+    enemy.footwork === 'HOLD' &&
+    rng.chance(0.12 + w.INVITE * 0.2)
+  ) {
+    return 'INVITE';
+  }
+
+  // FEINT when tempo clear + stam OK (uncommon — avoid fake-loop stalemates)
+  if (
+    !onTempo &&
+    stamOk &&
+    inMeasure &&
+    self.ticksSinceContact > 40 &&
+    rng.chance(0.025 + w.FEINT * 0.08)
+  ) {
+    return 'FEINT';
+  }
+
+  // Occasional ANGLE for sica kits
+  if (inMeasure && rng.chance(0.04 + w.ANGLE * 0.12)) {
+    return 'ANGLE';
+  }
+
+  return undefined;
+}
+
+/**
+ * Commit decisions — slower clock, or threat-edge forced re-eval.
+ */
+export function decideCommit(
+  self: Fighter,
+  enemy: Fighter | null,
+  rng: SeededRNG,
+  tick: number,
+): CommitDecision {
+  const idle: CommitDecision = { guard: false, cut: false, sidestep: false, feintCut: false };
+  if (!self.alive || !enemy || !enemy.alive || self.stunned || self.tangled) {
+    return idle;
+  }
+
+  const d = self.def();
+  const distance = dist(self.x, self.y, enemy.x, enemy.y);
+  const toEnemy = angleTo(self.x, self.y, enemy.x, enemy.y);
+  const bearingErr = Math.abs(angleDelta(self.facing, toEnemy));
+  const atkArc = effectiveAttackArc(d, self.footwork);
+  const lineOn = inCone(self.facing, toEnemy, atkArc * 0.9);
+  const stamRatio = self.stamina / self.maxStamina;
+  const lowStam = stamRatio < combatTuning.lowStamina;
+  const intent = self.activeIntention(tick);
+  const onTempo = tick < self.tempoUntil;
+  const guardArc = self.effectiveGuardArc();
+  // Cut range uses weapon reach — measure spring may sit slightly outside class band
+  const inCutRange =
+    distance <= d.attackRange * 1.02 && distance >= d.measureMin * 0.72;
+
+  const enemyToMe = angleTo(enemy.x, enemy.y, self.x, self.y);
+  const enemyArc = effectiveAttackArc(enemy.def(), enemy.footwork);
+  const seesCut = perceivesEnemyCut(self, enemy);
+  const enemyCuttingMe =
+    seesCut && inCone(enemy.facing, enemyToMe, enemyArc * 1.15);
+  const enemyRecovering =
+    enemy.action === 'ATTACK' && enemy.phase === 'RECOVER';
+
+  const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
+  const selfBroken = self.poiseBroken || self.poiseTier === 'BROKEN';
+  const selfCritical = self.poiseTier === 'CRITICAL';
+  const foeBroken = enemy.poiseBroken || enemy.poiseTier === 'BROKEN';
+  const punishOpen = foeBroken && self.brokenPunishContacts < combatTuning.brokenPunishMaxHits;
+
+  const canGuardThreat = inCone(self.facing, toEnemy, guardArc);
+  const guard =
+    self.canGuard &&
+    !selfBroken &&
+    ((enemyCuttingMe && canGuardThreat) ||
+      (self.poiseTier !== 'SOLID' && enemyCuttingMe && guardArc > 0.35)) &&
+    guardArc > 0.25 &&
+    self.stamina > 6 &&
+    !lowStam;
+
+  // Sidestep uses canDodge — broken fighters may still desperate-dive off the line
+  const sidestep =
+    self.canDodge &&
+    !guard &&
+    self.dodgeCd <= 0 &&
+    self.canAfford(d.dodgeStamina) &&
+    (enemyCuttingMe || (selfBroken && distance < clinchDist * 1.35)) &&
+    (selfBroken ||
+      selfCritical ||
+      guardArc < 0.5 ||
+      bearingErr > guardArc ||
+      distance < clinchDist);
+
+  const enemyGuardingLine =
+    enemy.canGuard &&
+    enemy.guarding &&
+    inCone(enemy.facing, angleTo(enemy.x, enemy.y, self.x, self.y), enemy.effectiveGuardArc());
+
+  const whiffPunish =
+    !selfBroken &&
+    enemyRecovering &&
+    distance <= d.attackRange * 1.05 &&
+    bearingErr < atkArc * 1.2 &&
+    self.attackCd <= 0 &&
+    self.canAfford(d.attackStamina);
+
+  const canCut =
+    !selfBroken &&
+    inCutRange &&
+    lineOn &&
+    self.attackCd <= 0 &&
+    self.canAfford(d.attackStamina) &&
+    !enemyCuttingMe &&
+    !(enemyGuardingLine && rng.chance(0.55)) &&
+    !lowStam &&
+    bearingErr < atkArc * 0.9 &&
+    intent !== 'RESET' &&
+    intent !== 'YIELD';
+
+  // FEINT: after micro-in, commit a fake windup
+  let feintCut = false;
+  if (
+    !selfBroken &&
+    intent === 'FEINT' &&
+    self.feintStage === 'IN' &&
+    !self.busy &&
+    self.attackCd <= 0 &&
+    self.canAfford(d.attackStamina * 0.5) &&
+    distance <= d.attackRange * 1.1
+  ) {
+    feintCut = true;
+  }
+
+  let cut = false;
+  if (feintCut) {
+    cut = false;
+  } else if (
+    whiffPunish ||
+    (punishOpen && canCut) ||
+    (enemy.poiseTier === 'CRITICAL' && canCut && rng.chance(0.75))
+  ) {
+    cut = true;
+  } else if (canCut && !onTempo) {
+    let urge = cutUrge(self, tick, enemy);
+    // INVITE suppresses own cuts but still allows tip-range opportunism for long kits
+    if (intent === 'INVITE') urge *= distance <= d.attackRange * 0.92 ? 0.45 : 0.15;
+    // Micro-hesitation — reads as thought, not aimbot
+    const hesitate =
+      rng.chance(combatTuning.cutHesitation * (1.15 - d.pursueBias * 0.5));
+    cut = !hesitate && rng.chance(urge);
+  }
+
+  return { guard, cut, sidestep, feintCut };
+}
+
+/** Threat edge — force commit re-eval before the slow clock. */
+export function commitThreatEdge(self: Fighter, enemy: Fighter | null): boolean {
+  if (!enemy || !enemy.alive) return false;
+  if (!perceivesEnemyCut(self, enemy)) return false;
+  const enemyToMe = angleTo(enemy.x, enemy.y, self.x, self.y);
+  const enemyArc = effectiveAttackArc(enemy.def(), enemy.footwork);
+  return inCone(enemy.facing, enemyToMe, enemyArc * 1.2);
+}
+
+/** Reaction lag ticks — heavy/slow helms see threats later. */
+export function reactionDelay(self: Fighter): number {
+  const tr = self.def().turnRate;
+  // turnRate ~2.0–3.6 → delay ~12–4
+  const raw = combatTuning.reactionDelayBase + (2.8 - tr) * 4;
+  return Math.max(
+    combatTuning.reactionDelayMin,
+    Math.min(combatTuning.reactionDelayMax, Math.round(raw)),
+  );
+}
+
+/** True if we "see" their cut commitment (windup past reaction lag, or active). */
+export function perceivesEnemyCut(self: Fighter, enemy: Fighter): boolean {
+  if (enemy.action !== 'ATTACK') return false;
+  if (enemy.phase === 'ACTIVE') return true;
+  if (enemy.phase !== 'WINDUP') return false;
+  return enemy.phaseT >= reactionDelay(self);
+}
+
+/**
+ * Threat pick — not pure nearest. Prefers recover/windup, low HP, threats on allies.
+ */
+export function pickThreat(self: Fighter, fighters: Fighter[]): Fighter | null {
+  let best: Fighter | null = null;
+  let bestScore = -Infinity;
+  const allies = alliesOf(self, fighters);
+
+  for (const f of fighters) {
+    if (!f.alive || f.team === self.team) continue;
+    const dd = dist(self.x, self.y, f.x, f.y);
+    let score = 400 - dd;
+
+    if (f.phase === 'RECOVER') score += 28;
+    if (f.phase === 'WINDUP' && perceivesEnemyCut(self, f)) score += 16;
+    if (f.poiseBroken || f.poiseTier === 'CRITICAL') score += 20;
+    if (f.poiseTier === 'SOFT') score += 8;
+
+    const hpRatio = f.hp / f.maxHp;
+    score += (1 - hpRatio) * combatTuning.finishHimBias;
+
+    // Ally under their blade → assist
+    for (const a of allies) {
+      if (a.id === self.id || !a.alive) continue;
+      const toAlly = angleTo(f.x, f.y, a.x, a.y);
+      const arc = effectiveAttackArc(f.def(), f.footwork);
+      if (
+        f.action === 'ATTACK' &&
+        (f.phase === 'WINDUP' || f.phase === 'ACTIVE') &&
+        inCone(f.facing, toAlly, arc * 1.2) &&
+        dist(f.x, f.y, a.x, a.y) < f.def().attackRange * 1.15
+      ) {
+        score += combatTuning.allyAssistBias;
+      }
+    }
+
+    // Slight pursueBias → stickier on current nearest
+    score += self.def().pursueBias * 6;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = f;
+    }
+  }
+  return best;
+}
+
+/** @deprecated prefer pickThreat — kept as nearest-distance helper */
+export function nearestEnemy(self: Fighter, fighters: Fighter[]): Fighter | null {
+  return pickThreat(self, fighters);
+}
+
+export function alliesOf(self: Fighter, fighters: Fighter[]): Fighter[] {
+  return fighters.filter((f) => f.team === self.team);
+}
+
+/** Relabel footwork from instantaneous spring velocity (UI / arcs). */
+export function footworkFromVelocity(
+  self: Fighter,
+  enemy: Fighter,
+  lateralBias: -1 | 0 | 1,
+): Footwork {
+  const dx = enemy.x - self.x;
+  const dy = enemy.y - self.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const fx = dx / len;
+  const fy = dy / len;
+  const lx = -fy;
+  const ly = fx;
+  const vRad = self.vx * fx + self.vy * fy;
+  const vLat = self.vx * lx + self.vy * ly;
+  const thresh = combatTuning.footworkVelThresh;
+  if (Math.abs(vLat) > thresh * 0.85 && Math.abs(vLat) >= Math.abs(vRad) * 0.7) {
+    return vLat > 0 || lateralBias < 0 ? 'CIRCLE_L' : 'CIRCLE_R';
+  }
+  if (vRad > thresh) return 'CLOSE';
+  if (vRad < -thresh) return 'DISENGAGE';
+  if (lateralBias < 0) return 'CIRCLE_L';
+  if (lateralBias > 0) return 'CIRCLE_R';
+  return 'HOLD';
+}
