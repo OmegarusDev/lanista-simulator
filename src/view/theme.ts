@@ -91,12 +91,12 @@ export const zBand = {
 
 /** Fight chrome geometry defaults (landscape reference). Prefer fightStageLayout(). */
 export const fightLayout = {
-  topBandH: 48,
+  topBandH: 44,
   /** Team eyebrow + chip row */
   rosterLabelH: 12,
-  rosterH: 38,
-  bottomCtrlH: 44,
-  bottomPad: 8,
+  rosterH: 36,
+  bottomCtrlH: 32,
+  bottomPad: 6,
   inspectW: 224,
   inspectMaxH: 300,
   inspectPad: 12,

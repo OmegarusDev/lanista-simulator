@@ -49,9 +49,14 @@ export function designToWorld(
   return { x: (x - t.ox) / s, y: (y - t.oy) / s };
 }
 
-/** Fit the fixed arena world into a design-space box (uniform, centered). */
-export function fitWorldInRect(box: Rect): WorldViewTransform {
-  const scale = Math.min(box.w / ARENA_WORLD_W, box.h / ARENA_WORLD_H);
+/**
+ * Fit the fixed arena world into a design-space box (uniform, centered).
+ * `zoom` > 1 scales past contain (crops edges) so the sand sits larger /
+ * closer to the box sides — used for mobile fight framing.
+ */
+export function fitWorldInRect(box: Rect, zoom = 1): WorldViewTransform {
+  const contain = Math.min(box.w / ARENA_WORLD_W, box.h / ARENA_WORLD_H);
+  const scale = contain * Math.max(0.01, zoom);
   const aw = ARENA_WORLD_W * scale;
   const ah = ARENA_WORLD_H * scale;
   const ox = box.x + (box.w - aw) / 2;
@@ -62,6 +67,26 @@ export function fitWorldInRect(box: Rect): WorldViewTransform {
     ox,
     oy,
   };
+}
+
+/**
+ * World→view zoom past contain-fit.
+ * Narrow / portrait: crop a little L/R so the oval approaches the edges and
+ * the painted world uses more of the tall arena band. Landscape: slight zoom
+ * for a taller feel without burying HUD.
+ */
+export function fightArenaZoom(w: number, h: number): number {
+  const portrait = orientationOf(w, h) === 'portrait';
+  const shortSide = Math.min(w, h);
+  if (portrait) {
+    // Phone-width portrait gets the strongest nudge; wider tablets milder.
+    if (w < 420) return 1.14;
+    if (w < 600) return 1.1;
+    return 1.06;
+  }
+  // Landscape phone / short stage: pull sides in a touch.
+  if (shortSide < 480 || w < 900) return 1.06;
+  return 1.03;
 }
 
 export interface FightStageLayout {
@@ -101,13 +126,14 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
   const orientation = orientationOf(dw, dh);
   const portrait = orientation === 'portrait';
 
-  const topBandH = portrait ? 52 : 48;
+  // Slim chrome a notch so the arena band (and landscape overlays) run taller.
+  const topBandH = portrait ? 46 : 44;
   const rosterLabelH = 12;
-  const rosterH = portrait ? 42 : 38;
+  const rosterH = portrait ? 40 : 36;
   const bottomRows: 1 | 2 = portrait ? 2 : 1;
-  const rowH = portrait ? 40 : 34;
+  const rowH = portrait ? 38 : 32;
   const bottomCtrlH = bottomRows === 2 ? rowH * 2 + space.sm : rowH;
-  const bottomPad = portrait ? 12 : 8;
+  const bottomPad = portrait ? 8 : 6;
   const chipGap = 6;
   const chromeBottomH =
     rosterLabelH + rosterH + space.sm + bottomCtrlH + bottomPad;
@@ -116,6 +142,7 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
   const rosterY = bottomCtrlY - space.sm - rosterH;
   const rosterBandTop = rosterY - rosterLabelH;
 
+  const zoom = fightArenaZoom(dw, dh);
   let world: WorldViewTransform;
   if (portrait) {
     const box: Rect = {
@@ -124,9 +151,9 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
       w: dw,
       h: Math.max(140, rosterBandTop - topBandH),
     };
-    world = fitWorldInRect(box);
+    world = fitWorldInRect(box, zoom);
   } else {
-    world = fitWorldInRect({ x: 0, y: 0, w: dw, h: dh });
+    world = fitWorldInRect({ x: 0, y: 0, w: dw, h: dh }, zoom);
   }
 
   const inspectPad = portrait ? 12 : 12;

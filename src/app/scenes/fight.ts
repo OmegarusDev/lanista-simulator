@@ -222,7 +222,10 @@ export class FightScene {
     const y = stage.bottomCtrlY;
     let action: FightAction = { type: 'NONE' };
     const pad = 12;
-    const rowH = stage.orientation === 'portrait' ? 40 : 34;
+    const rowH =
+      stage.bottomRows === 2
+        ? (stage.bottomCtrlH - 8) / 2 // space.sm between the two portrait rows
+        : stage.bottomCtrlH;
 
     if (stage.bottomRows === 2) {
       // Portrait: session row, then playback row
