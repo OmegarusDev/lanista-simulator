@@ -38,9 +38,9 @@ npm run build
 ## Controls
 
 **Sandbox:** Title back, Blue/Red picks, historical presets, Fight.  
-**Fight (lab):** Leave, Restart, Reroll, speed, Mute.  
-**Fight (career):** Leave (forfeit if early), Continue on result.  
-Keys: `Space` fight, `Esc` leave/clear, `R`/`N` lab restart/reroll, `1`/`2`/`4` speed, `D` feel debug.
+**Fight (lab):** Pause menu — Leave, Restart, Reroll, Mute; bottom chrome has speed + Pause.  
+**Fight (career):** Pause menu — Leave (forfeit if early), Mute; Continue on result.  
+Keys: `Space` fight, `Esc`/`P` pause (or clear inspect), `Q` leave, `R`/`N` lab restart/reroll, `1`/`2`/`4` speed, `D` feel debug.
 
 **Armaturae:** Murmillo, Thraex, Retiarius, Secutor, Hoplomachus, Provocator, Dimachaerus, Scissor.
 

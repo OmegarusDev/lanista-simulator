@@ -110,8 +110,8 @@ export interface FightStageLayout {
   chromeBottomH: number;
   /** World painted here; chrome overlays or stacks around it. */
   world: WorldViewTransform;
-  /** Portrait: two control rows; landscape: one. */
-  bottomRows: 1 | 2;
+  /** Bottom playback/pause row count (always one after session controls moved to pause). */
+  bottomRows: 1;
 }
 
 /**
@@ -130,9 +130,9 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
   const topBandH = portrait ? 46 : 44;
   const rosterLabelH = 12;
   const rosterH = portrait ? 40 : 36;
-  const bottomRows: 1 | 2 = portrait ? 2 : 1;
+  const bottomRows = 1 as const;
   const rowH = portrait ? 38 : 32;
-  const bottomCtrlH = bottomRows === 2 ? rowH * 2 + space.sm : rowH;
+  const bottomCtrlH = rowH;
   const bottomPad = portrait ? 8 : 6;
   const chipGap = 6;
   const chromeBottomH =

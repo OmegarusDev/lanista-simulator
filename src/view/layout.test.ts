@@ -14,7 +14,7 @@ describe('fightStageLayout', () => {
   it('stacks arena above chrome in portrait', () => {
     const stage = fightStageLayout(390, 844);
     expect(stage.orientation).toBe('portrait');
-    expect(stage.bottomRows).toBe(2);
+    expect(stage.bottomRows).toBe(1);
     // Zoom may crop L/R past the band, but the painted world stays in the band vertically.
     expect(stage.world.view.y).toBeGreaterThanOrEqual(stage.topBandH - 0.5);
     expect(stage.world.view.y + stage.world.view.h).toBeLessThanOrEqual(

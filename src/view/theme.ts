@@ -2,8 +2,9 @@
  * Lanista UI design language — shared tokens + layout bands.
  *
  * Rules (apply to every chrome addition):
- * 1. One job per chrome band. Top = match identity; bottom = session + playback;
- *    side dock = inspect; roster = fighter pick. Do not mix jobs in one band.
+ * 1. One job per chrome band. Top = match identity; bottom = playback + pause entry;
+ *    pause modal = session (leave/restart/reroll/mute); side dock = inspect;
+ *    roster = fighter pick. Do not mix jobs in one band.
  * 2. No card spam / no purple glow / no pill clusters. Panels only when they hold
  *    interaction or a focused inspect. Prefer hairlines and spacing over boxes.
  * 3. World stays clean. Chrome lives in vignette margins; overhead labels stay

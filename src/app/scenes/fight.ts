@@ -4,7 +4,7 @@ import { createQuickMatch, type Match } from '../../domain/combat/match';
 import { SeededRNG } from '../../domain/rng';
 import type { CombatEvent, FighterSnapshot, MatchResult } from '../../domain/combat/types';
 import { ARENA_WORLD_H, ARENA_WORLD_W, getDesign } from '../../shell/canvas';
-import type { Input } from '../../shell/input';
+import type { Input, PointerState } from '../../shell/input';
 import {
   drawArena,
   drawArenaChromeVignette,
@@ -27,6 +27,7 @@ import {
   hairline,
   inspectCard,
   label,
+  panel,
   rosterChip,
   segmentedControl,
 } from '../../view/ui';
@@ -48,12 +49,16 @@ export interface FightOptions {
 
 const SPEEDS = [1, 2, 4] as const;
 
+/** Non-interactive pointer so chrome under the pause overlay cannot steal taps. */
+const DEAD_POINTER: PointerState = { x: -1, y: -1, down: false, clicked: false };
+
 export class FightScene {
   private match: Match;
   private speed = 1;
   private shake = 0;
   private hitStop = 0;
   private finished = false;
+  private paused = false;
   private debugFeel = false;
   private selectedId: number | null = null;
   private readonly dust: DustParticle[] = [];
@@ -92,7 +97,12 @@ export class FightScene {
         this.selectedId = null;
         return { type: 'NONE' };
       }
-      return this.careerLeave();
+      this.paused = !this.paused;
+      return { type: 'NONE' };
+    }
+    if (input.wasKeyPressed('KeyP')) {
+      this.paused = !this.paused;
+      return { type: 'NONE' };
     }
     if (input.wasKeyPressed('Digit1')) this.speed = 1;
     if (input.wasKeyPressed('Digit2')) this.speed = 2;
@@ -100,6 +110,11 @@ export class FightScene {
     if (!this.career && input.wasKeyPressed('KeyR')) return { type: 'RESTART' };
     if (!this.career && input.wasKeyPressed('KeyN')) return { type: 'REROLL' };
     if (input.wasKeyPressed('KeyD')) this.debugFeel = !this.debugFeel;
+
+    // Freeze match + FX while the pause menu is open.
+    if (this.paused) {
+      return { type: 'NONE' };
+    }
 
     if (this.hitStop > 0) {
       this.hitStop--;
@@ -164,20 +179,25 @@ export class FightScene {
     drawArenaChromeVignette(ctx, stage);
 
     // —— Chrome bands (design space) ——
+    const chromePtr = this.paused ? DEAD_POINTER : input.pointer;
     this.drawTopBand(ctx, stage);
-    let action = this.drawBottomChrome(ctx, input, stage);
-    this.drawRoster(ctx, input, snaps, stage);
+    let action = this.drawBottomChrome(ctx, chromePtr, stage);
+    this.drawRoster(ctx, chromePtr, snaps, stage);
     this.drawInspect(ctx, snaps, stage);
 
     if (this.debugFeel) {
       debugBadge(ctx, stage.w - 56, 8);
     }
 
-    if (this.finished) {
+    if (this.finished && !this.paused) {
       action = this.drawEndBanner(ctx, input, action, stage);
-    } else {
+    } else if (!this.paused) {
       // Arena click-to-select after chrome consumed clicks
       this.handleArenaPick(input, snaps, stage);
+    }
+
+    if (this.paused) {
+      action = this.drawPauseMenu(ctx, input, stage, action);
     }
 
     return action;
@@ -216,112 +236,117 @@ export class FightScene {
 
   private drawBottomChrome(
     ctx: CanvasRenderingContext2D,
-    input: Input,
+    pointer: PointerState,
     stage: FightStageLayout,
   ): FightAction {
     const y = stage.bottomCtrlY;
-    let action: FightAction = { type: 'NONE' };
     const pad = 12;
-    const rowH =
-      stage.bottomRows === 2
-        ? (stage.bottomCtrlH - 8) / 2 // space.sm between the two portrait rows
-        : stage.bottomCtrlH;
-
-    if (stage.bottomRows === 2) {
-      // Portrait: session row, then playback row
-      const sessionN = this.career ? 1 : 3;
-      const labels = this.career ? ['Leave'] : ['Leave', 'Restart', 'Reroll'];
-      const rowW = stage.w - pad * 2;
-      const gap = 8;
-      const bw = (rowW - gap * (sessionN - 1)) / sessionN;
-      for (let i = 0; i < sessionN; i++) {
-        const r = { x: pad + i * (bw + gap), y, w: bw, h: rowH };
-        if (button(ctx, r, labels[i]!, input.pointer)) {
-          this.synth.play('ui');
-          if (i === 0) action = this.careerLeave();
-          else if (i === 1) action = { type: 'RESTART' };
-          else action = { type: 'REROLL' };
-        }
-      }
-
-      const y2 = y + rowH + space.sm;
-      const speedIdx = SPEEDS.indexOf(this.speed as (typeof SPEEDS)[number]);
-      const segW = stage.w - pad * 2 - 96 - gap;
-      const picked = segmentedControl(
-        ctx,
-        { x: pad, y: y2, w: segW, h: rowH },
-        ['1×', '2×', '4×'],
-        speedIdx >= 0 ? speedIdx : 0,
-        input.pointer,
-      );
-      if (picked !== null) this.speed = SPEEDS[picked]!;
-      if (
-        button(
-          ctx,
-          { x: pad + segW + gap, y: y2, w: 96, h: rowH },
-          this.synth.isMuted ? 'Unmute' : 'Mute',
-          input.pointer,
-        )
-      ) {
-        this.synth.toggleMute();
-      }
-      return action;
-    }
-
-    // Landscape: single control row
-    if (button(ctx, { x: 16, y, w: 72, h: rowH }, 'Leave', input.pointer)) {
-      this.synth.play('ui');
-      action = this.careerLeave();
-    }
-    if (!this.career) {
-      if (button(ctx, { x: 94, y, w: 80, h: rowH }, 'Restart', input.pointer)) {
-        this.synth.play('ui');
-        action = { type: 'RESTART' };
-      }
-      if (button(ctx, { x: 180, y, w: 74, h: rowH }, 'Reroll', input.pointer)) {
-        this.synth.play('ui');
-        action = { type: 'REROLL' };
-      }
-    }
-
-    hairline(ctx, 266, y + 6, 266, y + rowH - 6);
-
-    label(ctx, 'Bout', 278, y + 10, { variant: 'eyebrow' });
-    label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 278, y + 26, {
-      variant: 'value',
-      size: typeScale.body,
-    });
-
+    const gap = 8;
+    const rowH = stage.bottomCtrlH;
+    const pauseW = stage.orientation === 'portrait' ? 72 : 80;
     const speedIdx = SPEEDS.indexOf(this.speed as (typeof SPEEDS)[number]);
-    const segR = { x: stage.w - 248, y, w: 132, h: rowH };
+
+    let segX = pad;
+    let segW: number;
+
+    if (stage.orientation === 'landscape') {
+      label(ctx, 'Bout', 16, y + 10, { variant: 'eyebrow' });
+      label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 16, y + 26, {
+        variant: 'value',
+        size: typeScale.body,
+      });
+      hairline(ctx, 78, y + 6, 78, y + rowH - 6);
+      // Speed + Pause sit on the right; bout identity stays left.
+      segW = 132;
+      segX = stage.w - pad - pauseW - gap - segW;
+    } else {
+      segW = stage.w - pad * 2 - pauseW - gap;
+    }
+
     const picked = segmentedControl(
       ctx,
-      segR,
+      { x: segX, y, w: segW, h: rowH },
       ['1×', '2×', '4×'],
       speedIdx >= 0 ? speedIdx : 0,
-      input.pointer,
+      pointer,
     );
-    if (picked !== null) {
-      this.speed = SPEEDS[picked]!;
-    }
+    if (picked !== null) this.speed = SPEEDS[picked]!;
 
     if (
-      button(
-        ctx,
-        { x: stage.w - 104, y, w: 88, h: rowH },
-        this.synth.isMuted ? 'Unmute' : 'Mute',
-        input.pointer,
-      )
+      button(ctx, { x: segX + segW + gap, y, w: pauseW, h: rowH }, 'Pause', pointer, {
+        active: this.paused,
+      })
     ) {
-      this.synth.toggleMute();
+      this.synth.play('ui');
+      this.paused = !this.paused;
     }
 
+    return { type: 'NONE' };
+  }
+
+  private drawPauseMenu(
+    ctx: CanvasRenderingContext2D,
+    input: Input,
+    stage: FightStageLayout,
+    action: FightAction,
+  ): FightAction {
+    // Dim the fight; swallow clicks outside menu buttons.
+    ctx.fillStyle = 'rgba(10,8,6,0.72)';
+    ctx.fillRect(0, 0, stage.w, stage.h);
+
+    const portrait = stage.orientation === 'portrait';
+    const btnH = portrait ? 44 : 38;
+    const gap = space.sm;
+    const items: { label: string; kind: 'resume' | 'mute' | 'restart' | 'reroll' | 'leave' }[] = [
+      { label: 'Resume', kind: 'resume' },
+      { label: this.synth.isMuted ? 'Unmute' : 'Mute', kind: 'mute' },
+    ];
+    if (!this.career) {
+      items.push({ label: 'Restart', kind: 'restart' }, { label: 'Reroll', kind: 'reroll' });
+    }
+    items.push({ label: 'Leave', kind: 'leave' });
+
+    const panelW = Math.min(portrait ? 300 : 280, stage.w - space.xl * 2);
+    const panelH = space.lg + 28 + items.length * (btnH + gap) + space.md;
+    const panelX = (stage.w - panelW) / 2;
+    const panelY = Math.max(space.lg, (stage.h - panelH) / 2 - (portrait ? 12 : 0));
+    const pr = { x: panelX, y: panelY, w: panelW, h: panelH };
+    panel(ctx, pr, 'Paused');
+
+    const btnX = panelX + space.md;
+    const btnW = panelW - space.md * 2;
+    let by = panelY + space.lg + 22;
+
+    for (const item of items) {
+      const r = { x: btnX, y: by, w: btnW, h: btnH };
+      if (button(ctx, r, item.label, input.pointer)) {
+        this.synth.play('ui');
+        if (item.kind === 'resume') {
+          this.paused = false;
+        } else if (item.kind === 'mute') {
+          this.synth.toggleMute();
+        } else if (item.kind === 'restart') {
+          this.paused = false;
+          return { type: 'RESTART' };
+        } else if (item.kind === 'reroll') {
+          this.paused = false;
+          return { type: 'REROLL' };
+        } else {
+          this.paused = false;
+          return this.careerLeave();
+        }
+      }
+      by += btnH + gap;
+    }
+
+    // Eat residual clicks so they don't hit the arena / chrome underneath.
+    if (input.pointer.clicked) input.pointer.clicked = false;
     return action;
   }
 
   private drawRoster(
     ctx: CanvasRenderingContext2D,
-    input: Input,
+    pointer: PointerState,
     snaps: FighterSnapshot[],
     stage: FightStageLayout,
   ): void {
@@ -356,7 +381,7 @@ export class FightScene {
     for (const f of blue) {
       const r = { x: bx, y, w: chipWBlue, h };
       if (
-        rosterChip(ctx, r, input.pointer, {
+        rosterChip(ctx, r, pointer, {
           name: f.name,
           tag: ARMATURAE[f.armatura].short,
           team: 0,
@@ -375,7 +400,7 @@ export class FightScene {
     for (const f of red) {
       const r = { x: rx, y, w: chipWRed, h };
       if (
-        rosterChip(ctx, r, input.pointer, {
+        rosterChip(ctx, r, pointer, {
           name: f.name,
           tag: ARMATURAE[f.armatura].short,
           team: 1,
