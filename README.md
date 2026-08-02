@@ -1,10 +1,12 @@
 <p align="center">
   <a href="https://omegarusdev.github.io/lanista-simulator/">
-    <img src="https://img.shields.io/badge/▶_PLAY_NOW-playable_in_browser-brightgreen?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Play Now" />
+    <img src="https://img.shields.io/badge/▶_PLAY_NOW-playable_in_browser-brightgreen?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Play Now" height="40" />
   </a>
 </p>
 
 <p align="center"><strong>No install.</strong> Works in the browser (desktop &amp; mobile).</p>
+
+<p align="center"><sub>Offline shortcut: download <a href="PLAY.html"><code>PLAY.html</code></a> and open it locally — it launches the hosted game.</sub></p>
 
 # Lanista Simulator
 
