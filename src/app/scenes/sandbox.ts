@@ -114,7 +114,29 @@ export class SandboxScene {
     for (let i = 0; i < PAIRING_PRESETS.length; i++) {
       const p = PAIRING_PRESETS[i]!;
       const r = L.presetRects[i]!;
-      if (button(ctx, r, p.label, input.pointer)) {
+      const { pressed, clicked } = buttonChrome(ctx, r, input.pointer);
+      const midX = r.x + r.w / 2;
+      const midY = r.y + r.h / 2 + (pressed ? 1 : 0);
+      const vsIdx = p.label.indexOf(' vs ');
+      if (vsIdx > 0) {
+        label(ctx, p.label.slice(0, vsIdx), midX, midY - 7, {
+          size: 11,
+          align: 'center',
+          color: colors.buttonText,
+        });
+        label(ctx, `vs ${p.label.slice(vsIdx + 4)}`, midX, midY + 8, {
+          size: 11,
+          align: 'center',
+          color: colors.buttonText,
+        });
+      } else {
+        label(ctx, p.label, midX, midY, {
+          size: 11,
+          align: 'center',
+          color: colors.buttonText,
+        });
+      }
+      if (clicked) {
         const config = this.configFromPreset(p.id);
         try {
           this.synth.play('ui');
@@ -251,10 +273,10 @@ export class SandboxScene {
         });
         label(
           ctx,
-          pick === 'RANDOM' ? 'Random' : ARMATURAE[pick].short,
+          pick === 'RANDOM' ? 'Random' : ARMATURAE[pick].name,
           r.x + r.w / 2 + (narrow ? 0 : 20),
           r.y + 36 + (pressed ? 1 : 0),
-          { size: 14, align: 'center', color: colors.buttonText },
+          { size: narrow ? 11 : 13, align: 'center', color: colors.buttonText },
         );
         if (clicked) {
           if (team === 0) this.editSlot0 = s;

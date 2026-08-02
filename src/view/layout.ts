@@ -362,33 +362,19 @@ export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxL
   const subtitleY = brandY + 20;
   const historicalLabelY = subtitleY + 18;
 
-  const presetH = 28;
+  // Two-line full armatura names (e.g. "Murmillo" / "vs Thraex") need taller cells.
+  const presetH = 40;
   const presetGap = 6;
-  let presetRects: Rect[];
-  if (stacked) {
-    const cols = dw < 360 ? 2 : 2;
-    const cellW = (dw - pad * 2 - presetGap * (cols - 1)) / cols;
-    const area: Rect = {
-      x: pad,
-      y: historicalLabelY + 8,
-      w: dw - pad * 2,
-      h: 80,
-    };
-    presetRects = wrapGrid(presetCount, area, cellW, presetH, presetGap);
-  } else {
-    const presetW = Math.min(118, (dw - 48) / presetCount - presetGap);
-    const rowW = presetCount * presetW + (presetCount - 1) * presetGap;
-    const x0 = (dw - rowW) / 2;
-    presetRects = [];
-    for (let i = 0; i < presetCount; i++) {
-      presetRects.push({
-        x: x0 + i * (presetW + presetGap),
-        y: historicalLabelY + 6,
-        w: presetW,
-        h: presetH,
-      });
-    }
-  }
+  const presetCols = stacked ? 2 : Math.min(3, Math.max(1, presetCount));
+  const presetCellW = (dw - pad * 2 - presetGap * (presetCols - 1)) / presetCols;
+  const presetRows = Math.ceil(presetCount / presetCols);
+  const presetArea: Rect = {
+    x: pad,
+    y: historicalLabelY + 8,
+    w: dw - pad * 2,
+    h: presetRows * presetH + Math.max(0, presetRows - 1) * presetGap,
+  };
+  const presetRects = wrapGrid(presetCount, presetArea, presetCellW, presetH, presetGap);
 
   const presetsBottom =
     presetRects.length > 0
