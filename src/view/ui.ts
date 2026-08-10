@@ -24,25 +24,28 @@ export function hit(r: Rect, x: number, y: number): boolean {
 
 export function panel(ctx: CanvasRenderingContext2D, r: Rect, title?: string): void {
   // Carved stone plate — depth without card clutter
-  ctx.fillStyle = 'rgba(10,7,5,0.35)';
+  ctx.fillStyle = 'rgba(8,5,3,0.42)';
   roundRect(ctx, r.x + 2, r.y + 3, r.w, r.h, radius.lg);
   ctx.fill();
 
   const g = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
-  g.addColorStop(0, 'rgba(48,38,28,0.94)');
-  g.addColorStop(0.5, 'rgba(28,22,16,0.92)');
-  g.addColorStop(1, 'rgba(18,14,10,0.94)');
+  g.addColorStop(0, 'rgba(52,42,32,0.96)');
+  g.addColorStop(0.35, 'rgba(34,27,20,0.94)');
+  g.addColorStop(1, 'rgba(18,14,10,0.96)');
   ctx.fillStyle = g;
-  ctx.strokeStyle = 'rgba(160,130,95,0.55)';
+  ctx.strokeStyle = 'rgba(168,136,96,0.58)';
   ctx.lineWidth = stroke.emphasis;
   roundRect(ctx, r.x, r.y, r.w, r.h, radius.lg);
   ctx.fill();
   ctx.stroke();
 
-  // Inner highlight lip
-  ctx.strokeStyle = 'rgba(220,190,140,0.12)';
+  // Bronze edge catch-light (top) + deep inset (bottom)
+  ctx.strokeStyle = 'rgba(230,200,150,0.16)';
   ctx.lineWidth = 1;
   roundRect(ctx, r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3, radius.md);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+  roundRect(ctx, r.x + 2.5, r.y + 2.5, r.w - 5, r.h - 5, radius.sm);
   ctx.stroke();
 
   if (title) {
@@ -50,25 +53,47 @@ export function panel(ctx: CanvasRenderingContext2D, r: Rect, title?: string): v
   }
 }
 
-/** Soft sky + vignette behind chrome for menu shells (title/sandbox/ludus). */
+/**
+ * Soft sky + vignette behind chrome for menu shells (title/sandbox/ludus/flow).
+ * Bottom/edge stops meet `colors.bg` exactly so letterbox + band edges never seam.
+ */
 export function shellAtmosphere(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const sky = ctx.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, '#3a281c');
-  sky.addColorStop(0.4, '#241810');
+  sky.addColorStop(0, '#3c2a1c');
+  sky.addColorStop(0.22, '#2c2016');
+  sky.addColorStop(0.55, '#221810');
+  sky.addColorStop(0.82, '#1c1612');
   sky.addColorStop(1, colors.bg);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, w, h);
 
-  const glow = ctx.createRadialGradient(w / 2, h * 0.28, 10, w / 2, h * 0.45, Math.max(w, h) * 0.58);
-  glow.addColorStop(0, 'rgba(200,130,60,0.1)');
-  glow.addColorStop(0.55, 'rgba(60,40,24,0.05)');
+  const glow = ctx.createRadialGradient(
+    w / 2,
+    h * 0.26,
+    8,
+    w / 2,
+    h * 0.42,
+    Math.max(w, h) * 0.62,
+  );
+  glow.addColorStop(0, 'rgba(200,130,60,0.11)');
+  glow.addColorStop(0.45, 'rgba(120,80,40,0.045)');
+  glow.addColorStop(0.8, 'rgba(40,28,16,0.02)');
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, w, h);
 
-  const vig = ctx.createRadialGradient(w / 2, h * 0.42, Math.min(w, h) * 0.22, w / 2, h / 2, Math.max(w, h) * 0.75);
+  const vig = ctx.createRadialGradient(
+    w / 2,
+    h * 0.4,
+    Math.min(w, h) * 0.26,
+    w / 2,
+    h / 2,
+    Math.max(w, h) * 0.82,
+  );
   vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(1, 'rgba(8,5,3,0.42)');
+  vig.addColorStop(0.7, 'rgba(8,5,3,0.12)');
+  vig.addColorStop(0.9, 'rgba(8,5,3,0.28)');
+  vig.addColorStop(1, 'rgba(8,5,3,0.38)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
 }
@@ -238,8 +263,8 @@ export function buttonChrome(
 
   // Drop shadow / carved depth
   if (!opts?.disabled && !pressed) {
-    ctx.fillStyle = 'rgba(8,5,3,0.4)';
-    roundRect(ctx, r.x + 1, r.y + 2, r.w, r.h, radius.md);
+    ctx.fillStyle = 'rgba(6,4,2,0.48)';
+    roundRect(ctx, r.x + 1.5, r.y + 3, r.w, r.h, radius.md);
     ctx.fill();
   }
 
@@ -250,22 +275,22 @@ export function buttonChrome(
     top = mid = bot = surface.buttonDisabled;
   } else if (opts?.active) {
     const a = accent ?? surface.buttonActive;
-    top = accent ? a : '#b04a36';
+    top = accent ? lightenHex(a, 0.12) : '#c4563c';
     mid = a;
-    bot = accent ? 'rgba(0,0,0,0.45)' : '#5a2418';
+    bot = accent ? 'rgba(0,0,0,0.5)' : '#4a1e14';
   } else if (hovered) {
-    top = '#6a5240';
+    top = '#72604c';
     mid = surface.buttonHot;
     bot = '#3a2a1e';
   } else {
-    top = '#4a3c30';
+    top = '#564636';
     mid = surface.button;
-    bot = '#2a2018';
+    bot = '#261c14';
   }
 
   const g = ctx.createLinearGradient(r.x, y, r.x, y + r.h);
   g.addColorStop(0, top);
-  g.addColorStop(0.45, mid);
+  g.addColorStop(0.4, mid);
   g.addColorStop(1, bot);
   ctx.fillStyle = g;
   ctx.strokeStyle = opts?.active ? (accent ?? colors.accentHot) : surface.panelBorder;
@@ -274,9 +299,9 @@ export function buttonChrome(
   ctx.fill();
   ctx.stroke();
 
-  // Inner highlight lip (pressed = darker inset)
+  // Inner bronze lip (pressed = darker inset)
   if (!opts?.disabled) {
-    ctx.strokeStyle = pressed ? 'rgba(0,0,0,0.35)' : 'rgba(230,200,150,0.14)';
+    ctx.strokeStyle = pressed ? 'rgba(0,0,0,0.4)' : 'rgba(236,208,160,0.18)';
     ctx.lineWidth = 1;
     roundRect(ctx, r.x + 1.5, y + 1.5, r.w - 3, r.h - 3, radius.sm);
     ctx.stroke();
@@ -313,12 +338,24 @@ export function bar(
   ratio: number,
   fill: string,
 ): void {
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = fill;
-  ctx.fillRect(x, y, Math.max(0, w * Math.min(1, Math.max(0, ratio))), h);
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.strokeRect(x, y, w, h);
+  const rr = Math.min(2, h / 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  roundRect(ctx, x, y, w, h, rr);
+  ctx.fill();
+  const fw = Math.max(0, w * Math.min(1, Math.max(0, ratio)));
+  if (fw > 0.5) {
+    const g = ctx.createLinearGradient(x, y, x, y + h);
+    g.addColorStop(0, lightenHex(fill, 0.14));
+    g.addColorStop(0.55, fill);
+    g.addColorStop(1, darkenHex(fill, 0.18));
+    ctx.fillStyle = g;
+    roundRect(ctx, x, y, fw, h, rr);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, x, y, w, h, rr);
+  ctx.stroke();
 }
 
 /** Mutual-exclusive speed / mode strip — one active segment. */
@@ -333,11 +370,12 @@ export function segmentedControl(
   if (n === 0) return null;
   const segW = r.w / n;
   // Carved trough
-  ctx.fillStyle = 'rgba(8,5,3,0.35)';
+  ctx.fillStyle = 'rgba(6,4,2,0.4)';
   roundRect(ctx, r.x + 1, r.y + 2, r.w, r.h, radius.md);
   ctx.fill();
   const trough = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
-  trough.addColorStop(0, '#2a221a');
+  trough.addColorStop(0, '#241c14');
+  trough.addColorStop(0.5, '#2e261e');
   trough.addColorStop(1, '#3a3028');
   ctx.fillStyle = trough;
   ctx.strokeStyle = surface.panelBorder;
@@ -353,19 +391,23 @@ export function segmentedControl(
     const active = i === activeIndex;
     if (active) {
       const ag = ctx.createLinearGradient(sr.x, sr.y, sr.x, sr.y + sr.h);
-      ag.addColorStop(0, '#b04a36');
-      ag.addColorStop(0.5, surface.buttonActive);
-      ag.addColorStop(1, '#5a2418');
+      ag.addColorStop(0, '#c4563c');
+      ag.addColorStop(0.45, surface.buttonActive);
+      ag.addColorStop(1, '#4a1e14');
       ctx.fillStyle = ag;
-      roundRect(ctx, sr.x + 1, sr.y + 1, sr.w - 2, sr.h - 2, radius.sm);
+      roundRect(ctx, sr.x + 1.5, sr.y + 1.5, sr.w - 3, sr.h - 3, radius.sm);
       ctx.fill();
+      ctx.strokeStyle = 'rgba(236,208,160,0.2)';
+      ctx.lineWidth = 1;
+      roundRect(ctx, sr.x + 2, sr.y + 2, sr.w - 4, sr.h - 4, radius.sm);
+      ctx.stroke();
     } else if (hovered) {
       ctx.fillStyle = surface.buttonHot;
-      roundRect(ctx, sr.x + 1, sr.y + 1, sr.w - 2, sr.h - 2, radius.sm);
+      roundRect(ctx, sr.x + 1.5, sr.y + 1.5, sr.w - 3, sr.h - 3, radius.sm);
       ctx.fill();
     }
     if (i > 0) {
-      hairline(ctx, sr.x, r.y + 4, sr.x, r.y + r.h - 4, 'rgba(0,0,0,0.35)');
+      hairline(ctx, sr.x, r.y + 5, sr.x, r.y + r.h - 5, 'rgba(0,0,0,0.4)');
     }
     ctx.fillStyle = active ? surface.buttonText : surface.muted;
     ctx.font = `600 ${typeScale.label}px ${fontStack}`;
@@ -406,17 +448,40 @@ export function rosterChip(
   const pressed = hovered && pointer.down;
   const selected = Boolean(opts.selected);
 
+  const y = r.y + (pressed ? 1 : 0);
   ctx.globalAlpha = opts.muted ? 0.45 : 1;
-  ctx.fillStyle = selected ? 'rgba(40, 32, 24, 0.95)' : hovered ? surface.buttonHot : surface.button;
+  if (!pressed && !opts.disabled) {
+    ctx.fillStyle = 'rgba(6,4,2,0.35)';
+    roundRect(ctx, r.x + 1, r.y + 2, r.w, r.h, radius.md);
+    ctx.fill();
+  }
+  const chipG = ctx.createLinearGradient(r.x, y, r.x, y + r.h);
+  if (selected) {
+    chipG.addColorStop(0, 'rgba(56, 44, 32, 0.98)');
+    chipG.addColorStop(1, 'rgba(28, 22, 16, 0.96)');
+  } else if (hovered) {
+    chipG.addColorStop(0, '#6a5240');
+    chipG.addColorStop(1, surface.buttonHot);
+  } else {
+    chipG.addColorStop(0, '#4a3c30');
+    chipG.addColorStop(1, surface.button);
+  }
+  ctx.fillStyle = chipG;
   ctx.strokeStyle = selected ? accent : surface.panelBorder;
   ctx.lineWidth = selected ? stroke.emphasis : stroke.border;
-  roundRect(ctx, r.x, r.y + (pressed ? 1 : 0), r.w, r.h, radius.md);
+  roundRect(ctx, r.x, y, r.w, r.h, radius.md);
   ctx.fill();
   ctx.stroke();
+  if (selected) {
+    ctx.strokeStyle = 'rgba(236,208,160,0.14)';
+    ctx.lineWidth = 1;
+    roundRect(ctx, r.x + 1.5, y + 1.5, r.w - 3, r.h - 3, radius.sm);
+    ctx.stroke();
+  }
 
   // Team stripe
   ctx.fillStyle = accent;
-  ctx.fillRect(r.x + 1, r.y + (pressed ? 1 : 0) + 3, 3, r.h - 6);
+  ctx.fillRect(r.x + 1, y + 3, 3, r.h - 6);
 
   const textX = r.x + space.md + 2;
   const midY = r.y + r.h / 2 + (pressed ? 1 : 0);
@@ -467,11 +532,22 @@ export interface InspectCardOpts {
 /** Docked fighter inspect panel (player chrome). */
 export function inspectCard(ctx: CanvasRenderingContext2D, r: Rect, opts: InspectCardOpts): void {
   const accent = teamAccent(opts.team);
-  ctx.fillStyle = surface.panel;
+  ctx.fillStyle = 'rgba(6,4,2,0.4)';
+  roundRect(ctx, r.x + 2, r.y + 3, r.w, r.h, radius.lg);
+  ctx.fill();
+  const ig = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+  ig.addColorStop(0, 'rgba(48,38,28,0.96)');
+  ig.addColorStop(0.5, 'rgba(28,22,16,0.94)');
+  ig.addColorStop(1, 'rgba(16,12,9,0.96)');
+  ctx.fillStyle = ig;
   ctx.strokeStyle = surface.panelBorder;
   ctx.lineWidth = stroke.emphasis;
   roundRect(ctx, r.x, r.y, r.w, r.h, radius.lg);
   ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(230,200,150,0.12)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3, radius.md);
   ctx.stroke();
 
   // Structural team stripe
@@ -561,4 +637,30 @@ function roundRect(
   ctx.arcTo(x, y + h, x, y, rr);
   ctx.arcTo(x, y, x + w, y, rr);
   ctx.closePath();
+}
+
+function lightenHex(hex: string, amt: number): string {
+  if (!hex.startsWith('#') || (hex.length !== 7 && hex.length !== 4)) return hex;
+  const full =
+    hex.length === 4
+      ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+      : hex;
+  const n = parseInt(full.slice(1), 16);
+  const r = Math.min(255, ((n >> 16) & 255) + Math.round(255 * amt));
+  const g = Math.min(255, ((n >> 8) & 255) + Math.round(255 * amt));
+  const b = Math.min(255, (n & 255) + Math.round(255 * amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+function darkenHex(hex: string, amt: number): string {
+  if (!hex.startsWith('#') || (hex.length !== 7 && hex.length !== 4)) return hex;
+  const full =
+    hex.length === 4
+      ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+      : hex;
+  const n = parseInt(full.slice(1), 16);
+  const r = Math.max(0, ((n >> 16) & 255) - Math.round(255 * amt));
+  const g = Math.max(0, ((n >> 8) & 255) - Math.round(255 * amt));
+  const b = Math.max(0, (n & 255) - Math.round(255 * amt));
+  return `rgb(${r},${g},${b})`;
 }

@@ -7,7 +7,7 @@ import type { Input } from '../../shell/input';
 import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
 import { flowHeaderLayout, isPortrait, shellPad } from '../../view/layout';
-import { button, label, panel } from '../../view/ui';
+import { button, label, panel, shellAtmosphere } from '../../view/ui';
 import { typeScale } from '../../view/theme';
 
 export type OffersAction =
@@ -24,8 +24,7 @@ export class OffersScene {
     const portrait = isPortrait(w, h);
     const hdr = flowHeaderLayout(w, h);
 
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, w, h);
+    shellAtmosphere(ctx, w, h);
 
     label(ctx, 'Munera', pad, hdr.titleY, { size: typeScale.display, color: colors.parchment });
     label(

@@ -4,7 +4,7 @@ import type { Input } from '../../shell/input';
 import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
 import { isPortrait, primaryButtonSize, shellPad } from '../../view/layout';
-import { button, label, panel } from '../../view/ui';
+import { button, label, panel, shellAtmosphere } from '../../view/ui';
 import { typeScale } from '../../view/theme';
 
 export type AftermathAction = { type: 'NONE' } | { type: 'CONTINUE' };
@@ -27,8 +27,7 @@ export class AftermathScene {
     const panelX = (w - panelW) / 2;
     const panelY = portrait ? Math.min(h * 0.18, 140) : 110;
 
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, w, h);
+    shellAtmosphere(ctx, w, h);
 
     label(ctx, 'Aftermath', w / 2, portrait ? 48 : 60, {
       size: typeScale.display,

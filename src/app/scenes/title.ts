@@ -22,21 +22,42 @@ export class TitleScene {
 
     shellAtmosphere(ctx, w, h);
 
-    // Soft arena oval silhouette behind brand
-    ctx.strokeStyle = 'rgba(160,120,70,0.18)';
+    // Soft arena oval silhouette behind brand — cavea suggestion, not a card
+    const ovalCx = w / 2;
+    const ovalCy = layout.brandY + 6;
+    const ovalRx = Math.min(w * 0.44, 240);
+    const ovalRy = Math.min(h * 0.09, 52);
+    const ovalWash = ctx.createRadialGradient(ovalCx, ovalCy, 4, ovalCx, ovalCy, ovalRx);
+    ovalWash.addColorStop(0, 'rgba(180,120,60,0.08)');
+    ovalWash.addColorStop(0.55, 'rgba(80,55,30,0.04)');
+    ovalWash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ovalWash;
+    ctx.beginPath();
+    ctx.ellipse(ovalCx, ovalCy, ovalRx, ovalRy, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(168,130,80,0.22)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.ellipse(w / 2, layout.brandY + 8, Math.min(w * 0.42, 220), Math.min(h * 0.08, 48), 0, 0, Math.PI * 2);
+    ctx.ellipse(ovalCx, ovalCy, ovalRx, ovalRy, 0, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(120,90,50,0.12)';
+    ctx.strokeStyle = 'rgba(120,90,50,0.14)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.ellipse(w / 2, layout.brandY + 8, Math.min(w * 0.36, 180), Math.min(h * 0.06, 36), 0, 0, Math.PI * 2);
+    ctx.ellipse(ovalCx, ovalCy, ovalRx * 0.82, ovalRy * 0.72, 0, 0, Math.PI * 2);
     ctx.stroke();
 
+    const brandSize = layout.orientation === 'portrait' || w < 520 ? 46 : 56;
+    // Soft brand weight — parchment over a warm shadow, not a glow
+    ctx.fillStyle = 'rgba(8,5,3,0.35)';
+    ctx.font = `700 ${brandSize}px "Palatino Linotype", Palatino, Georgia, serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('LANISTA', w / 2 + 1.5, layout.brandY + 1.5);
     label(ctx, 'LANISTA', w / 2, layout.brandY, {
-      size: layout.orientation === 'portrait' || w < 520 ? 44 : 52,
+      size: brandSize,
       align: 'center',
       color: colors.parchment,
+      weight: '700',
     });
     label(ctx, 'A season of sand and steel', w / 2, layout.taglineY, {
       size: typeScale.label,

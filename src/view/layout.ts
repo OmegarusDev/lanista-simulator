@@ -108,7 +108,15 @@ export interface FightStageLayout {
   rosterY: number;
   rosterBandTop: number;
   chromeBottomH: number;
-  /** World painted here; chrome overlays or stacks around it. */
+  /**
+   * Design-space clip/viewport for the arena camera (unzoomed box).
+   * Pass this to ArenaCamera.toTransform — never a pre-scaled world footprint.
+   */
+  worldBox: Rect;
+  /**
+   * Static contain×fightArenaZoom fit (centered in worldBox). Useful for tests
+   * and chrome that wants a default framing; live fight overrides via ArenaCamera.
+   */
   world: WorldViewTransform;
   /** Bottom playback/pause row count (always one after session controls moved to pause). */
   bottomRows: 1;
@@ -143,18 +151,15 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
   const rosterBandTop = rosterY - rosterLabelH;
 
   const zoom = fightArenaZoom(dw, dh);
-  let world: WorldViewTransform;
-  if (portrait) {
-    const box: Rect = {
-      x: 0,
-      y: topBandH,
-      w: dw,
-      h: Math.max(140, rosterBandTop - topBandH),
-    };
-    world = fitWorldInRect(box, zoom);
-  } else {
-    world = fitWorldInRect({ x: 0, y: 0, w: dw, h: dh }, zoom);
-  }
+  const worldBox: Rect = portrait
+    ? {
+        x: 0,
+        y: topBandH,
+        w: dw,
+        h: Math.max(140, rosterBandTop - topBandH),
+      }
+    : { x: 0, y: 0, w: dw, h: dh };
+  const world = fitWorldInRect(worldBox, zoom);
 
   const inspectPad = 12;
   const inspectW = Math.min(240, dw - inspectPad * 2);
@@ -180,6 +185,7 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
     rosterY,
     rosterBandTop,
     chromeBottomH,
+    worldBox,
     world,
     bottomRows,
   };

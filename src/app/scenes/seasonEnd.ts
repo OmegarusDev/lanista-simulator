@@ -8,7 +8,7 @@ import { getDesign } from '../../shell/canvas';
 import { loadLegacy } from '../../shell/save';
 import type { Synth } from '../../view/audio';
 import { isPortrait, primaryButtonSize, shellPad } from '../../view/layout';
-import { button, label, panel } from '../../view/ui';
+import { button, label, panel, shellAtmosphere } from '../../view/ui';
 import { typeScale } from '../../view/theme';
 
 export type SeasonEndAction = { type: 'NONE' } | { type: 'TITLE' };
@@ -25,8 +25,7 @@ export class SeasonEndScene {
     const panelX = (w - panelW) / 2;
     const panelY = portrait ? Math.min(h * 0.24, 180) : 150;
 
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, w, h);
+    shellAtmosphere(ctx, w, h);
 
     const title = state.status === 'BROKE' ? 'Ruined' : 'Season Complete';
     label(ctx, title, w / 2, portrait ? 64 : 80, {

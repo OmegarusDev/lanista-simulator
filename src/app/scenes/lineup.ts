@@ -8,7 +8,7 @@ import type { Input } from '../../shell/input';
 import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
 import { isPortrait, shellPad } from '../../view/layout';
-import { button, label, panel, rosterChip } from '../../view/ui';
+import { button, label, panel, rosterChip, shellAtmosphere } from '../../view/ui';
 import { space, touchTarget, typeScale } from '../../view/theme';
 
 export type LineupAction =
@@ -41,8 +41,7 @@ export class LineupScene {
     const pad = shellPad(w);
     const portrait = isPortrait(w, h);
 
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, w, h);
+    shellAtmosphere(ctx, w, h);
 
     label(ctx, 'Lineup', pad, 40, { size: typeScale.display, color: colors.parchment });
     label(ctx, `${offer.name} · ${offer.teamSize}v${offer.teamSize}`, pad, 64, {

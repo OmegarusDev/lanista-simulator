@@ -7,7 +7,8 @@ export type CamMode = 'autocam' | 'manual' | 'focus';
 
 /**
  * Lightweight pan/zoom look-at camera for Instant Match preview + fight.
- * No physics — just smooth framing of posed or live fighters.
+ * `toTransform(viewRect)` expects the **clip/viewport box** in design space
+ * (not a pre-zoomed world footprint). Zoom is applied once: contain × zoom.
  */
 export class ArenaCamera {
   mode: CamMode = 'autocam';
@@ -20,8 +21,10 @@ export class ArenaCamera {
   /** Manual drag offset in world units. */
   panX = 0;
   panY = 0;
-  /** Multiplier on contain-fit (>1 crops in). */
+  /** Desired multiplier on contain-fit (>1 crops in). */
   zoom = 1.12;
+  /** Smoothed zoom used for rendering. */
+  smoothZoom = 1.12;
   focusId: number | null = null;
   focusedTeam: 0 | 1 | null = null;
 
@@ -44,6 +47,7 @@ export class ArenaCamera {
     this.panX = 0;
     this.panY = 0;
     this.zoom = zoom;
+    this.smoothZoom = zoom;
     this.focusId = null;
     this.focusedTeam = null;
     this.dragging = false;
@@ -141,13 +145,13 @@ export class ArenaCamera {
         this.targetX = tx;
         this.targetY = ty;
 
-        // Zoom out a touch for melees
+        // Zoom out a touch for melees — keep within a cinematic band
         const span = Math.max(
           ...alive.map((f) => Math.hypot(f.x - tx, f.y - ty)),
           40,
         );
-        const want = span > 160 ? 1.05 : span > 100 ? 1.12 : 1.2;
-        this.zoom += (want - this.zoom) * 0.04;
+        const want = span > 160 ? 1.05 : span > 100 ? 1.12 : 1.22;
+        this.zoom += (want - this.zoom) * 0.045;
       }
     }
     // Easing lives only in tickSmooth() — callers invoke both each frame.
@@ -159,6 +163,8 @@ export class ArenaCamera {
       this.dragging ? 0.35 : this.mode === 'focus' ? 0.18 : this.mode === 'manual' ? 0.16 : 0.1;
     this.smoothX += (this.targetX - this.smoothX) * k;
     this.smoothY += (this.targetY - this.smoothY) * k;
+    const zk = this.dragging ? 0.25 : 0.08;
+    this.smoothZoom += (this.zoom - this.smoothZoom) * zk;
   }
 
   beginDrag(designX: number, designY: number, scale: number): void {
@@ -176,7 +182,7 @@ export class ArenaCamera {
     const dx = designX - this.dragDesignX;
     const dy = designY - this.dragDesignY;
     if (Math.hypot(dx, dy) > 6) this.dragMoved = true;
-    // Drag moves the world under the finger → pan opposite
+    // Drag moves the world under the finger → pan opposite (world units)
     this.panX = this.dragPan0X - dx / this.lastScale;
     this.panY = this.dragPan0Y - dy / this.lastScale;
     this.clampPan();
@@ -192,9 +198,7 @@ export class ArenaCamera {
     const wasDrag = this.dragging && this.dragMoved;
     this.dragging = false;
     if (wasDrag) {
-      // After a pan, gently return to autocam after a beat
       this.focusHold = 0;
-      // Keep manual until user taps empty / focuses
     }
     return wasDrag;
   }
@@ -208,24 +212,30 @@ export class ArenaCamera {
   }
 
   private clampPan(): void {
-    const max = 220;
-    this.panX = Math.max(-max, Math.min(max, this.panX));
-    this.panY = Math.max(-max, Math.min(max, this.panY));
+    // Allow sliding a bit past the look-at, scaled so zoom-in can explore more.
+    const z = Math.max(0.8, this.smoothZoom);
+    const maxX = Math.min(280, 90 + ARENA_WORLD_W * 0.12 * z);
+    const maxY = Math.min(200, 70 + ARENA_WORLD_H * 0.12 * z);
+    this.panX = Math.max(-maxX, Math.min(maxX, this.panX));
+    this.panY = Math.max(-maxY, Math.min(maxY, this.panY));
   }
 
   /**
-   * World→design transform: look-at (smooth + pan) centered in `viewRect`.
+   * World→design transform: look-at (smooth + pan) centered in the **viewport** `viewRect`.
+   * Pass the clip box (arena band / stage), never a pre-scaled world footprint.
    */
   toTransform(viewRect: Rect): WorldViewTransform {
     const contain = Math.min(viewRect.w / ARENA_WORLD_W, viewRect.h / ARENA_WORLD_H);
-    const scale = contain * Math.max(0.8, this.zoom);
+    const z = Math.max(0.8, Math.min(1.55, this.smoothZoom));
+    const scale = contain * z;
+    // Look-at pivot: world point (cx,cy) maps to viewport center.
     const cx = this.smoothX + this.panX;
     const cy = this.smoothY + this.panY;
     const ox = viewRect.x + viewRect.w / 2 - cx * scale;
     const oy = viewRect.y + viewRect.h / 2 - cy * scale;
     this.lastScale = scale;
     return {
-      view: viewRect,
+      view: { x: viewRect.x, y: viewRect.y, w: viewRect.w, h: viewRect.h },
       scale,
       ox,
       oy,

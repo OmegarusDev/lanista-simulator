@@ -210,21 +210,23 @@ export class FightScene {
     const stage = fightStageLayout();
     const { w, h } = getDesign();
 
-    // Shell fill behind world
+    // Shell fill behind world — exact bg so letterbox + plate edges never seam
     ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, w, h);
 
     const snapsAll = this.match.snapshots();
-    const t = this.cam.toTransform(stage.world.view);
+    // Camera takes the unzoomed viewport box (not the pre-scaled world footprint).
+    const t = this.cam.toTransform(stage.worldBox);
     this.worldT = t;
-    // Keep stage.world in sync for vignette / inspect helpers that read it
+    // Keep stage.world in sync for helpers that still read the live transform
     stage.world.ox = t.ox;
     stage.world.oy = t.oy;
     stage.world.scale = t.scale;
+    stage.world.view = { ...stage.worldBox };
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(t.view.x, t.view.y, t.view.w, t.view.h);
+    ctx.rect(stage.worldBox.x, stage.worldBox.y, stage.worldBox.w, stage.worldBox.h);
     ctx.clip();
     ctx.translate(t.ox, t.oy);
     ctx.scale(t.scale, t.scale);
@@ -345,35 +347,42 @@ export class FightScene {
 
     const leanY =
       stage.orientation === 'portrait'
-        ? stage.world.view.y + 18
-        : stage.topBandH + 14;
+        ? stage.worldBox.y + 20
+        : stage.topBandH + 16;
     label(ctx, lean, stage.w / 2, leanY, {
       size: typeScale.meta,
       align: 'center',
       color: leanColor,
     });
 
-    // Team Blue vs Red favor bar (Blue share of combined team favor)
+    // Team Blue vs Red favor bar — amphitheatre meter, not debug strip
     const blueFavor = this.match.teamCrowdFavor(0);
     const redFavor = this.match.teamCrowdFavor(1);
     const favorSum = blueFavor + redFavor;
     const favor = favorSum > 0 ? blueFavor / favorSum : 0.5;
-    const barW = Math.min(180, stage.w * 0.4);
+    const barW = Math.min(200, stage.w * 0.42);
     const barX = stage.w / 2 - barW / 2;
-    const barY = leanY + 8;
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(barX, barY, barW, 5);
+    const barY = leanY + 10;
+    const barH = 6;
+    ctx.fillStyle = 'rgba(6,4,2,0.5)';
+    ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
     ctx.fillStyle = colors.ally;
-    ctx.fillRect(barX, barY, barW * favor, 5);
+    ctx.fillRect(barX, barY, barW * favor, barH);
     ctx.fillStyle = colors.foe;
-    ctx.fillRect(barX + barW * favor, barY, barW * (1 - favor), 5);
+    ctx.fillRect(barX + barW * favor, barY, barW * (1 - favor), barH);
+    ctx.strokeStyle = 'rgba(168,136,96,0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
 
     if (this.crowdShout && this.crowdShoutLife > 0) {
       const alpha = Math.min(1, this.crowdShoutLife / 30);
-      label(ctx, this.crowdShout.text, stage.w / 2, leanY + 28, {
+      const sw = Math.min(280, stage.w * 0.7);
+      ctx.fillStyle = `rgba(12,8,6,${(0.35 * alpha).toFixed(2)})`;
+      ctx.fillRect(stage.w / 2 - sw / 2, leanY + 20, sw, 22);
+      label(ctx, this.crowdShout.text, stage.w / 2, leanY + 36, {
         size: typeScale.label,
         align: 'center',
-        color: `rgba(232, 220, 196, ${alpha.toFixed(2)})`,
+        color: `rgba(242, 232, 212, ${alpha.toFixed(2)})`,
       });
     }
   }
@@ -712,10 +721,14 @@ export class FightScene {
     stage: FightStageLayout,
   ): void {
     const p = input.pointer;
-    const v = stage.world.view;
-    const t = this.worldT ?? stage.world;
+    const v = stage.worldBox;
+    const t = this.worldT ?? this.cam.toTransform(v);
     const inArena =
-      p.x >= v.x && p.x <= v.x + v.w && p.y >= v.y && p.y <= v.y + v.h && p.y >= stage.topBandH;
+      p.x >= v.x &&
+      p.x <= v.x + v.w &&
+      p.y >= v.y &&
+      p.y <= v.y + v.h &&
+      p.y < stage.rosterBandTop;
 
     // Ignore inspect panel while open
     let inInspect = false;

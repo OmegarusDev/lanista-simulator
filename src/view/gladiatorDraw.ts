@@ -323,11 +323,18 @@ function drawGroundShadow(
   scale: number,
   fallen: boolean,
 ): void {
+  // Soft contact with sand — radial falloff, sun-biased offset
   const ox = -SUN.dx * 10 * scale;
   const oy = -SUN.dy * 8 * scale;
-  ctx.fillStyle = fallen ? 'rgba(20,12,6,0.28)' : 'rgba(20,12,6,0.32)';
+  const rx = (fallen ? 21 : 16) * scale;
+  const ry = (fallen ? 10 : 7.5) * scale;
+  const g = ctx.createRadialGradient(ox, oy + 3, 0, ox, oy + 3, rx);
+  g.addColorStop(0, fallen ? 'rgba(20,12,6,0.38)' : 'rgba(20,12,6,0.34)');
+  g.addColorStop(0.55, fallen ? 'rgba(20,12,6,0.16)' : 'rgba(20,12,6,0.14)');
+  g.addColorStop(1, 'rgba(20,12,6,0)');
+  ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.ellipse(ox, oy + 3, (fallen ? 20 : 15) * scale, (fallen ? 9 : 7) * scale, 0.35, 0, Math.PI * 2);
+  ctx.ellipse(ox, oy + 3, rx, ry, 0.35, 0, Math.PI * 2);
   ctx.fill();
 }
 

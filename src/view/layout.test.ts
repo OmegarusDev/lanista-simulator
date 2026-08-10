@@ -34,6 +34,16 @@ describe('fightStageLayout', () => {
     expect(fightArenaZoom(390, 844)).toBeGreaterThan(1);
   });
 
+  it('exposes an unzoomed worldBox for the live camera', () => {
+    const stage = fightStageLayout(390, 844);
+    expect(stage.worldBox.x).toBe(0);
+    expect(stage.worldBox.y).toBe(stage.topBandH);
+    expect(stage.worldBox.w).toBe(390);
+    expect(stage.worldBox.h).toBeCloseTo(stage.rosterBandTop - stage.topBandH);
+    // Static fit may overflow the box; the box itself stays inside chrome bands.
+    expect(stage.worldBox.y + stage.worldBox.h).toBeLessThanOrEqual(stage.rosterBandTop + 0.5);
+  });
+
   it('fills the stage with a slightly zoomed arena in landscape', () => {
     const stage = fightStageLayout(960, 540);
     expect(stage.orientation).toBe('landscape');

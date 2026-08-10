@@ -79,24 +79,27 @@ function paintStaticPlate(
   const ry = combatTuning.arenaRY;
 
   // —— Cave / sky beyond the amphitheatre ——
+  // Edge stops match colors.bg so zoom/pan never reveals a mismatched seam.
   const sky = ctx.createLinearGradient(0, 0, 0, ARENA_WORLD_H);
-  sky.addColorStop(0, '#3a2a1c');
-  sky.addColorStop(0.35, '#2a1c14');
-  sky.addColorStop(1, '#15100c');
+  sky.addColorStop(0, '#3c2c1e');
+  sky.addColorStop(0.28, '#2a1e14');
+  sky.addColorStop(0.62, '#201812');
+  sky.addColorStop(1, colors.bg);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, ARENA_WORLD_W, ARENA_WORLD_H);
 
-  // Warm haze bloom (sun side)
+  // Warm haze bloom (sun side) — soft falloff, no hard rim
   const haze = ctx.createRadialGradient(
     cx + SUN.dx * 280,
     cy + SUN.dy * 200,
     20,
     cx,
     cy,
-    Math.max(rx, ry) * 1.6,
+    Math.max(rx, ry) * 1.75,
   );
-  haze.addColorStop(0, 'rgba(220,160,90,0.18)');
-  haze.addColorStop(0.45, 'rgba(180,120,60,0.06)');
+  haze.addColorStop(0, 'rgba(220,160,90,0.16)');
+  haze.addColorStop(0.4, 'rgba(180,120,60,0.055)');
+  haze.addColorStop(0.78, 'rgba(40,28,16,0.02)');
   haze.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = haze;
   ctx.fillRect(0, 0, ARENA_WORLD_W, ARENA_WORLD_H);
@@ -263,40 +266,54 @@ export function drawArenaChromeVignette(
   stage: FightStageLayout,
 ): void {
   const { w, h } = stage;
-  // Top / bottom chrome wash
-  const topG = ctx.createLinearGradient(0, 0, 0, stage.topBandH + 24);
-  topG.addColorStop(0, 'rgba(12,8,6,0.72)');
+  const box = stage.worldBox;
+
+  // Fill any portrait band gaps with shell bg (no mismatched solid rectangles).
+  if (stage.orientation === 'portrait') {
+    ctx.fillStyle = colors.bg;
+    if (box.y > stage.topBandH) {
+      ctx.fillRect(0, stage.topBandH, w, box.y - stage.topBandH);
+    }
+    const below = box.y + box.h;
+    if (below < stage.rosterBandTop) {
+      ctx.fillRect(0, below, w, stage.rosterBandTop - below);
+    }
+  }
+
+  // Top / bottom chrome wash — soft stops so bands don't hard-cut into the sand
+  const topEnd = stage.topBandH + 36;
+  const topG = ctx.createLinearGradient(0, 0, 0, topEnd);
+  topG.addColorStop(0, 'rgba(12,8,6,0.78)');
+  topG.addColorStop(0.55, 'rgba(12,8,6,0.35)');
+  topG.addColorStop(0.88, 'rgba(12,8,6,0.08)');
   topG.addColorStop(1, 'rgba(12,8,6,0)');
   ctx.fillStyle = topG;
-  ctx.fillRect(0, 0, w, stage.topBandH + 28);
+  ctx.fillRect(0, 0, w, topEnd);
 
-  const botY = h - stage.chromeBottomH - 20;
+  const botY = h - stage.chromeBottomH - 28;
   const botG = ctx.createLinearGradient(0, botY, 0, h);
   botG.addColorStop(0, 'rgba(12,8,6,0)');
-  botG.addColorStop(0.35, 'rgba(12,8,6,0.45)');
-  botG.addColorStop(1, 'rgba(12,8,6,0.78)');
+  botG.addColorStop(0.22, 'rgba(12,8,6,0.12)');
+  botG.addColorStop(0.55, 'rgba(12,8,6,0.5)');
+  botG.addColorStop(1, 'rgba(12,8,6,0.82)');
   ctx.fillStyle = botG;
   ctx.fillRect(0, botY, w, h - botY);
 
-  // Radial focus vignette over whole stage
-  const vig = ctx.createRadialGradient(w / 2, h * 0.42, Math.min(w, h) * 0.18, w / 2, h / 2, Math.max(w, h) * 0.7);
+  // Radial focus — eased outer stop so corners don't band
+  const vig = ctx.createRadialGradient(
+    w / 2,
+    h * 0.42,
+    Math.min(w, h) * 0.22,
+    w / 2,
+    h / 2,
+    Math.max(w, h) * 0.78,
+  );
   vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(0.65, 'rgba(8,5,3,0.12)');
-  vig.addColorStop(1, 'rgba(8,5,3,0.42)');
+  vig.addColorStop(0.55, 'rgba(8,5,3,0.06)');
+  vig.addColorStop(0.85, 'rgba(8,5,3,0.22)');
+  vig.addColorStop(1, 'rgba(8,5,3,0.36)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
-
-  if (stage.orientation === 'portrait') {
-    const v = stage.world.view;
-    ctx.fillStyle = '#15100c';
-    if (v.y > stage.topBandH) {
-      ctx.fillRect(0, stage.topBandH, stage.w, v.y - stage.topBandH);
-    }
-    const below = v.y + v.h;
-    if (below < stage.rosterBandTop) {
-      ctx.fillRect(0, below, stage.w, stage.rosterBandTop - below);
-    }
-  }
 }
 
 export function spawnDust(

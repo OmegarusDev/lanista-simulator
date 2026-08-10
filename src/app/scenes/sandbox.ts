@@ -211,12 +211,12 @@ export class SandboxScene {
     this.cam.tickSmooth();
     const worldT = this.cam.toTransform(this.arenaView);
 
-    // Clip arena band
+    // Clip arena band — fill matches shell so edges never hard-cut
     ctx.save();
     ctx.beginPath();
     ctx.rect(this.arenaView.x, this.arenaView.y, this.arenaView.w, this.arenaView.h);
     ctx.clip();
-    ctx.fillStyle = '#1a1410';
+    ctx.fillStyle = colors.bg;
     ctx.fillRect(this.arenaView.x, this.arenaView.y, this.arenaView.w, this.arenaView.h);
     ctx.save();
     ctx.translate(worldT.ox, worldT.oy);
@@ -229,20 +229,35 @@ export class SandboxScene {
       });
     }
     ctx.restore();
-    // Soft edge falloff over the preview band
+    // Soft edge falloff — eased stops + top/bottom washes into shell
     const av = this.arenaView;
     const bandVig = ctx.createRadialGradient(
       av.x + av.w / 2,
       av.y + av.h * 0.45,
-      Math.min(av.w, av.h) * 0.2,
+      Math.min(av.w, av.h) * 0.24,
       av.x + av.w / 2,
       av.y + av.h / 2,
-      Math.max(av.w, av.h) * 0.62,
+      Math.max(av.w, av.h) * 0.7,
     );
     bandVig.addColorStop(0, 'rgba(0,0,0,0)');
-    bandVig.addColorStop(1, 'rgba(8,5,3,0.38)');
+    bandVig.addColorStop(0.72, 'rgba(8,5,3,0.1)');
+    bandVig.addColorStop(0.9, 'rgba(8,5,3,0.26)');
+    bandVig.addColorStop(1, 'rgba(8,5,3,0.36)');
     ctx.fillStyle = bandVig;
     ctx.fillRect(av.x, av.y, av.w, av.h);
+    const edge = 28;
+    const topFade = ctx.createLinearGradient(0, av.y, 0, av.y + edge);
+    topFade.addColorStop(0, colors.bg);
+    topFade.addColorStop(0.45, 'rgba(26,20,16,0.55)');
+    topFade.addColorStop(1, 'rgba(26,20,16,0)');
+    ctx.fillStyle = topFade;
+    ctx.fillRect(av.x, av.y, av.w, edge);
+    const botFade = ctx.createLinearGradient(0, av.y + av.h - edge, 0, av.y + av.h);
+    botFade.addColorStop(0, 'rgba(26,20,16,0)');
+    botFade.addColorStop(0.55, 'rgba(26,20,16,0.55)');
+    botFade.addColorStop(1, colors.bg);
+    ctx.fillStyle = botFade;
+    ctx.fillRect(av.x, av.y + av.h - edge, av.w, edge);
     ctx.restore();
 
     // Team cam chips + fighter focus strip
