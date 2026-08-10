@@ -21,7 +21,14 @@ import {
   turnToward,
 } from './geometry';
 import { Fighter, resetFighterIds } from './fighter';
-import type { CombatEvent, Intention, MatchConfig, MatchResult, TeamSize } from './types';
+import type {
+  CombatEvent,
+  FighterSpawnSpec,
+  Intention,
+  MatchConfig,
+  MatchResult,
+  TeamSize,
+} from './types';
 
 const NAMES_A = ['Marcus', 'Lucius', 'Gaius', 'Titus', 'Quintus', 'Secundus'];
 const NAMES_B = ['Vindex', 'Felix', 'Crispus', 'Rufus', 'Niger', 'Albus'];
@@ -53,27 +60,40 @@ export class Match {
     this.arenaHeight = config.arenaHeight;
     this.rng = new SeededRNG(config.seed);
 
-    const t0 = config.team0 ?? this.rollTeam();
-    const t1 = config.team1 ?? this.rollTeam();
-    this.spawnTeam(0, t0);
-    this.spawnTeam(1, t1);
+    const t0Specs =
+      config.team0Specs ??
+      (config.team0 ?? this.rollTeam()).map((a) => ({ armatura: a }) satisfies FighterSpawnSpec);
+    const t1Specs =
+      config.team1Specs ??
+      (config.team1 ?? this.rollTeam()).map((a) => ({ armatura: a }) satisfies FighterSpawnSpec);
+    this.spawnTeam(0, t0Specs);
+    this.spawnTeam(1, t1Specs);
   }
 
   private rollTeam(): ArmaturaId[] {
     return Array.from({ length: this.teamSize }, () => this.rng.pick(ARMATURA_LIST));
   }
 
-  private spawnTeam(team: 0 | 1, kits: ArmaturaId[]): void {
+  private spawnTeam(team: 0 | 1, specs: FighterSpawnSpec[]): void {
     const names = team === 0 ? NAMES_A : NAMES_B;
     const baseX = combatTuning.arenaCX + (team === 0 ? -140 : 140);
     const baseY = combatTuning.arenaCY;
-    const spreadStep = kits.length >= 3 ? 36 : 42;
-    for (let i = 0; i < kits.length; i++) {
-      const spread = (i - (kits.length - 1) / 2) * spreadStep;
-      const x = baseX + (kits.length >= 3 ? (i - 1) * 8 * (team === 0 ? 1 : -1) : 0);
+    const spreadStep = specs.length >= 3 ? 36 : 42;
+    for (let i = 0; i < specs.length; i++) {
+      const spec = specs[i]!;
+      const spread = (i - (specs.length - 1) / 2) * spreadStep;
+      const x = baseX + (specs.length >= 3 ? (i - 1) * 8 * (team === 0 ? 1 : -1) : 0);
       const y = baseY + spread;
       const facing = team === 0 ? 0 : Math.PI;
-      const f = new Fighter(team, kits[i]!, this.rng.pick(names), x, y, facing);
+      const f = new Fighter(
+        team,
+        spec.armatura,
+        spec.name ?? this.rng.pick(names),
+        x,
+        y,
+        facing,
+      );
+      f.applySpawnSpec(spec);
       // Opposite preferred orbits so mirrors shear instead of ramming
       f.orbitSide = team === 0 ? 1 : -1;
       this.fighters.push(f);
@@ -753,6 +773,17 @@ export function createQuickMatch(
   team1?: ArmaturaId[],
   arenaWidth = 960,
   arenaHeight = 540,
+  team0Specs?: FighterSpawnSpec[],
+  team1Specs?: FighterSpawnSpec[],
 ): Match {
-  return new Match({ teamSize, seed, team0, team1, arenaWidth, arenaHeight });
+  return new Match({
+    teamSize,
+    seed,
+    team0,
+    team1,
+    team0Specs,
+    team1Specs,
+    arenaWidth,
+    arenaHeight,
+  });
 }

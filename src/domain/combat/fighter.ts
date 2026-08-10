@@ -1,8 +1,9 @@
-import { ARMATURAE, type ArmaturaId } from '../../content/armatura';
+import { ARMATURAE, type ArmaturaDef, type ArmaturaId } from '../../content/armatura';
 import { combatTuning } from '../../content/combat';
 import type {
   ActionKind,
   FighterSnapshot,
+  FighterSpawnSpec,
   Footwork,
   Intention,
   Phase,
@@ -28,7 +29,9 @@ export class Fighter {
   readonly id: number;
   readonly team: TeamId;
   readonly armatura: ArmaturaId;
-  readonly name: string;
+  name: string;
+  /** Career / doctrina overlay of class kit — null means stock armatura. */
+  private defOverride: ArmaturaDef | null = null;
 
   x: number;
   y: number;
@@ -113,8 +116,46 @@ export class Fighter {
     this.desiredDist = (d.measureMin + d.measureMax) * 0.5;
   }
 
-  def() {
-    return ARMATURAE[this.armatura];
+  def(): ArmaturaDef {
+    return this.defOverride ?? ARMATURAE[this.armatura];
+  }
+
+  /**
+   * Apply career / lab spawn modifiers. Rescales pools from the overridden kit.
+   */
+  applySpawnSpec(spec: FighterSpawnSpec): void {
+    if (spec.name) this.name = spec.name;
+    const base = ARMATURAE[this.armatura];
+    const d: ArmaturaDef = { ...base };
+    const clampBias = (n: number) => Math.max(0, Math.min(1, n));
+    if (spec.damageMul != null) d.damageMul = base.damageMul * spec.damageMul;
+    if (spec.attackStaminaMul != null) {
+      d.attackStamina = Math.max(1, Math.round(base.attackStamina * spec.attackStaminaMul));
+      d.dodgeStamina = Math.max(1, Math.round(base.dodgeStamina * spec.attackStaminaMul));
+    }
+    if (spec.pursueBiasAdd != null) d.pursueBias = clampBias(base.pursueBias + spec.pursueBiasAdd);
+    if (spec.clinchPanicAdd != null) {
+      d.clinchPanic = clampBias(base.clinchPanic + spec.clinchPanicAdd);
+    }
+    if (spec.circleArcAdd != null) {
+      d.circleArcBonus = Math.max(0, base.circleArcBonus + spec.circleArcAdd);
+    }
+    this.defOverride = d;
+
+    const hpMul = spec.hpMul ?? 1;
+    const stamMul = spec.staminaMul ?? 1;
+    const poiseMul = spec.poiseMul ?? 1;
+    this.maxHp = Math.max(1, Math.round(base.maxHealth * combatTuning.healthScale * hpMul));
+    this.maxStamina = Math.max(1, Math.round(base.maxStamina * stamMul));
+    this.maxPoise = Math.max(
+      1,
+      Math.round(base.maxPoise * combatTuning.poisePoolScale * poiseMul),
+    );
+    const start = spec.startHpRatio ?? 1;
+    this.hp = Math.max(1, Math.round(this.maxHp * Math.max(0.15, Math.min(1, start))));
+    this.stamina = this.maxStamina;
+    this.poise = this.maxPoise;
+    this.desiredDist = (d.measureMin + d.measureMax) * 0.5;
   }
 
   get alive(): boolean {

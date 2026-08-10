@@ -1,5 +1,6 @@
 import { ARMATURAE } from '../../content/armatura';
 import { colors } from '../../content/palette';
+import { DOCTRINA, GRADE_LABEL, GRADE_ORDER } from '../../content/rpg';
 import { fightersForSlot, shortSlotReq } from '../../domain/campaign/eligibility';
 import { fightableRoster } from '../../domain/campaign/season';
 import type { MuneraOffer, SeasonState } from '../../domain/campaign/types';
@@ -50,7 +51,14 @@ export class LineupScene {
     label(ctx, offer.blurb, pad, 86, { size: typeScale.body, color: colors.muted });
 
     const opp = offer.opponents.map((id) => ARMATURAE[id].name).join(', ');
-    label(ctx, `Opponents: ${opp}`, pad, 108, { size: typeScale.meta, color: colors.muted });
+    const doc = DOCTRINA[state.doctrina];
+    label(
+      ctx,
+      `Opponents: ${opp} · ${offer.editor ?? 'Editor'} · Doctrina: ${doc.name}`,
+      pad,
+      108,
+      { size: typeScale.meta, color: colors.muted },
+    );
 
     // Slot tabs — wrap on narrow widths
     const slotW = portrait ? Math.min(150, (w - pad * 2 - space.sm) / Math.min(2, offer.teamSize)) : 150;
@@ -88,7 +96,10 @@ export class LineupScene {
       (id, idx) => id != null && idx !== this.activeSlot,
     ) as number[];
     const slotReq = offer.playerSlots[this.activeSlot]!;
-    const candidates = fightersForSlot(pool, slotReq, pickedElsewhere);
+    const minIdx = offer.minGrade ? GRADE_ORDER.indexOf(offer.minGrade) : 0;
+    const candidates = fightersForSlot(pool, slotReq, pickedElsewhere).filter(
+      (g) => GRADE_ORDER.indexOf(g.grade) >= minIdx,
+    );
 
     let action: LineupAction = { type: 'NONE' };
 
@@ -115,7 +126,7 @@ export class LineupScene {
       if (
         rosterChip(ctx, r, input.pointer, {
           name: g.name,
-          tag: ARMATURAE[g.armatura].short,
+          tag: `${ARMATURAE[g.armatura].short}·${GRADE_LABEL[g.grade].slice(0, 3)}`,
           team: 0,
           hpRatio: g.hpRatio,
           selected,

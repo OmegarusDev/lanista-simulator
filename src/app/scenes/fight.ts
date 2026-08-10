@@ -85,6 +85,8 @@ export class FightScene {
       config.team1,
       ARENA_WORLD_W,
       ARENA_WORLD_H,
+      config.team0Specs,
+      config.team1Specs,
     );
   }
 

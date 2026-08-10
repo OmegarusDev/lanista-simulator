@@ -1,5 +1,7 @@
 import { colors } from '../content/palette';
 import { applyCareerFight } from '../domain/campaign/aftermath';
+import { spawnSpecsFromLineup } from '../domain/campaign/combatMods';
+import { settleSeasonLegacy } from '../domain/campaign/legacy';
 import { createSeason, endDay } from '../domain/campaign/season';
 import type { AftermathSummary, MuneraOffer, SeasonState } from '../domain/campaign/types';
 import {
@@ -10,7 +12,13 @@ import {
   resizeCanvas,
 } from '../shell/canvas';
 import { Input } from '../shell/input';
-import { clearSeasonSave, loadSeason, saveSeason } from '../shell/save';
+import {
+  clearSeasonSave,
+  loadLegacy,
+  loadSeason,
+  saveLegacy,
+  saveSeason,
+} from '../shell/save';
 import { Synth } from '../view/audio';
 import { AftermathScene } from './scenes/aftermath';
 import { FightScene, type FightAction } from './scenes/fight';
@@ -179,7 +187,7 @@ export class App {
     }
     if (action.type === 'NEW_SEASON') {
       const seed = (Math.random() * 0xffffffff) >>> 0;
-      this.season = createSeason(seed);
+      this.season = createSeason(seed, loadLegacy());
       clearSeasonSave();
       saveSeason(this.season);
       this.mode = 'ludus';
@@ -243,7 +251,7 @@ export class App {
       this.goTitle();
       return;
     }
-    if (action.type === 'HEALED' || action.type === 'RESTED') {
+    if (action.type === 'CHANGED' || action.type === 'RESTED') {
       this.persist();
       if (this.seasonTerminal(this.season)) {
         clearSeasonSave();
@@ -286,11 +294,28 @@ export class App {
         const g = this.season!.roster.find((x) => x.id === id)!;
         return g.armatura;
       });
+      const team0Specs = spawnSpecsFromLineup(
+        this.season.roster,
+        action.lineupIds,
+        this.season.doctrina,
+      );
+      const tierMul = 1 + (offer.tier - 1) * 0.04;
+      const team1Specs = offer.opponents.map((armatura, i) => ({
+        armatura,
+        name: `Rival ${i + 1}`,
+        hpMul: tierMul,
+        staminaMul: tierMul,
+        poiseMul: tierMul,
+        damageMul: tierMul,
+        pursueBiasAdd: offer.rivalName ? 0.06 : 0,
+      }));
       const config: SandboxConfig = {
         teamSize: offer.teamSize,
         seed: (this.season.seed + this.season.day * 1009 + offer.templateId.length) >>> 0,
         team0,
         team1: [...offer.opponents],
+        team0Specs,
+        team1Specs,
         lockedMatchup: true,
       };
       this.enterFight(config, 'career');
@@ -324,6 +349,8 @@ export class App {
     }
     const action = this.seasonEnd.draw(ctx, this.input, this.season);
     if (action.type === 'TITLE') {
+      const legacy = settleSeasonLegacy(this.season, loadLegacy());
+      saveLegacy(legacy);
       clearSeasonSave();
       this.season = null;
       this.goTitle();

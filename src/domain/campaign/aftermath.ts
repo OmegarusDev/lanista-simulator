@@ -1,5 +1,9 @@
+import { economy } from '../../content/economy';
 import type { MatchResult } from '../combat/types';
 import { SeededRNG } from '../rng';
+import { onBoutForContracts } from './contracts';
+import { addXp } from './gladiator';
+import { resolveAssignments } from './ludusDay';
 import { markBrokeIfNeeded, upkeepCost } from './season';
 import type { AftermathSummary, Gladiator, InjuryTier, MuneraOffer, SeasonState } from './types';
 
@@ -20,26 +24,49 @@ function bumpInjury(cur: InjuryTier): InjuryTier {
 function applyFighterAftermath(
   g: Gladiator,
   lost: boolean,
+  draw: boolean,
+  forfeited: boolean,
   rng: SeededRNG,
-): InjuryTier | null {
+): { injury: InjuryTier | null; xp: number; leveled: boolean } {
   g.fatigue += 1;
-  g.hpRatio = Math.max(0.2, g.hpRatio - (lost ? 0.35 : 0.12) - g.fatigue * 0.03);
+  g.hpRatio = Math.max(0.2, g.hpRatio - (lost ? 0.35 : draw ? 0.18 : 0.12) - g.fatigue * 0.03);
   let became: InjuryTier | null = null;
   if (lost && rng.chance(0.55)) {
     const next = bumpInjury(g.injury);
     if (next !== g.injury) became = next;
     g.injury = next;
-  } else if (!lost && rng.chance(0.12)) {
+  } else if (!lost && !draw && rng.chance(0.12)) {
     const next = bumpInjury(g.injury);
     if (next !== g.injury) became = next;
     g.injury = next;
   }
-  if (lost) g.losses += 1;
-  else g.wins += 1;
-  return became;
+
+  const xp = forfeited
+    ? economy.xpForfeit
+    : draw
+      ? economy.xpDraw
+      : lost
+        ? economy.xpLoss
+        : economy.xpWin;
+
+  // Fame purse weight
+  if (!lost && !forfeited) g.fame += draw ? economy.fameDraw : economy.fameWin;
+  g.mastery += lost ? 1 : 2;
+
+  const { leveled } = addXp(g, xp);
+
+  if (lost || forfeited) g.losses += 1;
+  else if (!draw) g.wins += 1;
+
+  // Missio / retirement on catastrophic wound + loss
+  if (g.injury === 'SEVERE' && lost && rng.chance(0.22)) {
+    g.retired = true;
+  }
+
+  return { injury: became, xp, leveled };
 }
 
-/** Apply purse, virtus, injuries; marks dayResolved. Player is always team 0. */
+/** Apply purse, virtus, injuries, XP; marks dayResolved. Player is always team 0. */
 export function applyCareerFight(state: SeasonState, input: CareerFightInput): AftermathSummary {
   const { offer, lineupIds, forfeited } = input;
   let resultLabel: AftermathSummary['result'];
@@ -67,13 +94,21 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
   let virtusDelta = 0;
   const notes: string[] = [];
 
+  // Fame-weighted purse
+  const fameBonus = lineupIds.reduce((s, id) => {
+    const g = state.roster.find((x) => x.id === id);
+    return s + (g ? Math.min(12, g.fame) : 0);
+  }, 0);
+
   if (forfeited) {
     virtusDelta = Math.min(-1, offer.virtusLose);
     notes.push('Forfeit — entry lost.');
   } else if (playerWin) {
-    purseDelta += offer.purse;
-    virtusDelta = offer.virtusWin;
-    notes.push(`Purse collected: ${offer.purse} denarii.`);
+    const purse = offer.purse + fameBonus;
+    purseDelta += purse;
+    virtusDelta = offer.virtusWin + (offer.rivalName ? 1 : 0);
+    notes.push(`Purse collected: ${purse} denarii.`);
+    if (offer.location) notes.push(`At the ${offer.location}.`);
   } else if (draw) {
     purseDelta += Math.floor(offer.purse * 0.35);
     virtusDelta = Math.max(0, Math.floor(offer.virtusWin / 2));
@@ -81,6 +116,10 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
   } else {
     virtusDelta = offer.virtusLose;
     notes.push('Defeat — no purse.');
+    if (offer.rivalName) {
+      virtusDelta -= 1;
+      notes.push(`${offer.rivalName} claims the crowd.`);
+    }
   }
 
   state.denarii += purseDelta;
@@ -88,15 +127,24 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
 
   const rng = new SeededRNG(state.seed + state.day * 131 + offer.templateId.length * 17);
   const injuries: AftermathSummary['injuries'] = [];
+  const xpGains: NonNullable<AftermathSummary['xpGains']> = [];
+
   for (const id of lineupIds) {
     const g = state.roster.find((x) => x.id === id);
     if (!g) continue;
     const lost = forfeited || (!playerWin && !draw);
-    const became = applyFighterAftermath(g, lost, rng);
-    if (became) injuries.push({ name: g.name, injury: became });
+    const { injury, xp, leveled } = applyFighterAftermath(g, lost, draw, forfeited, rng);
+    if (injury) injuries.push({ name: g.name, injury });
+    xpGains.push({ name: g.name, xp, grade: leveled ? g.grade : undefined });
+    if (g.retired) {
+      notes.push(`${g.name} is retired from the familia — missio of the flesh.`);
+      state.retiredNames.push(g.name);
+    }
   }
 
-  // Day upkeep after bout
+  const assignNotes = resolveAssignments(state, rng);
+  notes.push(...assignNotes);
+
   const upkeep = upkeepCost(state);
   if (state.denarii >= upkeep) {
     state.denarii -= upkeep;
@@ -117,7 +165,9 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
     virtusDelta,
     injuries,
     notes,
+    xpGains,
   };
+  onBoutForContracts(state, summary, offer.rivalName);
   state.lastAftermath = summary;
   return summary;
 }

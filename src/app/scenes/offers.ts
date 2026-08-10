@@ -45,11 +45,17 @@ export class OffersScene {
       panel(ctx, { x: pad - 4, y, w: w - pad * 2 + 8, h: rowH - 8 });
       const titleColor = o.eligible ? colors.parchment : colors.muted;
       label(ctx, o.name, pad + 12, y + 24, { size: typeScale.title, color: titleColor });
-      label(ctx, `${o.kind} · ${o.teamSize}v${o.teamSize}`, pad + 12, y + 44, {
-        variant: 'eyebrow',
-        color: o.eligible ? colors.muted : colors.buttonDisabled,
-      });
-      const opp = o.opponents.map((id) => ARMATURAE[id].short).join('+');
+      label(
+        ctx,
+        `${o.kind} · ${o.teamSize}v${o.teamSize} · ${o.location ?? 'arena'}`,
+        pad + 12,
+        y + 44,
+        {
+          variant: 'eyebrow',
+          color: o.eligible ? colors.muted : colors.buttonDisabled,
+        },
+      );
+      const opp = o.opponents.map((id) => ARMATURAE[id].name).join('+');
       label(
         ctx,
         `${formatSlotGates(o.playerSlots)}  →  vs ${opp}  ·  ${o.purse}d / fee ${o.entryFee}`,

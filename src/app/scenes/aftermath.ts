@@ -61,13 +61,13 @@ export class AftermathScene {
     );
 
     let y = panelY + 120;
-    for (const note of summary.notes) {
+    for (const note of summary.notes.slice(0, 4)) {
       label(ctx, note, w / 2, y, {
         align: 'center',
         size: typeScale.body,
         color: colors.muted,
       });
-      y += 22;
+      y += 20;
     }
     for (const inj of summary.injuries) {
       label(ctx, `${inj.name} → ${inj.injury}`, w / 2, y, {
@@ -75,7 +75,17 @@ export class AftermathScene {
         size: typeScale.body,
         color: colors.accentHot,
       });
-      y += 22;
+      y += 20;
+    }
+    for (const xp of summary.xpGains ?? []) {
+      label(
+        ctx,
+        `${xp.name} +${xp.xp} xp${xp.grade ? ` → ${xp.grade}` : ''}`,
+        w / 2,
+        y,
+        { align: 'center', size: typeScale.meta, color: colors.parchment },
+      );
+      y += 18;
     }
 
     label(ctx, `Purse now ${state.denarii} · Virtus ${state.virtus}`, w / 2, h - 90, {

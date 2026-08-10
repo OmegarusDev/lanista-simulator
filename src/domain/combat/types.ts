@@ -65,11 +65,30 @@ export interface FighterSnapshot {
 /** Campaign supports up to 3v3; Instant Match sandbox stays 1v1/2v2. */
 export type TeamSize = 1 | 2 | 3;
 
+/** Optional career / lab spawn overrides applied after class kit. */
+export interface FighterSpawnSpec {
+  armatura: ArmaturaId;
+  name?: string;
+  hpMul?: number;
+  staminaMul?: number;
+  poiseMul?: number;
+  damageMul?: number;
+  attackStaminaMul?: number;
+  pursueBiasAdd?: number;
+  clinchPanicAdd?: number;
+  circleArcAdd?: number;
+  /** Fraction of max HP at bout start (after pool scale). */
+  startHpRatio?: number;
+}
+
 export interface MatchConfig {
   teamSize: TeamSize;
   seed: number;
   team0?: ArmaturaId[];
   team1?: ArmaturaId[];
+  /** When set, overrides team0 kits + names + career mods. */
+  team0Specs?: FighterSpawnSpec[];
+  team1Specs?: FighterSpawnSpec[];
   arenaWidth: number;
   arenaHeight: number;
 }

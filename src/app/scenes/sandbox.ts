@@ -1,7 +1,7 @@
 import { ARMATURA_LIST, ARMATURAE, type ArmaturaId } from '../../content/armatura';
 import { PAIRING_PRESETS } from '../../content/pairings';
 import { colors } from '../../content/palette';
-import type { TeamSize } from '../../domain/combat/types';
+import type { FighterSpawnSpec, TeamSize } from '../../domain/combat/types';
 import type { Input } from '../../shell/input';
 import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
@@ -17,6 +17,9 @@ export interface SandboxConfig {
   team0: ArmaturaId[];
   team1: ArmaturaId[];
   lockedMatchup: boolean;
+  /** Career: full spawn specs (condition, grade, doctrina…). */
+  team0Specs?: FighterSpawnSpec[];
+  team1Specs?: FighterSpawnSpec[];
 }
 
 export type SandboxAction =
