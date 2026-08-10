@@ -226,15 +226,15 @@ function drawGroundShadow(
   scale: number,
   fallen: boolean,
 ): void {
-  // Soft contact with sand — radial falloff, sun-biased offset
-  const ox = -SUN.dx * 10 * scale;
-  const oy = -SUN.dy * 8 * scale;
-  const rx = (fallen ? 21 : 16) * scale;
-  const ry = (fallen ? 10 : 7.5) * scale;
+  // Soft contact with sand — radial falloff, sun-biased offset + dark core
+  const ox = -SUN.dx * 11 * scale;
+  const oy = -SUN.dy * 9 * scale;
+  const rx = (fallen ? 22 : 17) * scale;
+  const ry = (fallen ? 11 : 8) * scale;
   const g = ctx.createRadialGradient(ox, oy + 3, 0, ox, oy + 3, rx);
-  g.addColorStop(0, fallen ? 'rgba(16,10,5,0.48)' : 'rgba(16,10,5,0.42)');
-  g.addColorStop(0.5, fallen ? 'rgba(16,10,5,0.2)' : 'rgba(16,10,5,0.18)');
-  g.addColorStop(1, 'rgba(16,10,5,0)');
+  g.addColorStop(0, fallen ? 'rgba(12,8,4,0.62)' : 'rgba(12,8,4,0.55)');
+  g.addColorStop(0.4, fallen ? 'rgba(12,8,4,0.28)' : 'rgba(12,8,4,0.24)');
+  g.addColorStop(1, 'rgba(12,8,4,0)');
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.ellipse(ox, oy + 3, rx, ry, 0.35, 0, Math.PI * 2);
@@ -262,17 +262,23 @@ function drawSelectionRing(
   teamTint: string,
   scale: number,
 ): void {
-  // Soft washed ellipse — structural team cue, not a neon ring
+  // Soft washed ellipse — team structure + bronze plaque lip (matches meters/rails)
   ctx.fillStyle = teamTint;
-  ctx.globalAlpha = 0.1;
+  ctx.globalAlpha = 0.12;
   ctx.beginPath();
   ctx.ellipse(0, 3, 19 * scale, 11.5 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = teamTint;
-  ctx.globalAlpha = 0.22;
-  ctx.lineWidth = 1.25;
+  ctx.globalAlpha = 0.28;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.ellipse(0, 3, 18 * scale, 11 * scale, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = colors.bronze;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(0, 3, 20 * scale, 12.2 * scale, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
 }
@@ -308,26 +314,32 @@ function weaponAngleForPose(look: ArmaturaLook, pose: Pose, phaseT: number): num
 
 function drawAuras(ctx: CanvasRenderingContext2D, f: FighterSnapshot, scale: number): void {
   if (f.stunned) {
-    ctx.fillStyle = 'rgba(240,230,168,0.28)';
+    ctx.fillStyle = colors.bronzeHot;
+    ctx.globalAlpha = 0.18;
     ctx.beginPath();
     ctx.arc(0, 0, 22 * scale, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
   }
   if (f.tangled) {
-    ctx.strokeStyle = 'rgba(220,210,180,0.55)';
+    ctx.strokeStyle = colors.parchment;
+    ctx.globalAlpha = 0.45;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(0, 0, 20 * scale, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.globalAlpha = 1;
   }
   if (f.poiseBroken) {
-    ctx.strokeStyle = 'rgba(201,162,39,0.75)';
+    ctx.strokeStyle = colors.stamina;
+    ctx.globalAlpha = 0.8;
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 3]);
     ctx.beginPath();
     ctx.arc(0, 0, 19 * scale, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
   }
 }
 
@@ -345,14 +357,15 @@ function drawCones(
     const soft =
       f.poiseTier === 'SOFT' ? 0.7 : f.poiseTier === 'CRITICAL' ? 0.45 : 1;
     const core = guardArc * (0.72 + soft * 0.28);
-    // Soft edge fade when poise is mid/low
-    ctx.fillStyle = `rgba(142,180,212,${(0.06 + thick * 0.06) * soft})`;
+    // Poise meter blue — same token family as HUD bars
+    const [pr, pg, pb] = hexRgb(colors.poise);
+    ctx.fillStyle = `rgba(${pr},${pg},${pb},${(0.08 + thick * 0.07) * soft})`;
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, attackRange * (0.4 + thick * 0.2), f.facing - guardArc, f.facing + guardArc);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = `rgba(142,180,212,${(0.14 + thick * 0.12) * soft})`;
+    ctx.fillStyle = `rgba(${pr},${pg},${pb},${(0.16 + thick * 0.12) * soft})`;
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, attackRange * (0.4 + thick * 0.2), f.facing - core, f.facing + core);
@@ -360,14 +373,28 @@ function drawCones(
     ctx.fill();
   }
   if (pose === 'windup' || pose === 'strike') {
-    ctx.fillStyle =
-      pose === 'windup' ? `rgba(232,196,122,${0.1 + phaseT * 0.18})` : 'rgba(196,92,58,0.2)';
+    if (pose === 'windup') {
+      const [br, bg, bb] = hexRgb(colors.bronzeHot);
+      ctx.fillStyle = `rgba(${br},${bg},${bb},${0.1 + phaseT * 0.18})`;
+    } else {
+      const [ar, ag, ab] = hexRgb(colors.accentHot);
+      ctx.fillStyle = `rgba(${ar},${ag},${ab},0.22)`;
+    }
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, attackRange, f.facing - attackArc, f.facing + attackArc);
     ctx.closePath();
     ctx.fill();
   }
+}
+
+function hexRgb(hex: string): [number, number, number] {
+  const full =
+    hex.length === 4
+      ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+      : hex;
+  const n = parseInt(full.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
 function drawBody(
@@ -765,14 +792,29 @@ function drawBars(
     f.poiseBroken || f.poiseTier === 'BROKEN'
       ? colors.accentHot
       : f.poiseTier === 'CRITICAL'
-        ? '#c97827'
+        ? colors.bronzeHot
         : f.poiseTier === 'SOFT'
-          ? '#c9a227'
+          ? colors.stamina
           : colors.poise;
 
-  // Tiny plaque behind meters so they read as broadcast chrome, not debug
-  ctx.fillStyle = 'rgba(12,8,5,0.45)';
-  ctx.fillRect(bx - 3, by - 3, bw + 6, 22);
+  // Tiny carved plaque behind meters — same language as rail meters
+  ctx.fillStyle = 'rgba(12,8,5,0.55)';
+  ctx.beginPath();
+  const pr = 3;
+  const px = bx - 4;
+  const py = by - 4;
+  const pw = bw + 8;
+  const ph = 24;
+  ctx.moveTo(px + pr, py);
+  ctx.arcTo(px + pw, py, px + pw, py + ph, pr);
+  ctx.arcTo(px + pw, py + ph, px, py + ph, pr);
+  ctx.arcTo(px, py + ph, px, py, pr);
+  ctx.arcTo(px, py, px + pw, py, pr);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = colors.hairline;
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
   bar(ctx, bx, by, bw, 4, f.hp / f.maxHp, colors.hp);
   bar(ctx, bx, by + 6, bw, 4, stam, stam < 0.38 ? colors.accentHot : colors.stamina);

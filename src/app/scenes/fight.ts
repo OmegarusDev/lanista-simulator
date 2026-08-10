@@ -640,29 +640,32 @@ export class FightScene {
           ? 'Blue wins'
           : 'Red wins';
 
-    const btnH = stage.orientation === 'portrait' ? touchTarget : 40;
-    const bandH = 136;
-    const bandY =
-      stage.orientation === 'portrait'
-        ? stage.world.view.y + stage.world.view.h / 2 - bandH / 2
-        : stage.h * 0.34;
+    // Same plaque language as pause / Custom — not a flat rgba band
     ctx.fillStyle = 'rgba(10,8,6,0.62)';
-    ctx.fillRect(0, bandY, stage.w, bandH);
+    ctx.fillRect(0, 0, stage.w, stage.h);
 
-    label(ctx, text, stage.w / 2, bandY + 44, {
+    const btnH = stage.orientation === 'portrait' ? touchTarget : 40;
+    const gap = space.sm;
+    const portrait = stage.orientation === 'portrait';
+    const panelW = Math.min(portrait ? 340 : 380, stage.w - space.xl * 2);
+    const panelH = space.lg + 56 + btnH + gap + space.md + 8;
+    const panelX = (stage.w - panelW) / 2;
+    const panelY = Math.max(
+      stage.topBandH + space.md,
+      Math.min(stage.rosterBandTop - panelH - space.md, stage.h * 0.32),
+    );
+    plaque(ctx, { x: panelX, y: panelY, w: panelW, h: panelH }, 'Bout over');
+
+    label(ctx, text, stage.w / 2, panelY + 52, {
       size: typeScale.banner,
       align: 'center',
       color: colors.parchment,
     });
-    label(ctx, 'Session', stage.w / 2, bandY + 66, {
-      variant: 'eyebrow',
-      align: 'center',
-    });
 
-    const by = bandY + 78;
+    const by = panelY + panelH - btnH - space.md;
     if (this.career) {
       if (
-        button(ctx, { x: stage.w / 2 - 80, y: by, w: 160, h: btnH }, 'Continue', input.pointer, {
+        button(ctx, { x: panelX + space.md, y: by, w: panelW - space.md * 2, h: btnH }, 'Continue', input.pointer, {
           size: typeScale.label,
         })
       ) {
@@ -677,33 +680,35 @@ export class FightScene {
       return action;
     }
 
-    if (stage.orientation === 'portrait') {
-      const gap = 8;
-      const bw = (stage.w - 32 - gap * 2) / 3;
-      if (button(ctx, { x: 16, y: by, w: bw, h: btnH }, 'Restart', input.pointer)) {
+    if (portrait) {
+      const bw = (panelW - space.md * 2 - gap * 2) / 3;
+      const bx = panelX + space.md;
+      if (button(ctx, { x: bx, y: by, w: bw, h: btnH }, 'Restart', input.pointer)) {
         this.synth.play('ui');
         return { type: 'RESTART' };
       }
-      if (button(ctx, { x: 16 + bw + gap, y: by, w: bw, h: btnH }, 'Reroll', input.pointer)) {
+      if (button(ctx, { x: bx + bw + gap, y: by, w: bw, h: btnH }, 'Reroll', input.pointer)) {
         this.synth.play('ui');
         return { type: 'REROLL' };
       }
-      if (button(ctx, { x: 16 + (bw + gap) * 2, y: by, w: bw, h: btnH }, 'Leave', input.pointer)) {
+      if (button(ctx, { x: bx + (bw + gap) * 2, y: by, w: bw, h: btnH }, 'Leave', input.pointer)) {
         this.synth.play('ui');
         return { type: 'EXIT' };
       }
       return action;
     }
 
-    if (button(ctx, { x: stage.w / 2 - 180, y: by, w: 108, h: btnH }, 'Restart', input.pointer)) {
+    const bw = (panelW - space.md * 2 - gap * 2) / 3;
+    const bx = panelX + space.md;
+    if (button(ctx, { x: bx, y: by, w: bw, h: btnH }, 'Restart', input.pointer)) {
       this.synth.play('ui');
       return { type: 'RESTART' };
     }
-    if (button(ctx, { x: stage.w / 2 - 54, y: by, w: 108, h: btnH }, 'Reroll', input.pointer)) {
+    if (button(ctx, { x: bx + bw + gap, y: by, w: bw, h: btnH }, 'Reroll', input.pointer)) {
       this.synth.play('ui');
       return { type: 'REROLL' };
     }
-    if (button(ctx, { x: stage.w / 2 + 72, y: by, w: 108, h: btnH }, 'Leave', input.pointer)) {
+    if (button(ctx, { x: bx + (bw + gap) * 2, y: by, w: bw, h: btnH }, 'Leave', input.pointer)) {
       this.synth.play('ui');
       return { type: 'EXIT' };
     }

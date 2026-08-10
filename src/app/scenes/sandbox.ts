@@ -20,8 +20,9 @@ import {
   pickLabFighter,
 } from '../../view/labStage';
 import { buttonRow, isPortrait, shellPad } from '../../view/layout';
+import { carvedBand } from '../../view/materials';
 import { posedCardsToSnapshots } from '../../view/posedPreview';
-import { space, touchTarget, typeScale } from '../../view/theme';
+import { space, teamAccent, touchTarget, typeScale } from '../../view/theme';
 import {
   button,
   buttonChrome,
@@ -30,7 +31,6 @@ import {
   labelFitted,
   plaque,
   segmentedControl,
-  shellAtmosphere,
   type Rect,
 } from '../../view/ui';
 
@@ -220,12 +220,33 @@ export class SandboxScene {
       this.synth.play('ui');
     }
 
-    // Shelf controls
+    // Shelf focus — carved trough of rail plaques (camera/selection, not loose chips)
     const shelfPad = pad;
-    const focusY = chrome.shelf.y + 18;
+    const focusY = chrome.shelf.y + 16;
     const focusH = touchTarget - 4;
-    const teamLabs = buttonRow(shelfPad, focusY, Math.min(200, w * 0.4), focusH, 2, 4);
-    if (button(ctx, teamLabs[0]!, 'Blue', input.pointer, { size: typeScale.meta })) {
+    const trough: Rect = {
+      x: shelfPad,
+      y: focusY - 4,
+      w: w - shelfPad * 2,
+      h: focusH + 8,
+    };
+    carvedBand(ctx, trough.x, trough.y, trough.w, trough.h, {
+      seed: 0x5e1f,
+      tone: 'dark',
+      lip: 'none',
+      shade: 0.28,
+    });
+
+    const teamLabs = buttonRow(shelfPad + 4, focusY, Math.min(196, w * 0.38), focusH, 2, 4);
+    const blueSel = snaps.some((f) => f.team === 0 && f.id === this.selectedPreviewId);
+    const redSel = snaps.some((f) => f.team === 1 && f.id === this.selectedPreviewId);
+    if (
+      button(ctx, teamLabs[0]!, 'Blue', input.pointer, {
+        size: typeScale.meta,
+        active: blueSel,
+        accent: teamAccent(0),
+      })
+    ) {
       const blue = snaps.find((f) => f.team === 0);
       this.selectedPreviewId = blue?.id ?? null;
       this.synth.play('ui');
@@ -233,6 +254,8 @@ export class SandboxScene {
     if (
       button(ctx, teamLabs[1]!, this.matchKind === 'venatio' ? 'Beasts' : 'Red', input.pointer, {
         size: typeScale.meta,
+        active: redSel,
+        accent: teamAccent(1),
       })
     ) {
       const red = snaps.find((f) => f.team === 1);
@@ -240,7 +263,7 @@ export class SandboxScene {
       this.synth.play('ui');
     }
     const nameStart = shelfPad + Math.min(208, w * 0.4) + 8;
-    const nameBudget = w - shelfPad - nameStart;
+    const nameBudget = w - shelfPad - nameStart - 4;
     const n = snaps.length;
     const nameW = Math.min(88, (nameBudget - 4 * Math.max(0, n - 1)) / Math.max(1, n));
     snaps.forEach((f, i) => {
@@ -253,6 +276,7 @@ export class SandboxScene {
       if (
         button(ctx, r, f.name.slice(0, 8), input.pointer, {
           active: this.selectedPreviewId === f.id,
+          accent: teamAccent(f.team),
           size: typeScale.eyebrow,
         })
       ) {
@@ -324,7 +348,11 @@ export class SandboxScene {
     const portrait = isPortrait(w, h);
     let action: SandboxAction = { type: 'NONE' };
 
-    shellAtmosphere(ctx, w, h);
+    // Amphitheatre stays under the Custom sheet — one product, not a second form scene
+    const geom = labStageGeom(w, h, this.teamSize);
+    drawLabAmphitheatre(ctx, geom, this.seed);
+    ctx.fillStyle = 'rgba(10,8,6,0.55)';
+    ctx.fillRect(0, 0, w, h);
     plaque(ctx, { x: pad * 0.5, y: pad * 0.5, w: w - pad, h: h - pad });
 
     if (button(ctx, { x: pad, y: pad, w: touchTarget, h: touchTarget }, '←', input.pointer)) {

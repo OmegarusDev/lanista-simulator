@@ -2,8 +2,14 @@
  * Mosaic + sword-and-sandal material system (zero assets).
  * Heavy fills are cached OffscreenCanvases — safe for 60Hz mobile.
  */
+import { colors, PALETTE_REV } from '../content/palette';
 import { SeededRNG } from '../domain/rng';
 import { getDesign } from '../shell/canvas';
+
+/** Include in plate cache keys so palette/material edits bust stale canvases. */
+export function materialCacheTag(): string {
+  return `m${PALETTE_REV}`;
+}
 
 export type Quality = 'low' | 'med' | 'high';
 
@@ -262,6 +268,54 @@ function paintStone(
     }
     ctx.stroke();
   }
+}
+
+/**
+ * Shared wood + mosaic lip band — Lab beam/shelf and Fight rails speak one depth language.
+ */
+export function carvedBand(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  opts: {
+    seed: number;
+    tone?: 'dark' | 'warm';
+    lip?: 'top' | 'bottom' | 'none';
+    /** Extra dark wash over the wood (0–1). */
+    shade?: number;
+  },
+): void {
+  const tone = opts.tone ?? 'dark';
+  const lip = opts.lip ?? 'none';
+  const lipH = Math.min(10, Math.max(6, h * 0.12));
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  woodFill(ctx, x, y, w, h, { seed: opts.seed, tone });
+  if (lip === 'bottom') {
+    mosaicFill(ctx, x, y + h - lipH, w, lipH, {
+      seed: opts.seed ^ 0x71,
+      palette: mosaicPalettes.bronze,
+      cell: 5,
+      grout: colors.grout,
+    });
+  } else if (lip === 'top') {
+    mosaicFill(ctx, x, y, w, lipH, {
+      seed: opts.seed ^ 0x72,
+      palette: mosaicPalettes.bronze,
+      cell: 5,
+      grout: colors.grout,
+    });
+  }
+  const shade = opts.shade ?? 0;
+  if (shade > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${shade})`;
+    ctx.fillRect(x, y, w, h);
+  }
+  ctx.restore();
 }
 
 /** Bronze edge stroke for inlays. */

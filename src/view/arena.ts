@@ -5,6 +5,7 @@ import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
 import type { FightStageLayout } from './layout';
 import {
   bronzeStroke,
+  materialCacheTag,
   mosaicFill,
   mosaicPalettes,
   stoneFill,
@@ -29,10 +30,10 @@ export interface ArenaDrawOpts {
 /** Afternoon sun — light from upper-left. */
 export const SUN = { dx: -0.55, dy: -0.35 } as const;
 
-const plateCache = new Map<number, HTMLCanvasElement | OffscreenCanvas>();
+const plateCache = new Map<string, HTMLCanvasElement | OffscreenCanvas>();
 
 function getPlate(seed: number): HTMLCanvasElement | OffscreenCanvas {
-  const key = seed >>> 0;
+  const key = `${materialCacheTag()}:${seed >>> 0}`;
   const hit = plateCache.get(key);
   if (hit) return hit;
 
@@ -45,7 +46,7 @@ function getPlate(seed: number): HTMLCanvasElement | OffscreenCanvas {
   const ctx = c.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
   if (!ctx) return c;
 
-  paintStaticPlate(ctx as CanvasRenderingContext2D, new SeededRNG(key ^ 0x40ca1c));
+  paintStaticPlate(ctx as CanvasRenderingContext2D, new SeededRNG((seed >>> 0) ^ 0x40ca1c));
   plateCache.set(key, c);
   if (plateCache.size > 8) {
     const first = plateCache.keys().next().value;
@@ -228,19 +229,20 @@ export function drawArenaChromeVignette(
     }
   }
 
-  const topEnd = stage.topBandH + 40;
+  // Soft vignette only in chrome bands — sand stays clean
+  const topEnd = stage.topBandH + 36;
   const topG = ctx.createLinearGradient(0, 0, 0, topEnd);
-  topG.addColorStop(0, 'rgba(18,12,8,0.82)');
-  topG.addColorStop(0.6, 'rgba(18,12,8,0.3)');
+  topG.addColorStop(0, 'rgba(18,12,8,0.78)');
+  topG.addColorStop(0.55, 'rgba(18,12,8,0.28)');
   topG.addColorStop(1, 'rgba(18,12,8,0)');
   ctx.fillStyle = topG;
   ctx.fillRect(0, 0, w, topEnd);
 
-  const botStart = stage.rosterBandTop - 36;
+  const botStart = stage.rosterBandTop - 32;
   const botG = ctx.createLinearGradient(0, botStart, 0, h);
   botG.addColorStop(0, 'rgba(18,12,8,0)');
-  botG.addColorStop(0.35, 'rgba(18,12,8,0.35)');
-  botG.addColorStop(1, 'rgba(18,12,8,0.78)');
+  botG.addColorStop(0.4, 'rgba(18,12,8,0.32)');
+  botG.addColorStop(1, 'rgba(18,12,8,0.72)');
   ctx.fillStyle = botG;
   ctx.fillRect(0, botStart, w, h - botStart);
 }

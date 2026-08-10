@@ -1,7 +1,10 @@
 /**
  * Mosaic + sword-and-sandal palette.
  * `bg` MUST match index.html `--shell-bg`.
+ * Bump `PALETTE_REV` when tokens change so arena/lab plate caches invalidate.
  */
+export const PALETTE_REV = 2;
+
 export const colors = {
   bg: '#1a1410',
   ink: '#1a1410',

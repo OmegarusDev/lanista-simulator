@@ -48,7 +48,7 @@ describe('ArenaCamera', () => {
     expect(br.y).toBeCloseTo(ARENA_WORLD_H, 5);
   });
 
-  it('cover-fills a tall Lab viewport with no letterbox bands', () => {
+  it('cover-fills a tall viewport with no letterbox bands', () => {
     const box = { x: 0, y: 0, w: 390, h: 844 };
     const cam = new ArenaCamera();
     cam.reset(1, 'cover');
@@ -58,5 +58,35 @@ describe('ArenaCamera', () => {
     // Cover scale must beat contain (otherwise you get the picture-window bars).
     const contain = Math.min(box.w / ARENA_WORLD_W, box.h / ARENA_WORLD_H);
     expect(t.scale).toBeGreaterThan(contain + 0.01);
+  });
+
+  it('nudgeZoom clamps to the cinematic band', () => {
+    const cam = new ArenaCamera();
+    cam.reset(1.12);
+    cam.nudgeZoom(2);
+    expect(cam.zoom).toBeLessThanOrEqual(1.45);
+    cam.nudgeZoom(-5);
+    expect(cam.zoom).toBeGreaterThanOrEqual(0.95);
+  });
+
+  it('soft-returns pan when not dragging', () => {
+    const cam = new ArenaCamera();
+    cam.reset(1.12);
+    cam.panX = 40;
+    cam.panY = -30;
+    cam.mode = 'autocam';
+    for (let i = 0; i < 80; i++) cam.tickSmooth();
+    expect(Math.abs(cam.panX)).toBeLessThan(0.2);
+    expect(Math.abs(cam.panY)).toBeLessThan(0.2);
+  });
+
+  it('focusFighter zooms in and holds look-at', () => {
+    const cam = new ArenaCamera();
+    cam.reset(1.1);
+    cam.focusFighter({ id: 3, x: 400, y: 280 });
+    expect(cam.mode).toBe('focus');
+    expect(cam.zoom).toBeGreaterThanOrEqual(1.28);
+    expect(cam.targetX).toBe(400);
+    expect(cam.targetY).toBe(280);
   });
 });

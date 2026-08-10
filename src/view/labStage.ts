@@ -8,10 +8,11 @@ import { SeededRNG } from '../domain/rng';
 import { drawGladiator } from './gladiatorDraw';
 import {
   bronzeStroke,
+  carvedBand,
+  materialCacheTag,
   mosaicFill,
   mosaicPalettes,
   stoneFill,
-  woodFill,
 } from './materials';
 import type { Rect } from './ui';
 
@@ -65,7 +66,7 @@ export function drawLabAmphitheatre(
   geom: LabStageGeom,
   seed: number,
 ): void {
-  const key = `${geom.w | 0}x${geom.h | 0}:${seed >>> 0}`;
+  const key = `${materialCacheTag()}:${geom.w | 0}x${geom.h | 0}:${seed >>> 0}`;
   let plate = plateCache.get(key);
   if (!plate) {
     plate =
@@ -89,11 +90,14 @@ function paintLabPlate(ctx: CanvasRenderingContext2D, geom: LabStageGeom, seed: 
   const { w, h, cx, cy, rx, ry } = geom;
   const rng = new SeededRNG(seed ^ 0x1ab57a9e);
 
-  // Cave darkness to the edges — no flat UI bg band
-  const cave = ctx.createRadialGradient(cx, cy, Math.min(rx, ry) * 0.2, cx, cy, Math.max(w, h) * 0.75);
+  // Cave darkness to the edges — meets `colors.bg` so shell letterbox never seams
+  ctx.fillStyle = colors.bg;
+  ctx.fillRect(0, 0, w, h);
+  const cave = ctx.createRadialGradient(cx, cy, Math.min(rx, ry) * 0.2, cx, cy, Math.max(w, h) * 0.72);
   cave.addColorStop(0, '#3a2a1c');
-  cave.addColorStop(0.45, '#22180f');
-  cave.addColorStop(1, '#0e0a08');
+  cave.addColorStop(0.5, '#22180f');
+  cave.addColorStop(0.88, colors.bg);
+  cave.addColorStop(1, colors.bg);
   ctx.fillStyle = cave;
   ctx.fillRect(0, 0, w, h);
 
@@ -182,31 +186,13 @@ function paintLabPlate(ctx: CanvasRenderingContext2D, geom: LabStageGeom, seed: 
     2.5,
   );
 
-  // Architectural niches for chrome — carved into the plate (not floating cards)
-  // Top portico beam
+  // Architectural niches for chrome — same carvedBand language as Fight rails
   const beamH = Math.min(96, h * 0.12);
-  woodFill(ctx, 0, 0, w, beamH, { seed: 0x70f, tone: 'dark' });
-  mosaicFill(ctx, 0, beamH - 8, w, 8, {
-    seed: 0x71,
-    palette: mosaicPalettes.bronze,
-    cell: 5,
-    grout: colors.grout,
-  });
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(0, 0, w, beamH);
+  carvedBand(ctx, 0, 0, w, beamH, { seed: 0x70f, tone: 'dark', lip: 'bottom', shade: 0.22 });
 
-  // Bottom podium shelf
   const shelfH = Math.min(168, h * 0.22);
   const shelfY = h - shelfH;
-  woodFill(ctx, 0, shelfY, w, shelfH, { seed: 0x80f, tone: 'warm' });
-  mosaicFill(ctx, 0, shelfY, w, 10, {
-    seed: 0x81,
-    palette: mosaicPalettes.bronze,
-    cell: 5,
-    grout: colors.grout,
-  });
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.fillRect(0, shelfY, w, shelfH);
+  carvedBand(ctx, 0, shelfY, w, shelfH, { seed: 0x80f, tone: 'warm', lip: 'top', shade: 0.18 });
 
   // Soft vignette so edges feel like cave, not UI letterbox
   const vig = ctx.createRadialGradient(cx, cy, Math.min(rx, ry) * 0.5, cx, cy, Math.max(w, h) * 0.7);

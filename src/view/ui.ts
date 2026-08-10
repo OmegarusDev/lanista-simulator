@@ -3,6 +3,7 @@ import type { PointerState } from '../shell/input';
 import {
   bronzeStroke,
   carveFrame,
+  carvedBand,
   mosaicFill,
   mosaicPalettes,
   roundPath,
@@ -62,38 +63,21 @@ export function panel(ctx: CanvasRenderingContext2D, r: Rect, title?: string): v
   plaque(ctx, r, title);
 }
 
-/** Full-width carved wood rail with mosaic lip. */
+/** Full-width carved wood rail with mosaic lip (same band language as Lab beam/shelf). */
 export function rail(
   ctx: CanvasRenderingContext2D,
   r: Rect,
   opts?: { edge?: 'bottom' | 'top' | 'none' },
 ): void {
   const edge = opts?.edge ?? 'none';
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(r.x, r.y, r.w, r.h);
-  ctx.clip();
-  woodFill(ctx, r.x, r.y, r.w, r.h, { seed: 0x241 + (r.y | 0), tone: 'dark' });
+  carvedBand(ctx, r.x, r.y, r.w, r.h, {
+    seed: 0x241 + (r.y | 0),
+    tone: 'dark',
+    lip: edge === 'none' ? 'none' : edge,
+    shade: 0.12,
+  });
 
-  // Mosaic accent strip on the world-facing edge
-  if (edge === 'bottom') {
-    mosaicFill(ctx, r.x, r.y + r.h - 10, r.w, 10, {
-      seed: 0x71,
-      palette: mosaicPalettes.bronze,
-      cell: 5,
-      grout: colors.grout,
-    });
-  } else if (edge === 'top') {
-    mosaicFill(ctx, r.x, r.y, r.w, 10, {
-      seed: 0x72,
-      palette: mosaicPalettes.bronze,
-      cell: 5,
-      grout: colors.grout,
-    });
-  }
-  ctx.restore();
-
-  // Fade into stage
+  // Soft falloff into the world band
   const fade = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
   if (edge === 'bottom') {
     fade.addColorStop(0.75, 'rgba(0,0,0,0)');
@@ -101,11 +85,14 @@ export function rail(
   } else if (edge === 'top') {
     fade.addColorStop(0, 'rgba(10,6,3,0.35)');
     fade.addColorStop(0.25, 'rgba(0,0,0,0)');
+  } else {
+    fade.addColorStop(0, 'rgba(0,0,0,0)');
+    fade.addColorStop(1, 'rgba(0,0,0,0)');
   }
   ctx.fillStyle = fade;
   ctx.fillRect(r.x, r.y, r.w, r.h);
 
-  ctx.strokeStyle = 'rgba(196,154,85,0.45)';
+  ctx.strokeStyle = colors.hairline;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   if (edge === 'bottom') {
