@@ -62,7 +62,7 @@ export interface FighterSnapshot {
   flash: number;
 }
 
-/** Campaign supports up to 3v3; Instant Match sandbox stays 1v1/2v2. */
+/** Campaign supports up to 3v3; Instant Match supports 1–3 as well. */
 export type TeamSize = 1 | 2 | 3;
 
 /** Optional career / lab spawn overrides applied after class kit. */

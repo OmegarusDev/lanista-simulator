@@ -83,6 +83,8 @@ export function loadSeason(): SeasonState | null {
     const state = migrateSeason(data);
     if (!state) return null;
     applyOfflineIdle(state);
+    // Persist idle clock so recovery isn't reapplied on every Continue
+    saveSeason(state);
     return state;
   } catch {
     return null;

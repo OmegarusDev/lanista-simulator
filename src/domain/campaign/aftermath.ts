@@ -86,7 +86,6 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
   if (forfeited) {
     resultLabel = 'FORFEIT';
     state.record.forfeits += 1;
-    state.record.losses += 1;
   } else if (input.result === 'DRAW') {
     resultLabel = 'DRAW';
     draw = true;
@@ -148,13 +147,34 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
     xpGains.push({ name: g.name, xp, grade: leveled ? g.grade : undefined });
   }
 
-  // Crowd missio for downed (incapacitated) fighters — entertainment + RNG
+  // Crowd missio for downed fighters — entertainment + RNG
+  // Skip forfeit escape, and only judge fighters on the losing side
+  // (or both on draw) so a winning ally who fell isn't executed for spectacle.
   const missio: MissioVerdict[] = [];
-  if (!forfeited && input.boutStats) {
+  const judgeDowned =
+    !forfeited ||
+    // Mid-bout leave: still judge anyone already downed on the player's side
+    (forfeited && Boolean(input.boutStats?.some((s) => s.downed)));
+
+  if (judgeDowned && input.boutStats) {
     for (const st of input.boutStats) {
       if (!st.downed) continue;
       const g = state.roster.find((x) => x.id === st.gladiatorId && !x.retired);
       if (!g) continue;
+      // On a clear win, spare the fallen by default (crowd grants missio to the victors' blood)
+      if (playerWin) {
+        g.injury = 'SEVERE';
+        g.hpRatio = Math.min(g.hpRatio, 0.28);
+        notes.push(`${g.name} fell but the victors are spared.`);
+        missio.push({
+          gladiatorId: g.id,
+          name: g.name,
+          entertainment: st.entertainment,
+          outcome: 'SPARE',
+          lean: 'Victory softens the thumb…',
+        });
+        continue;
+      }
       const histrio = g.temperament === 'HISTRIO' ? 8 : 0;
       const { outcome, chance } = rollMissio(st.entertainment + histrio, g.fame, rng);
       const lean =

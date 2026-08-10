@@ -395,8 +395,7 @@ export class App {
       return;
     }
     if (action.type === 'REROLL') {
-      this.sandbox.seed = (Math.random() * 0xffffffff) >>> 0;
-      this.enterFight(this.sandbox.makeConfig(), 'lab');
+      this.enterFight(this.sandbox.rerollLab(), 'lab');
     }
   }
 }

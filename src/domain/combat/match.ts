@@ -63,12 +63,20 @@ export class Match {
     this.arenaHeight = config.arenaHeight;
     this.rng = new SeededRNG(config.seed);
 
-    const t0Specs =
+    const raw0 =
       config.team0Specs ??
       (config.team0 ?? this.rollTeam()).map((a) => ({ armatura: a }) satisfies FighterSpawnSpec);
-    const t1Specs =
+    const raw1 =
       config.team1Specs ??
       (config.team1 ?? this.rollTeam()).map((a) => ({ armatura: a }) satisfies FighterSpawnSpec);
+    const t0Specs = raw0.slice(0, this.teamSize);
+    const t1Specs = raw1.slice(0, this.teamSize);
+    while (t0Specs.length < this.teamSize) {
+      t0Specs.push({ armatura: this.rng.pick(ARMATURA_LIST) });
+    }
+    while (t1Specs.length < this.teamSize) {
+      t1Specs.push({ armatura: this.rng.pick(ARMATURA_LIST) });
+    }
     this.spawnTeam(0, t0Specs);
     this.spawnTeam(1, t1Specs);
   }
@@ -680,7 +688,7 @@ export class Match {
     this.stareTicks = 0;
   }
 
-  /** If both idle in measure — or jammed in a clinch — INVITE/ANGLE to break the freeze. */
+  /** Break idle stares / clinch jams per fighter pair — not only when everyone is stuck. */
   private updateStareRhythm(): void {
     const alive = this.fighters.filter((f) => f.alive);
     if (alive.length < 2) {
@@ -689,35 +697,54 @@ export class Match {
     }
 
     const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
-    const idleStuck = alive.every((f) => {
+    let anyStuckPair = false;
+
+    for (const f of alive) {
       const foe = nearestEnemy(f, this.fighters);
-      if (!foe || f.phase !== 'IDLE' || f.action !== 'NONE') return false;
-      // Intentions like mutual PRESS in a jam still count as stuck if no attack
+      if (!foe || f.phase !== 'IDLE' || f.action !== 'NONE') continue;
       const dd = dist(f.x, f.y, foe.x, foe.y);
       const inMeasure = dd >= f.def().measureMin * 0.9 && dd <= f.def().measureMax * 1.1;
       const inClinch = dd < clinchDist * 1.2;
       const intent = f.activeIntention(this.tick);
-      if (inClinch) return intent === 'NONE' || intent === 'PRESS' || intent === 'INVITE';
-      if (intent !== 'NONE') return false;
-      return inMeasure;
-    });
+      const foeIdle = foe.phase === 'IDLE' && foe.action === 'NONE';
+      if (!foeIdle) continue;
+      if (inClinch && (intent === 'NONE' || intent === 'PRESS' || intent === 'INVITE')) {
+        anyStuckPair = true;
+        break;
+      }
+      if (intent === 'NONE' && inMeasure) {
+        anyStuckPair = true;
+        break;
+      }
+    }
 
-    if (!idleStuck) {
+    if (!anyStuckPair) {
       this.stareTicks = 0;
       return;
     }
 
     this.stareTicks++;
-    const threshold =
-      alive.some((f) => {
-        const foe = nearestEnemy(f, this.fighters);
-        return foe && dist(f.x, f.y, foe.x, foe.y) < clinchDist * 1.2;
-      })
-        ? Math.floor(combatTuning.staleStareTicks * 0.55)
-        : combatTuning.staleStareTicks;
+    const clinched = alive.some((f) => {
+      const foe = nearestEnemy(f, this.fighters);
+      return foe && dist(f.x, f.y, foe.x, foe.y) < clinchDist * 1.2;
+    });
+    const threshold = clinched
+      ? Math.floor(combatTuning.staleStareTicks * 0.55)
+      : combatTuning.staleStareTicks;
     if (this.stareTicks < threshold) return;
 
-    const pick = this.rng.pick(alive);
+    // Prefer breaking the closest jammed pair
+    let pick = alive[0]!;
+    let best = Infinity;
+    for (const f of alive) {
+      const foe = nearestEnemy(f, this.fighters);
+      if (!foe) continue;
+      const dd = dist(f.x, f.y, foe.x, foe.y);
+      if (dd < best) {
+        best = dd;
+        pick = f;
+      }
+    }
     this.assignIntention(pick, 'ANGLE');
     pick.desiredDist = Math.max(
       pick.desiredDist,
