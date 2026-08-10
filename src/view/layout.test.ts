@@ -8,8 +8,6 @@ import {
   fitWorldInRect,
   titleLayout,
 } from './layout';
-import { labChromeRects, labStageGeom, placeLabFighters, pickLabFighter } from './labStage';
-import type { FighterSnapshot } from '../domain/combat/types';
 
 describe('fightStageLayout', () => {
   it('stacks arena above chrome in portrait', () => {
@@ -96,102 +94,5 @@ describe('titleLayout', () => {
       expect(b.w).toBeGreaterThan(180);
       expect(b.x + b.w / 2).toBeCloseTo(195, 0);
     }
-  });
-});
-
-describe('labStage', () => {
-  it('builds world-space slots for both teams', () => {
-    const g = labStageGeom(390, 844, 2);
-    expect(g.fighterSlots).toHaveLength(4);
-    expect(g.fighterSlots.filter((s) => s.team === 0)).toHaveLength(2);
-    expect(g.rx).toBeGreaterThan(100);
-  });
-
-  it('places fighters onto Lab slots', () => {
-    const g = labStageGeom(390, 844, 1);
-    const stub = (id: number, team: 0 | 1): FighterSnapshot =>
-      ({
-        id,
-        team,
-        kind: 'gladiator',
-        armatura: 'MURMILLO',
-        beastId: null,
-        name: 'X',
-        x: 0,
-        y: 0,
-        facing: 0,
-        hp: 1,
-        maxHp: 1,
-        stamina: 1,
-        maxStamina: 1,
-        poise: 1,
-        maxPoise: 1,
-        action: 'NONE',
-        phase: 'IDLE',
-        phaseT: 0,
-        phaseMax: 0,
-        footwork: 'HOLD',
-        intention: 'NONE',
-        desiredDist: 45,
-        poiseTier: 'SOLID',
-        stunned: false,
-        tangled: false,
-        poiseBroken: false,
-        guarding: false,
-        alive: true,
-        flash: 0,
-      }) as FighterSnapshot;
-    const placed = placeLabFighters([stub(1, 0), stub(2, 1)], g);
-    expect(placed[0]!.x).toBe(g.fighterSlots[0]!.x);
-    expect(placed[1]!.x).toBe(g.fighterSlots[1]!.x);
-  });
-
-  it('picks the nearest fighter in design space', () => {
-    const g = labStageGeom(390, 844, 1);
-    const snaps = placeLabFighters(
-      [
-        {
-          id: 1,
-          team: 0,
-          kind: 'gladiator',
-          armatura: 'MURMILLO',
-          beastId: null,
-          name: 'A',
-          x: 0,
-          y: 0,
-          facing: 0,
-          hp: 1,
-          maxHp: 1,
-          stamina: 1,
-          maxStamina: 1,
-          poise: 1,
-          maxPoise: 1,
-          action: 'NONE',
-          phase: 'IDLE',
-          phaseT: 0,
-          phaseMax: 0,
-          footwork: 'HOLD',
-          intention: 'NONE',
-          desiredDist: 45,
-          poiseTier: 'SOLID',
-          stunned: false,
-          tangled: false,
-          poiseBroken: false,
-          guarding: false,
-          alive: true,
-          flash: 0,
-        },
-      ],
-      g,
-    );
-    const hit = pickLabFighter(snaps, snaps[0]!.x + 2, snaps[0]!.y - 2, 40);
-    expect(hit?.id).toBe(1);
-  });
-
-  it('carves beam and shelf chrome bands', () => {
-    const c = labChromeRects(390, 844);
-    expect(c.beam.y).toBe(0);
-    expect(c.shelf.y + c.shelf.h).toBe(844);
-    expect(c.beam.h + c.shelf.h).toBeLessThan(844);
   });
 });

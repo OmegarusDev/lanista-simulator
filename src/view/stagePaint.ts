@@ -4,6 +4,7 @@
  */
 import { combatTuning } from '../content/combat';
 import type { FighterSnapshot } from '../domain/combat/types';
+import { beginGfxFrame, paintVignette } from '../gfx/compositor';
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
 import { drawArena, drawDust, type DustParticle } from './arena';
 import { ArenaCamera } from './arenaCamera';
@@ -55,6 +56,7 @@ export function paintStageWorld(
     hideBars?: boolean;
   },
 ): WorldViewTransform {
+  beginGfxFrame();
   const view = stageViewRect(opts.cssW, opts.cssH);
   const t = opts.cam.toTransform(view);
 
@@ -80,6 +82,8 @@ export function paintStageWorld(
   }
   if (opts.dust) drawDust(ctx, opts.dust);
   ctx.restore();
+
+  paintVignette(ctx, opts.cssW, opts.cssH);
 
   return t;
 }

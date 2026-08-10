@@ -4,7 +4,8 @@ import { BEASTS } from '../content/beasts';
 import { colors } from '../content/palette';
 import type { FighterSnapshot } from '../domain/combat/types';
 import { SUN } from './arena';
-import { mosaicFill, mosaicPalettes } from './materials';
+import { fleshFill, leatherFill, metalFill as metalPlateFill, mosaicFill, mosaicPalettes } from './materials';
+import { paintContactShadow } from '../gfx/light';
 import { fontStack, typeScale } from './theme';
 import { bar } from './ui';
 
@@ -226,19 +227,7 @@ function drawGroundShadow(
   scale: number,
   fallen: boolean,
 ): void {
-  // Soft contact with sand — radial falloff, sun-biased offset + dark core
-  const ox = -SUN.dx * 11 * scale;
-  const oy = -SUN.dy * 9 * scale;
-  const rx = (fallen ? 22 : 17) * scale;
-  const ry = (fallen ? 11 : 8) * scale;
-  const g = ctx.createRadialGradient(ox, oy + 3, 0, ox, oy + 3, rx);
-  g.addColorStop(0, fallen ? 'rgba(12,8,4,0.62)' : 'rgba(12,8,4,0.55)');
-  g.addColorStop(0.4, fallen ? 'rgba(12,8,4,0.28)' : 'rgba(12,8,4,0.24)');
-  g.addColorStop(1, 'rgba(12,8,4,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.ellipse(ox, oy + 3, rx, ry, 0.35, 0, Math.PI * 2);
-  ctx.fill();
+  paintContactShadow(ctx, scale, fallen);
 }
 
 function lighten(hex: string, amt: number): string {
@@ -406,41 +395,37 @@ function drawBody(
 ): void {
   const rx = look.bodyRx * scale * (pose === 'sidestep' ? 0.92 : 1);
   const ry = look.bodyRy * scale * (pose === 'guard' ? 1.08 : 1);
-  const teamPal = teamTint === colors.ally ? mosaicPalettes.team0 : mosaicPalettes.team1;
+  const team: 0 | 1 = teamTint === colors.ally ? 0 : 1;
+  const seed = Math.round(look.bodyRx * 100 + look.bodyRy * 50);
 
-  // Mosaic tessera body — inlaid figure, not soft blob
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
   ctx.clip();
-  mosaicFill(ctx, -rx - 2, -ry - 2, rx * 2 + 4, ry * 2 + 4, {
-    seed: Math.round(look.bodyRx * 100 + look.bodyRy * 50),
-    palette: [...teamPal, look.bodyFill, look.leather],
-    cell: Math.max(3, 4.5 * scale),
-    grout: colors.grout,
-    jitter: 0.45,
-  });
-  // Flesh/leather wash so kit still reads
+  fleshFill(ctx, -rx - 2, -ry - 2, rx * 2 + 4, ry * 2 + 4, { seed, team });
+  // Leather straps wash
+  ctx.globalAlpha = 0.35;
+  leatherFill(ctx, -rx, -ry * 0.2, rx * 2, ry * 1.2, { seed: seed ^ 0x71 });
+  ctx.globalAlpha = 1;
   const wash = ctx.createRadialGradient(SUN.dx * rx * 0.4, SUN.dy * ry * 0.4, 0, 0, 0, rx);
-  wash.addColorStop(0, 'rgba(255,230,190,0.12)');
+  wash.addColorStop(0, 'rgba(255,230,190,0.16)');
   wash.addColorStop(0.55, 'rgba(0,0,0,0)');
-  wash.addColorStop(1, 'rgba(20,10,5,0.28)');
+  wash.addColorStop(1, 'rgba(20,10,5,0.32)');
   ctx.fillStyle = wash;
   ctx.fillRect(-rx, -ry, rx * 2, ry * 2);
   ctx.restore();
 
-  ctx.strokeStyle = 'rgba(20,12,6,0.75)';
-  ctx.lineWidth = 1.6 * scale;
+  ctx.strokeStyle = 'rgba(12,8,4,0.88)';
+  ctx.lineWidth = 2 * scale;
   ctx.beginPath();
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.strokeStyle = colors.bronze;
-  ctx.globalAlpha = 0.35;
+  ctx.globalAlpha = 0.28;
   ctx.lineWidth = 1 * scale;
   ctx.stroke();
   ctx.globalAlpha = 1;
 
-  // Team sash — bronze-edged cloth
   ctx.strokeStyle = teamTint;
   ctx.lineWidth = 3.2 * scale;
   ctx.lineCap = 'round';
@@ -460,12 +445,7 @@ function drawBody(
     ctx.beginPath();
     ctx.ellipse(1 * scale, 0, rx * 0.55, ry * 0.7, 0, 0, Math.PI * 2);
     ctx.clip();
-    mosaicFill(ctx, -rx, -ry, rx * 2, ry * 2, {
-      seed: 99,
-      palette: mosaicPalettes.bronze,
-      cell: 3.5 * scale,
-      grout: '#3a2a18',
-    });
+    metalPlateFill(ctx, -rx, -ry, rx * 2, ry * 2, { seed: 99, tone: 'bronze' });
     ctx.restore();
     ctx.strokeStyle = look.leather;
     ctx.lineWidth = 1.2;

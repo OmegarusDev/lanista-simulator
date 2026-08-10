@@ -1,4 +1,5 @@
 import { economy } from '../../content/economy';
+import type { EventRole } from '../../content/identity';
 import { MUNERA_TEMPLATES, type MuneraKind, type MuneraTier } from '../../content/munera';
 import { GRADE_ORDER, LOCATION_FLAVOR, RIVAL_NAMES, type GladiatorGrade } from '../../content/rpg';
 import type { SeededRNG } from '../rng';
@@ -18,10 +19,16 @@ function minGradeForTier(tier: MuneraTier): GladiatorGrade | undefined {
   return undefined;
 }
 
-/**
- * Daily board: prefer eligible events, mix kinds, 4–5 cards.
- * Ineligible classics still appear greyed so players see what kits unlock.
- */
+function roleForTemplate(kind: MuneraKind, tier: MuneraTier, rival: boolean, day: number): EventRole {
+  if (rival && day >= 6) return 'revenge';
+  if (tier >= 3 && kind === 'classic') return 'championship';
+  if (kind === 'spectacle') return 'spectacle';
+  if (kind === 'melee' || kind === 'pair') return 'team';
+  if (kind === 'trial') return 'exhibition';
+  if (tier >= 2) return 'high_purse';
+  return 'duel';
+}
+
 export function rollDailyOffers(state: SeasonState, rng: SeededRNG): MuneraOffer[] {
   const tier = maxOfferTier(state.virtus);
   const pool = MUNERA_TEMPLATES.filter((t) => t.tier <= tier);
@@ -61,10 +68,14 @@ export function rollDailyOffers(state: SeasonState, rng: SeededRNG): MuneraOffer
   }
 
   const activeContract = state.contracts.find((c) => !c.completed && !c.failed);
+  const forceRevenge =
+    state.day >= 8 &&
+    state.rivalsBeaten.length === 0 &&
+    state.relationships.some((e) => e.kind === 'rival' && e.intensity > 0.3);
 
   return picked.slice(0, 5).map((t, i) => {
-    const rival =
-      t.tier >= 2 && rng.chance(0.45) ? rng.pick([...RIVAL_NAMES]) : null;
+    let rival = t.tier >= 2 && rng.chance(0.45) ? rng.pick([...RIVAL_NAMES]) : null;
+    if (forceRevenge && i === 0) rival = rng.pick([...RIVAL_NAMES]);
     const location = rng.pick([...LOCATION_FLAVOR]);
     const editor =
       t.kind === 'classic' ? 'Editor of the games' : rng.chance(0.5) ? 'Local magistrate' : 'Patron';
@@ -80,17 +91,27 @@ export function rollDailyOffers(state: SeasonState, rng: SeededRNG): MuneraOffer
       );
       if (!hasGrade) eligibleNow = false;
     }
+    const eventRole = roleForTemplate(t.kind, t.tier, Boolean(rival), state.day);
+    const purseBoost =
+      eventRole === 'championship' ? 25 : eventRole === 'revenge' ? 15 : eventRole === 'high_purse' ? 12 : 0;
     return {
       instanceId: `d${state.day}-${t.id}-${i}`,
       templateId: t.id,
-      name: rival ? `${t.name} — vs ${rival}` : t.name,
+      name:
+        eventRole === 'revenge' && rival
+          ? `Revenge — vs ${rival}`
+          : rival
+            ? `${t.name} — vs ${rival}`
+            : eventRole === 'championship'
+              ? `Championship — ${t.name}`
+              : t.name,
       blurb: `${t.blurb} · ${location}.`,
       kind: t.kind,
       tier: t.tier,
       teamSize: t.teamSize,
-      purse: t.purse + (rival ? 10 : 0),
-      entryFee: t.entryFee,
-      virtusWin: t.virtusWin,
+      purse: t.purse + (rival ? 10 : 0) + purseBoost,
+      entryFee: t.entryFee + (eventRole === 'championship' ? 8 : 0),
+      virtusWin: t.virtusWin + (eventRole === 'championship' ? 1 : 0),
       virtusLose: t.virtusLose,
       playerSlots: t.playerSlots.map((s) => ({ anyOf: [...s.anyOf], label: s.label })),
       opponents: [...t.opponents],
@@ -100,6 +121,7 @@ export function rollDailyOffers(state: SeasonState, rng: SeededRNG): MuneraOffer
       rivalName: rival,
       contractId: rival && activeContract?.name.includes(rival) ? activeContract.id : null,
       minGrade,
+      eventRole,
     };
   });
 }

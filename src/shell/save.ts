@@ -1,25 +1,48 @@
+import { ORIGIN_LIST, TRAIT_LIST } from '../content/identity';
 import { TEMPERAMENT_LIST, type DayAssignment, type GearGrade, type GladiatorGrade } from '../content/rpg';
 import { emptyLegacy } from '../domain/campaign/legacy';
 import { applyOfflineIdle } from '../domain/campaign/idle';
-import type { Gladiator, LegacyState, SeasonState } from '../domain/campaign/types';
+import { syncInjuryTier } from '../domain/campaign/injury';
+import {
+  DEFAULT_FIGHT_ORDERS,
+  type BodyInjury,
+  type Gladiator,
+  type LegacyState,
+  type SeasonState,
+} from '../domain/campaign/types';
 
 const SAVE_KEY = 'lanista.season.v2';
 const LEGACY_KEY = 'lanista.legacy.v1';
 const SAVE_KEY_V1 = 'lanista.season.v1';
 
 function migrateGladiator(raw: Partial<Gladiator> & { id: number; name: string; armatura: Gladiator['armatura'] }): Gladiator {
-  return {
+  const vitality = raw.vitality ?? raw.hpRatio ?? 1;
+  const injuries: BodyInjury[] = Array.isArray(raw.injuries) ? raw.injuries : [];
+  const g: Gladiator = {
     id: raw.id,
     name: raw.name,
     armatura: raw.armatura,
-    hpRatio: raw.hpRatio ?? 1,
+    hpRatio: vitality,
+    vitality,
     injury: raw.injury ?? 'NONE',
+    injuries,
     fatigue: raw.fatigue ?? 0,
     wins: raw.wins ?? 0,
     losses: raw.losses ?? 0,
     xp: raw.xp ?? 0,
     grade: (raw.grade as GladiatorGrade) ?? 'TIRO',
     temperament: raw.temperament ?? TEMPERAMENT_LIST[raw.id % TEMPERAMENT_LIST.length]!,
+    traits: Array.isArray(raw.traits) && raw.traits.length
+      ? raw.traits
+      : [TRAIT_LIST[raw.id % TRAIT_LIST.length]!, TRAIT_LIST[(raw.id + 3) % TRAIT_LIST.length]!],
+    origin: raw.origin ?? ORIGIN_LIST[raw.id % ORIGIN_LIST.length]!,
+    appearanceSeed: raw.appearanceSeed ?? raw.id * 9973,
+    history: Array.isArray(raw.history) ? raw.history : [{ day: 0, text: 'Continued from an older season.' }],
+    morale: typeof raw.morale === 'number' ? raw.morale : 55,
+    confidence: typeof raw.confidence === 'number' ? raw.confidence : 50,
+    constitution: typeof raw.constitution === 'number' ? raw.constitution : 1,
+    showmanship: typeof raw.showmanship === 'number' ? raw.showmanship : 1,
+    grit: typeof raw.grit === 'number' ? raw.grit : 1,
     fame: raw.fame ?? 0,
     mastery: raw.mastery ?? 0,
     gearGrade: (raw.gearGrade as GearGrade) ?? 0,
@@ -27,6 +50,23 @@ function migrateGladiator(raw: Partial<Gladiator> & { id: number; name: string; 
     retired: raw.retired,
     age: typeof raw.age === 'number' ? raw.age : 22,
   };
+  if (!injuries.length && g.injury === 'LIGHT') {
+    g.injuries.push({
+      id: `legacy-${g.id}-light`,
+      part: 'ribs',
+      severity: 'minor',
+      daysLeft: 2,
+    });
+  } else if (!injuries.length && g.injury === 'SEVERE') {
+    g.injuries.push({
+      id: `legacy-${g.id}-sev`,
+      part: 'knee',
+      severity: 'serious',
+      daysLeft: 4,
+    });
+  }
+  syncInjuryTier(g);
+  return g;
 }
 
 function migrateSeason(data: Record<string, unknown>): SeasonState | null {
@@ -67,6 +107,10 @@ function migrateSeason(data: Record<string, unknown>): SeasonState | null {
     retiredNames: Array.isArray(data.retiredNames) ? (data.retiredNames as string[]) : [],
     lastSeenAt: typeof data.lastSeenAt === 'number' ? data.lastSeenAt : Date.now(),
     seasonIndex: typeof data.seasonIndex === 'number' ? data.seasonIndex : 1,
+    relationships: Array.isArray(data.relationships)
+      ? (data.relationships as SeasonState['relationships'])
+      : [],
+    pendingOrders: (data.pendingOrders as SeasonState['pendingOrders']) ?? { ...DEFAULT_FIGHT_ORDERS },
   };
 }
 
@@ -89,7 +133,6 @@ export function loadSeason(): SeasonState | null {
     if (idleNotes.length) {
       state.pendingNotes = [...(state.pendingNotes ?? []), ...idleNotes];
     }
-    // Persist idle clock so recovery isn't reapplied on every Continue
     saveSeason(state);
     return state;
   } catch {
@@ -120,23 +163,15 @@ export function loadLegacy(): LegacyState {
   try {
     const raw = localStorage.getItem(LEGACY_KEY);
     if (!raw) return emptyLegacy();
-    const data = JSON.parse(raw) as LegacyState;
-    if (!data || typeof data.patronage !== 'number') return emptyLegacy();
-    return {
-      patronage: data.patronage ?? 0,
-      seasonsCompleted: data.seasonsCompleted ?? 0,
-      unlockedFacilities: data.unlockedFacilities ?? [],
-      alumni: data.alumni ?? [],
-      starterGradeBump: Boolean(data.starterGradeBump),
-    };
+    return { ...emptyLegacy(), ...(JSON.parse(raw) as Partial<LegacyState>) };
   } catch {
     return emptyLegacy();
   }
 }
 
-export function saveLegacy(legacy: LegacyState): void {
+export function saveLegacy(state: LegacyState): void {
   try {
-    localStorage.setItem(LEGACY_KEY, JSON.stringify(legacy));
+    localStorage.setItem(LEGACY_KEY, JSON.stringify(state));
   } catch {
     /* ignore */
   }

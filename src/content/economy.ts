@@ -1,6 +1,6 @@
 /** Career economy — season length, costs, gates, RPG knobs. */
 export const economy = {
-  seasonDays: 14,
+  seasonDays: 18,
   startingDenarii: 160,
   startingVirtus: 0,
   startingRosterSize: 4,

@@ -489,7 +489,8 @@ export class FightScene {
           this.synth.play('hit');
           this.shake = Math.min(10, this.shake + 4);
           this.hitStop = Math.max(this.hitStop, 3);
-          spawnDust(this.dust, ev.x, ev.y, 5, this.fxRng);
+          spawnDust(this.dust, ev.x, ev.y, 4, this.fxRng, 'dust');
+          spawnDust(this.dust, ev.x, ev.y, 3, this.fxRng, 'blood');
           this.interestX = ev.x;
           this.interestY = ev.y;
           this.interestLife = 45;
@@ -519,7 +520,8 @@ export class FightScene {
         case 'KO':
           this.shake = Math.min(16, this.shake + 8);
           this.hitStop = Math.max(this.hitStop, 8);
-          spawnDust(this.dust, ev.x, ev.y, 6, this.fxRng);
+          spawnDust(this.dust, ev.x, ev.y, 5, this.fxRng, 'dust');
+          spawnDust(this.dust, ev.x, ev.y, 6, this.fxRng, 'blood');
           this.interestX = ev.x;
           this.interestY = ev.y;
           this.interestLife = 70;

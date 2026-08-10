@@ -28,8 +28,10 @@ body {
   grid-template: 1fr / 1fr;
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   background:
+    var(--tex-wood, none),
     radial-gradient(ellipse 70% 55% at 50% 35%, rgba(90, 58, 32, 0.35), transparent 70%),
     linear-gradient(180deg, #241810 0%, var(--shell-bg, #1a1410) 55%, #120e0a 100%);
+  background-blend-mode: soft-light, normal, normal;
   color-scheme: dark;
   overflow: hidden;
   touch-action: manipulation;
@@ -163,7 +165,10 @@ button,
   border-radius: var(--radius-md);
   min-height: var(--touch);
   padding: 0.55rem 1rem;
-  background: linear-gradient(180deg, #5a4030, var(--button));
+  background:
+    var(--tex-wood, none),
+    linear-gradient(180deg, #5a4030, var(--button));
+  background-blend-mode: soft-light, normal;
   color: var(--button-text);
   font: 600 var(--type-label) / 1.2 var(--font-ui);
   cursor: pointer;
@@ -378,7 +383,10 @@ button.ghost,
   padding: var(--space-xl) var(--space-lg);
   border: 1.5px solid var(--bronze);
   border-radius: var(--radius-lg);
-  background: rgba(40, 28, 18, 0.88);
+  background:
+    var(--tex-parchment, none),
+    rgba(40, 28, 18, 0.88);
+  background-blend-mode: soft-light, normal;
   text-align: center;
 }
 

@@ -1,5 +1,6 @@
 import { ARMATURAE } from '../content/armatura';
 import { economy } from '../content/economy';
+import { ORIGINS, TRAITS } from '../content/identity';
 import {
   DOCTRINA_LIST,
   FACILITIES,
@@ -11,6 +12,7 @@ import {
   type MedicusTier,
 } from '../content/rpg';
 import { buyFacility, applyMedicus, medicusCost, upgradeGear } from '../domain/campaign/facilities';
+import { injuryLabel } from '../domain/campaign/injury';
 import {
   currentRosterCap,
   fightableRoster,
@@ -205,18 +207,28 @@ export class LudusView {
         className: `chip${this.selectedId === g.id ? ' is-selected' : ''}${g.injury === 'SEVERE' ? ' is-muted' : ''}`,
       });
       chip.append(el('span', { className: 'name', text: g.name }));
+      const origin = ORIGINS[g.origin]?.name ?? '';
+      const traits = (g.traits ?? []).map((t) => TRAITS[t].name).slice(0, 2).join('/');
       chip.append(
         el('span', {
           className: 'tag',
-          text: `${tag} · ${ARMATURAE[g.armatura].short} · ${g.assignment === 'NONE' ? '—' : g.assignment}`,
+          text: `${tag} · ${ARMATURAE[g.armatura].short} · ${origin}`,
         }),
       );
       chip.append(
         el('span', {
           className: 'tag',
-          text: `${g.wins}W-${g.losses}L · xp ${g.xp} · ${g.age}y`,
+          text: `${traits || TEMPERAMENTS[g.temperament].name} · morale ${Math.round(g.morale ?? 50)} · ${g.wins}W-${g.losses}L`,
         }),
       );
+      if (g.injuries?.length) {
+        chip.append(
+          el('span', {
+            className: 'tag',
+            text: g.injuries.map(injuryLabel).slice(0, 2).join(', '),
+          }),
+        );
+      }
       const bar = el('div', { className: 'hp-bar' });
       bar.append(el('span', { attrs: { style: `width:${Math.round(g.hpRatio * 100)}%` } }));
       chip.append(bar);
@@ -235,9 +247,17 @@ export class LudusView {
     const detail = el('div', { className: 'detail-strip' });
     detail.append(
       el('p', {
-        text: `${sel.name} · ${GRADE_LABEL[sel.grade]} · ${sel.age}y · kit ${sel.gearGrade} · fat ${sel.fatigue}`,
+        text: `${sel.name} · ${ORIGINS[sel.origin]?.name ?? ''} · ${GRADE_LABEL[sel.grade]} · ${sel.age}y · kit ${sel.gearGrade} · fat ${sel.fatigue} · conf ${Math.round(sel.confidence ?? 50)}`,
       }),
     );
+    if (sel.history?.length) {
+      detail.append(
+        el('p', {
+          className: 'meta',
+          text: sel.history[sel.history.length - 1]!.text,
+        }),
+      );
+    }
     const aRow = el('div', { className: 'row-btns' });
     for (const a of ASSIGNMENTS) {
       aRow.append(

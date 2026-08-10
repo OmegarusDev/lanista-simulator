@@ -45,6 +45,12 @@ export class AftermathView {
       }),
     );
 
+    if (summary.storyBeats?.length) {
+      for (const beat of summary.storyBeats.slice(0, 3)) {
+        card.append(el('p', { text: beat }));
+      }
+    }
+
     if (summary.missio?.length) {
       card.append(el('p', { className: 'meta', text: 'The crowd judges the fallen' }));
       for (const m of summary.missio) {
@@ -59,13 +65,23 @@ export class AftermathView {
       }
     }
 
-    if (summary.notes?.length) {
-      for (const n of summary.notes.slice(0, 4)) {
+    for (const inj of summary.injuries) {
+      card.append(
+        el('p', {
+          className: 'meta',
+          text: `${inj.name} → ${inj.detail ?? inj.injury}`,
+        }),
+      );
+    }
+    if (summary.relationNotes?.length) {
+      for (const n of summary.relationNotes.slice(0, 2)) {
         card.append(el('p', { className: 'meta', text: n }));
       }
     }
-    for (const inj of summary.injuries) {
-      card.append(el('p', { className: 'meta', text: `${inj.name} → ${inj.injury}` }));
+    if (summary.notes?.length) {
+      for (const n of summary.notes.slice(0, 3)) {
+        card.append(el('p', { className: 'meta', text: n }));
+      }
     }
     for (const xp of summary.xpGains ?? []) {
       card.append(

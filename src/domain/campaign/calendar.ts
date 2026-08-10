@@ -3,24 +3,18 @@ import { BEAST_LIST, type BeastId } from '../../content/beasts';
 import { economy } from '../../content/economy';
 import { GRADE_ORDER } from '../../content/rpg';
 import { rollMissio } from '../combat/entertainment';
-import type { TeamSize } from '../combat/types';
+import { createQuickMatch } from '../combat/match';
+import type { FighterSpawnSpec, TeamSize } from '../combat/types';
 import { SeededRNG } from '../rng';
+import { spawnSpecFromGladiator } from './combatMods';
 import { addXp } from './gladiator';
+import { addInjury, rollFightInjury } from './injury';
+import { applyFightMorale } from './morale';
 import { rollFighter } from './rollFighter';
-import type { Gladiator, InjuryTier, MuneraOffer, SeasonState, SlateBout } from './types';
+import type { Gladiator, MuneraOffer, SeasonState, SlateBout } from './types';
 
 function fightable(state: SeasonState): Gladiator[] {
   return state.roster.filter((g) => !g.retired && g.injury !== 'SEVERE' && g.hpRatio > 0.15);
-}
-
-function bumpInjury(cur: InjuryTier): InjuryTier {
-  if (cur === 'NONE') return 'LIGHT';
-  if (cur === 'LIGHT') return 'SEVERE';
-  return 'SEVERE';
-}
-
-function gradeWeight(g: Gladiator): number {
-  return GRADE_ORDER.indexOf(g.grade) + 1 + g.fame * 0.05 - (g.age > 32 ? 0.4 : 0);
 }
 
 /** Build today's living slate — school fighters fight their own bouts. */
@@ -110,10 +104,11 @@ export function slateToOffer(state: SeasonState, bout: SlateBout): MuneraOffer {
     editor: '',
     rivalName: bout.rivalName,
     contractId: null,
+    eventRole: bout.kind === 'venatio' ? 'spectacle' : 'duel',
   };
 }
 
-/** Lightweight off-screen result — same injury/XP/missio spirit without FightScene. */
+/** Off-screen resolve via real Match.runToEnd (same spawn pipeline as FightScene). */
 export function simulateSlateBout(
   state: SeasonState,
   bout: SlateBout,
@@ -131,15 +126,39 @@ export function simulateSlateBout(
     return notes;
   }
 
-  const power = school.reduce((s, g) => s + gradeWeight(g), 0) / school.length;
-  const oppPower =
-    bout.kind === 'venatio'
-      ? 2.2 + bout.teamSize * 0.15
-      : 1.6 + bout.teamSize * 0.2 + rng.next();
-  const winP = Math.max(0.22, Math.min(0.78, 0.5 + (power - oppPower) * 0.12));
-  const roll = rng.next();
-  const win = roll < winP;
-  const draw = !win && roll < winP + 0.08;
+  const team0: FighterSpawnSpec[] = school.map((g) =>
+    spawnSpecFromGladiator(g, state.doctrina, state.pendingOrders),
+  );
+  const team1: FighterSpawnSpec[] = [];
+  if (bout.kind === 'venatio' && bout.beastOpponents) {
+    for (const beast of bout.beastOpponents) {
+      team1.push({ kind: 'beast', beast, armatura: 'MURMILLO' });
+    }
+  } else {
+    for (let i = 0; i < bout.opponentArmaturae.length; i++) {
+      const rival = rollFighter(rng, {
+        policy: 'rival',
+        id: 8000 + i,
+        armatura: bout.opponentArmaturae[i],
+      });
+      team1.push(spawnSpecFromGladiator(rival, 'PRESS'));
+    }
+  }
+
+  const seed = (state.seed + state.day * 1009 + bout.id.length * 17 + rng.int(1, 999)) >>> 0;
+  const match = createQuickMatch(
+    bout.teamSize,
+    seed,
+    team0.map((s) => s.armatura ?? 'MURMILLO'),
+    team1.map((s) => s.armatura ?? 'MURMILLO'),
+    960,
+    540,
+    team0,
+    team1,
+  );
+  const result = match.runToEnd();
+  const win = result === 'TEAM0';
+  const draw = result === 'DRAW';
   bout.simResult = draw ? 'DRAW' : win ? 'WIN' : 'LOSS';
   bout.status = 'simulated';
 
@@ -158,19 +177,22 @@ export function simulateSlateBout(
   for (const g of school) {
     const lost = !win && !draw;
     g.fatigue += 1;
-    g.hpRatio = Math.max(
+    g.vitality = Math.max(
       0.2,
-      g.hpRatio - (lost ? 0.32 : draw ? 0.16 : 0.1) - g.fatigue * 0.02,
+      (g.vitality ?? g.hpRatio) - (lost ? 0.28 : draw ? 0.14 : 0.1) - g.fatigue * 0.02,
     );
-    if (lost && rng.chance(0.5)) g.injury = bumpInjury(g.injury);
+    g.hpRatio = g.vitality;
+    const inj = rollFightInjury(rng, { lost, draw, chanceMul: 1 / (g.constitution || 1), sourceDay: state.day });
+    if (inj) addInjury(g, inj);
     const xp = draw ? economy.xpDraw : lost ? economy.xpLoss : economy.xpWin;
     addXp(g, xp);
     g.mastery += lost ? 1 : 2;
     if (!lost && !draw) g.fame += economy.fameWin;
     if (lost) g.losses += 1;
     else if (!draw) g.wins += 1;
+    applyFightMorale(g, { won: win, draw, forfeited: false, deathOnRoster: false });
 
-    if (lost && rng.chance(0.35)) {
+    if (lost && rng.chance(0.28)) {
       const ent = 20 + rng.int(0, 40);
       const miss = rollMissio(ent, g.fame, rng);
       if (miss.outcome === 'DEATH') {
@@ -178,14 +200,20 @@ export function simulateSlateBout(
         state.retiredNames.push(g.name);
         notes.push(`${g.name} falls in ${bout.name} — no missio.`);
       } else {
-        g.injury = 'SEVERE';
+        addInjury(g, {
+          id: `slate-${g.id}-${state.day}`,
+          part: 'ribs',
+          severity: 'serious',
+          daysLeft: 4,
+          sourceDay: state.day,
+        });
         notes.push(`${g.name} spared after ${bout.name}.`);
       }
     }
   }
 
   notes.push(
-    `${bout.name}: ${bout.simResult === 'WIN' ? 'victory' : bout.simResult === 'DRAW' ? 'draw' : 'defeat'} (unwatched).`,
+    `${bout.name}: ${bout.simResult === 'WIN' ? 'victory' : bout.simResult === 'DRAW' ? 'draw' : 'defeat'} (unwatched Match).`,
   );
   return notes;
 }
@@ -201,11 +229,16 @@ export function resolvePendingSlate(state: SeasonState, rng: SeededRNG): string[
   return notes;
 }
 
-export function markSlateWatched(state: SeasonState, boutId: string): void {
-  const bout = state.slate.find((b) => b.id === boutId);
-  if (bout) bout.status = 'watched';
+export function markSlateWatched(state: SeasonState, instanceId: string): void {
+  const bout = state.slate.find((b) => b.id === instanceId);
+  if (bout && bout.status === 'pending') bout.status = 'watched';
 }
 
-export function findSlateBout(state: SeasonState, boutId: string): SlateBout | undefined {
-  return state.slate.find((b) => b.id === boutId);
+export function findSlateBout(state: SeasonState, id: string): SlateBout | undefined {
+  return state.slate.find((b) => b.id === id);
+}
+
+/** @deprecated kept for tests that referenced grade weights */
+export function gradeWeight(g: Gladiator): number {
+  return GRADE_ORDER.indexOf(g.grade) + 1 + g.fame * 0.05 - (g.age > 32 ? 0.4 : 0);
 }

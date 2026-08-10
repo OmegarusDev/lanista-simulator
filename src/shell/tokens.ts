@@ -1,7 +1,9 @@
 /**
  * Export palette + theme tokens into CSS :root once at boot.
+ * Bakes procedural noise tiles into data-URL backgrounds (zero assets).
  */
 import { colors } from '../content/palette';
+import { noiseDataUrl } from '../gfx/pattern';
 import { fontStack, radius, space, touchTarget, typeScale } from '../view/theme';
 
 export function applyCssTokens(root: HTMLElement = document.documentElement): void {
@@ -57,4 +59,30 @@ export function applyCssTokens(root: HTMLElement = document.documentElement): vo
   set('--safe-right', 'env(safe-area-inset-right, 0px)');
   set('--safe-bottom', 'env(safe-area-inset-bottom, 0px)');
   set('--safe-left', 'env(safe-area-inset-left, 0px)');
+
+  try {
+    const parchment = noiseDataUrl({
+      seed: 0xda7c,
+      low: '#3a2a18',
+      high: '#c4a878',
+      contrast: 0.9,
+      frequency: 3,
+      size: 64,
+      tag: 'css-parchment',
+    });
+    const wood = noiseDataUrl({
+      seed: 0x60cd,
+      low: '#1a1008',
+      high: '#6a4a30',
+      contrast: 1.2,
+      frequency: 3,
+      stretchY: 0.3,
+      size: 64,
+      tag: 'css-wood',
+    });
+    if (parchment) set('--tex-parchment', `url(${parchment})`);
+    if (wood) set('--tex-wood', `url(${wood})`);
+  } catch {
+    // Headless / missing canvas — skip texture tokens
+  }
 }

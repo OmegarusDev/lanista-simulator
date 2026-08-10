@@ -1,11 +1,15 @@
 import { economy } from '../../content/economy';
+import { TRAITS } from '../../content/identity';
 import { rollMissio } from '../combat/entertainment';
 import type { MatchResult } from '../combat/types';
 import { SeededRNG } from '../rng';
 import { markSlateWatched, resolvePendingSlate } from './calendar';
 import { onBoutForContracts } from './contracts';
-import { addXp } from './gladiator';
+import { addXp, pushHistory } from './gladiator';
+import { addInjury, injuryLabel, rollFightInjury } from './injury';
 import { resolveAssignments } from './ludusDay';
+import { applyFightMorale } from './morale';
+import { lineupFriction, onSharedLineup } from './relationships';
 import { markBrokeIfNeeded, upkeepCost } from './season';
 import type {
   AftermathSummary,
@@ -24,17 +28,10 @@ export interface BoutFighterStat {
 
 export interface CareerFightInput {
   offer: MuneraOffer;
-  /** Player lineup gladiator ids (team 0). */
   lineupIds: number[];
   result: MatchResult;
   forfeited: boolean;
   boutStats?: BoutFighterStat[];
-}
-
-function bumpInjury(cur: InjuryTier): InjuryTier {
-  if (cur === 'NONE') return 'LIGHT';
-  if (cur === 'LIGHT') return 'SEVERE';
-  return 'SEVERE';
 }
 
 function applyFighterAftermath(
@@ -43,18 +40,31 @@ function applyFighterAftermath(
   draw: boolean,
   forfeited: boolean,
   rng: SeededRNG,
-): { injury: InjuryTier | null; xp: number; leveled: boolean } {
+  day: number,
+): { injury: InjuryTier | null; detail?: string; xp: number; leveled: boolean } {
   g.fatigue += 1;
-  g.hpRatio = Math.max(0.2, g.hpRatio - (lost ? 0.35 : draw ? 0.18 : 0.12) - g.fatigue * 0.03);
+  const drop = (lost ? 0.28 : draw ? 0.15 : 0.1) + g.fatigue * 0.025;
+  g.vitality = Math.max(0.2, (g.vitality ?? g.hpRatio) - drop);
+  g.hpRatio = g.vitality;
+
   let became: InjuryTier | null = null;
-  if (lost && rng.chance(0.55)) {
-    const next = bumpInjury(g.injury);
-    if (next !== g.injury) became = next;
-    g.injury = next;
-  } else if (!lost && !draw && rng.chance(0.12)) {
-    const next = bumpInjury(g.injury);
-    if (next !== g.injury) became = next;
-    g.injury = next;
+  let detail: string | undefined;
+  const traitMul =
+    (g.traits ?? []).reduce((s, t) => s + TRAITS[t].injuryChanceMul, 0) /
+      Math.max(1, g.traits?.length ?? 1) /
+      (g.constitution || 1);
+
+  const rolled = rollFightInjury(rng, {
+    lost,
+    draw,
+    chanceMul: traitMul,
+    sourceDay: day,
+  });
+  if (rolled) {
+    addInjury(g, rolled);
+    became = g.injury;
+    detail = injuryLabel(rolled);
+    pushHistory(g, day, `Suffered ${detail} in the arena.`);
   }
 
   const xp = forfeited
@@ -65,16 +75,14 @@ function applyFighterAftermath(
         ? economy.xpLoss
         : economy.xpWin;
 
-  // Fame purse weight
   if (!lost && !forfeited) g.fame += draw ? economy.fameDraw : economy.fameWin;
   g.mastery += lost ? 1 : 2;
 
   const { leveled } = addXp(g, xp);
-
   if (lost || forfeited) g.losses += 1;
   else if (!draw) g.wins += 1;
 
-  return { injury: became, xp, leveled };
+  return { injury: became, detail, xp, leveled };
 }
 
 /** Apply purse, virtus, injuries, XP; marks dayResolved. Player is always team 0. */
@@ -103,8 +111,9 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
   let purseDelta = -offer.entryFee;
   let virtusDelta = 0;
   const notes: string[] = [];
+  const storyBeats: string[] = [];
+  const moraleNotes: string[] = [];
 
-  // Fame-weighted purse
   const fameBonus = lineupIds.reduce((s, id) => {
     const g = state.roster.find((x) => x.id === id);
     return s + (g ? Math.min(12, g.fame) : 0);
@@ -113,19 +122,29 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
   if (forfeited) {
     virtusDelta = Math.min(-1, offer.virtusLose);
     notes.push('Forfeit — entry lost.');
+    storyBeats.push('The lanista withdraws the familia under a cloud.');
   } else if (playerWin) {
     const purse = offer.purse + fameBonus;
     purseDelta += purse;
     virtusDelta = offer.virtusWin + (offer.rivalName ? 1 : 0);
     notes.push(`Purse collected: ${purse} denarii.`);
-    if (offer.location) notes.push(`At the ${offer.location}.`);
+    storyBeats.push(
+      offer.eventRole === 'revenge'
+        ? 'Revenge is settled in blood and applause.'
+        : offer.eventRole === 'championship'
+          ? 'A crown bout — the benches remember the names.'
+          : `Victory at the ${offer.location || 'arena'}.`,
+    );
+    if (offer.rivalName) storyBeats.push(`${offer.rivalName} tastes sand.`);
   } else if (draw) {
     purseDelta += Math.floor(offer.purse * 0.35);
     virtusDelta = Math.max(0, Math.floor(offer.virtusWin / 2));
     notes.push('Draw — partial purse.');
+    storyBeats.push('Neither side yields; the editor cuts the card short.');
   } else {
     virtusDelta = offer.virtusLose;
     notes.push('Defeat — no purse.');
+    storyBeats.push('The familia leaves with lowered heads.');
     if (offer.rivalName) {
       virtusDelta -= 1;
       notes.push(`${offer.rivalName} claims the crowd.`);
@@ -143,30 +162,51 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
     const g = state.roster.find((x) => x.id === id);
     if (!g) continue;
     const lost = forfeited || (!playerWin && !draw);
-    const { injury, xp, leveled } = applyFighterAftermath(g, lost, draw, forfeited, rng);
-    if (injury) injuries.push({ name: g.name, injury });
+    const { injury, detail, xp, leveled } = applyFighterAftermath(
+      g,
+      lost,
+      draw,
+      forfeited,
+      rng,
+      state.day,
+    );
+    if (injury) injuries.push({ name: g.name, injury, detail });
     xpGains.push({ name: g.name, xp, grade: leveled ? g.grade : undefined });
+    applyFightMorale(g, {
+      won: playerWin,
+      draw,
+      forfeited,
+      deathOnRoster: false,
+    });
+    moraleNotes.push(
+      `${g.name}: morale ${Math.round(g.morale)}, confidence ${Math.round(g.confidence)}.`,
+    );
   }
 
-  // Crowd missio for downed fighters — entertainment + RNG
-  // Skip forfeit escape, and only judge fighters on the losing side
-  // (or both on draw) so a winning ally who fell isn't executed for spectacle.
+  const relationNotes = lineupFriction(state, lineupIds);
+  onSharedLineup(state, lineupIds, playerWin);
+
   const missio: MissioVerdict[] = [];
   const judgeDowned =
-    !forfeited ||
-    // Mid-bout leave: still judge anyone already downed on the player's side
-    (forfeited && Boolean(input.boutStats?.some((s) => s.downed)));
+    !forfeited || (forfeited && Boolean(input.boutStats?.some((s) => s.downed)));
 
   if (judgeDowned && input.boutStats) {
     for (const st of input.boutStats) {
       if (!st.downed) continue;
       const g = state.roster.find((x) => x.id === st.gladiatorId && !x.retired);
       if (!g) continue;
-      // On a clear win, spare the fallen by default (crowd grants missio to the victors' blood)
       if (playerWin) {
-        g.injury = 'SEVERE';
-        g.hpRatio = Math.min(g.hpRatio, 0.28);
+        addInjury(g, {
+          id: `missio-${g.id}-${state.day}`,
+          part: 'ribs',
+          severity: 'serious',
+          daysLeft: 4,
+          sourceDay: state.day,
+        });
+        g.vitality = Math.min(g.vitality, 0.28);
+        g.hpRatio = g.vitality;
         notes.push(`${g.name} fell but the victors are spared.`);
+        storyBeats.push(`${g.name} tastes the sand — and rises to missio.`);
         missio.push({
           gladiatorId: g.id,
           name: g.name,
@@ -177,7 +217,8 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
         continue;
       }
       const histrio = g.temperament === 'HISTRIO' ? 8 : 0;
-      const { outcome, chance } = rollMissio(st.entertainment + histrio, g.fame, rng);
+      const show = Math.round((g.showmanship ?? 1) * 6);
+      const { outcome, chance } = rollMissio(st.entertainment + histrio + show, g.fame, rng);
       const lean =
         chance >= 0.55
           ? 'The crowd roared for him…'
@@ -185,15 +226,34 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
             ? 'The benches murmur…'
             : 'They want blood…';
       if (outcome === 'SPARE') {
-        g.injury = 'SEVERE';
-        g.hpRatio = Math.min(g.hpRatio, 0.28);
+        addInjury(g, {
+          id: `missio-${g.id}-${state.day}`,
+          part: 'head',
+          severity: 'critical',
+          daysLeft: 7,
+          sourceDay: state.day,
+        });
+        g.vitality = Math.min(g.vitality, 0.28);
+        g.hpRatio = g.vitality;
         g.fame += 1;
         notes.push(`${g.name} is spared — missio.`);
+        storyBeats.push(`${g.name} lives by the crowd's mercy.`);
       } else {
         g.retired = true;
         state.retiredNames.push(g.name);
         state.virtus = Math.max(0, state.virtus - 1);
         notes.push(`${g.name} dies in the sand.`);
+        storyBeats.push(`${g.name} does not leave the arena walking.`);
+        for (const ally of state.roster) {
+          if (!ally.retired && ally.id !== g.id) {
+            applyFightMorale(ally, {
+              won: false,
+              draw: false,
+              forfeited: false,
+              deathOnRoster: true,
+            });
+          }
+        }
       }
       missio.push({
         gladiatorId: g.id,
@@ -232,8 +292,11 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
     virtusDelta,
     injuries,
     notes,
+    storyBeats,
     xpGains,
     missio: missio.length ? missio : undefined,
+    moraleNotes,
+    relationNotes: relationNotes.length ? relationNotes : undefined,
   };
   onBoutForContracts(state, summary, offer.rivalName);
   state.lastAftermath = summary;

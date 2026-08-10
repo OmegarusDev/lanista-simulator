@@ -1,18 +1,5 @@
-import { applyCareerFight } from '../domain/campaign/aftermath';
-import { findSlateBout, slateToOffer } from '../domain/campaign/calendar';
-import { spawnSpecFromGladiator, spawnSpecsFromLineup } from '../domain/campaign/combatMods';
-import { rollFighter } from '../domain/campaign/rollFighter';
-import { SeededRNG } from '../domain/rng';
-import { settleSeasonLegacy } from '../domain/campaign/legacy';
-import { createSeason, endDay } from '../domain/campaign/season';
-import type { AftermathSummary, MuneraOffer, SeasonState } from '../domain/campaign/types';
-import { Input } from '../shell/input';
 import {
   clearSeasonSave,
-  loadLegacy,
-  loadSeason,
-  saveLegacy,
-  saveSeason,
 } from '../shell/save';
 import { applyCssTokens } from '../shell/tokens';
 import {
@@ -21,6 +8,7 @@ import {
   setStageVisible,
   type AppShell,
 } from '../shell/viewport';
+import { Input } from '../shell/input';
 import { Synth } from '../view/audio';
 import { ArenaCamera } from '../view/arenaCamera';
 import { defaultStageZoom, paintStageWorld, pickFighterWorld, stagePointerToWorld } from '../view/stagePaint';
@@ -32,7 +20,10 @@ import { OffersView } from '../ui/offersView';
 import { PracticeView, type SandboxConfig } from '../ui/practiceView';
 import { SeasonEndView } from '../ui/seasonEndView';
 import { TitleView } from '../ui/titleView';
-import { FightScene, type FightAction } from './scenes/fight';
+import { FightSession } from './fightSession';
+import { SeasonController } from './seasonController';
+import type { FightAction } from './scenes/fight';
+import type { SeasonState } from '../domain/campaign/types';
 
 type Mode =
   | 'title'
@@ -44,12 +35,12 @@ type Mode =
   | 'aftermath'
   | 'seasonEnd';
 
-type FightContext = 'lab' | 'career';
-
 export class App {
   private readonly shell: AppShell;
   private readonly input = new Input();
   private readonly synth = new Synth();
+  private readonly career = new SeasonController();
+  private readonly fights = new FightSession();
 
   private readonly title: TitleView;
   private readonly practice: PracticeView;
@@ -60,15 +51,8 @@ export class App {
   private readonly seasonEnd: SeasonEndView;
   private readonly fightHud: FightHud;
 
-  private fight: FightScene | null = null;
   private mode: Mode = 'title';
-  private lastConfig: SandboxConfig | null = null;
   private labReturn: 'title' | 'ludus' = 'title';
-
-  private season: SeasonState | null = null;
-  private pendingOffer: MuneraOffer | null = null;
-  private pendingLineup: number[] = [];
-  private pendingAftermath: AftermathSummary | null = null;
 
   private readonly previewCam = new ArenaCamera();
   private previewPtrWasDown = false;
@@ -113,7 +97,6 @@ export class App {
         y: ((cy - rect.top) / h) * h,
       };
     });
-    // Keyboard works even when stage is hidden (window listeners in Input).
     const onResize = () => {
       if (this.shell.app.classList.contains('has-stage')) {
         resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
@@ -134,7 +117,6 @@ export class App {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.acc += dt;
-
     while (this.acc >= this.step) {
       this.fixedUpdate();
       this.acc -= this.step;
@@ -145,15 +127,13 @@ export class App {
   };
 
   private fixedUpdate(): void {
-    if (this.mode === 'fight' && this.fight) {
-      this.applyFightAction(this.fight.update(this.input));
+    if (this.mode === 'fight' && this.fights.scene) {
+      this.applyFightAction(this.fights.update(this.input));
     }
   }
 
-  private persist(): void {
-    if (this.season && this.season.status === 'ACTIVE') {
-      saveSeason(this.season);
-    }
+  private get season(): SeasonState | null {
+    return this.career.season;
   }
 
   private setMode(mode: Mode): void {
@@ -164,8 +144,8 @@ export class App {
     this.title.show(mode === 'title');
     this.ludus.show(mode === 'ludus', this.season);
     this.offers.show(mode === 'offers', this.season);
-    this.lineup.show(mode === 'lineup', this.season, this.pendingOffer);
-    this.aftermathView.show(mode === 'aftermath', this.season, this.pendingAftermath);
+    this.lineup.show(mode === 'lineup', this.season, this.career.pendingOffer);
+    this.aftermathView.show(mode === 'aftermath', this.season, this.career.pendingAftermath);
     this.seasonEnd.show(mode === 'seasonEnd', this.season);
     this.practice.show(mode === 'sandbox');
     if (mode !== 'fight') this.fightHud.show(false);
@@ -187,11 +167,8 @@ export class App {
   }
 
   private goTitle(): void {
-    this.fight?.dispose();
-    this.fight = null;
-    this.pendingOffer = null;
-    this.pendingLineup = [];
-    this.pendingAftermath = null;
+    this.fights.dispose();
+    this.career.clearPending();
     this.setMode('title');
   }
 
@@ -200,22 +177,18 @@ export class App {
     this.setMode('sandbox');
   }
 
-  private enterFight(config: SandboxConfig, context: FightContext): void {
-    this.synth.ensure();
-    this.lastConfig = config;
+  private enterFight(config: SandboxConfig, context: 'lab' | 'career'): void {
     this.practice.seed = config.seed;
-    this.fight?.dispose();
-    this.fight = new FightScene(config, this.synth, this.fightHud, {
-      career: context === 'career',
-      lineupIds: context === 'career' ? [...this.pendingLineup] : undefined,
-    });
+    this.fights.enter(
+      config,
+      context,
+      this.synth,
+      this.fightHud,
+      context === 'career' ? [...this.career.pendingLineup] : undefined,
+    );
     this.setMode('fight');
     this.input.pointer.clicked = false;
     this.input.pointer.down = false;
-  }
-
-  private seasonTerminal(state: SeasonState): boolean {
-    return state.status === 'BROKE' || state.status === 'SEASON_END';
   }
 
   private render(): void {
@@ -249,11 +222,11 @@ export class App {
   }
 
   private paintFight(): void {
-    if (!this.fight) return;
+    if (!this.fights.scene) return;
     const pads = this.fightHud.getStagePads();
     this.applyStagePads(pads.top, pads.bottom);
     const { cssW, cssH } = resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
-    this.applyFightAction(this.fight.paint(this.shell.stageCtx, cssW, cssH, this.input));
+    this.applyFightAction(this.fights.paint(this.shell.stageCtx, cssW, cssH, this.input));
   }
 
   private paintPracticeStage(): void {
@@ -271,7 +244,6 @@ export class App {
       hideBars: true,
     });
 
-    // Custom sheet owns taps; Quick can pick fighters on the sand.
     if (this.practice.mode === 'custom') {
       this.previewPtrWasDown = this.input.pointer.down;
       return;
@@ -298,22 +270,15 @@ export class App {
       return;
     }
     if (action.type === 'NEW_SEASON') {
-      const seed = (Math.random() * 0xffffffff) >>> 0;
-      this.season = createSeason(seed, loadLegacy());
-      clearSeasonSave();
-      saveSeason(this.season);
+      this.career.newSeason();
       this.setMode('ludus');
       return;
     }
     if (action.type === 'CONTINUE') {
-      const loaded = loadSeason();
+      const loaded = this.career.continueSeason();
       if (loaded) {
-        this.season = loaded;
-        if (loaded.status === 'BROKE' || loaded.status === 'SEASON_END') {
-          this.setMode('seasonEnd');
-        } else {
-          this.setMode('ludus');
-        }
+        if (this.career.isTerminal(loaded)) this.setMode('seasonEnd');
+        else this.setMode('ludus');
       }
     }
   }
@@ -339,7 +304,7 @@ export class App {
       this.goTitle();
       return;
     }
-    if (this.seasonTerminal(this.season)) {
+    if (this.career.isTerminal()) {
       clearSeasonSave();
       this.setMode('seasonEnd');
       return;
@@ -355,86 +320,44 @@ export class App {
       return;
     }
     if (action.type === 'WATCH_SLATE') {
-      const bout = findSlateBout(this.season, action.boutId);
-      if (!bout || bout.status !== 'pending') return;
-      const offer = slateToOffer(this.season, bout);
-      this.pendingOffer = offer;
-      this.pendingLineup = [...bout.schoolIds];
-      const team0 = bout.schoolIds.map((id) => {
-        const g = this.season!.roster.find((x) => x.id === id)!;
-        return g.armatura;
-      });
-      const team0Specs = spawnSpecsFromLineup(
-        this.season.roster,
-        bout.schoolIds,
-        this.season.doctrina,
-      );
-      const boutSeed = (this.season.seed + this.season.day * 1009 + bout.id.length) >>> 0;
-      let team1Specs;
-      if (bout.kind === 'venatio' && bout.beastOpponents) {
-        team1Specs = bout.beastOpponents.map((beast) => ({
-          kind: 'beast' as const,
-          beast,
-          armatura: 'MURMILLO' as const,
-        }));
-      } else {
-        const rivalRng = new SeededRNG(boutSeed ^ 0x51a7);
-        team1Specs = bout.opponentArmaturae.map((armatura, i) => {
-          const rival = rollFighter(rivalRng, {
-            policy: 'rival',
-            id: 9000 + i,
-            armatura,
-          });
-          return spawnSpecFromGladiator(rival, 'PRESS');
-        });
-      }
-      const config: SandboxConfig = {
-        teamSize: bout.teamSize,
-        seed: boutSeed,
-        team0,
-        team1: [...bout.opponentArmaturae],
-        team0Specs,
-        team1Specs,
-        lockedMatchup: true,
-        matchKind: bout.kind === 'venatio' ? 'venatio' : 'matchup',
-      };
+      const config = this.career.buildSlateConfig(action.boutId);
+      if (!config) return;
       this.enterFight(config, 'career');
       return;
     }
     if (action.type === 'END_DAY') {
-      endDay(this.season);
-      this.persist();
-      if (this.seasonTerminal(this.season)) {
+      this.career.endDay();
+      if (this.career.isTerminal()) {
         clearSeasonSave();
         this.setMode('seasonEnd');
       } else {
-        this.ludus.refresh(this.season);
+        this.ludus.refresh(this.season!);
       }
       return;
     }
     if (action.type === 'TITLE') {
-      this.persist();
+      this.career.persist();
       this.goTitle();
       return;
     }
     if (action.type === 'RESTED') {
-      this.pendingAftermath = this.season.lastAftermath;
-      this.persist();
-      if (this.seasonTerminal(this.season)) {
+      this.career.pendingAftermath = this.season.lastAftermath;
+      this.career.persist();
+      if (this.career.isTerminal()) {
         clearSeasonSave();
         this.setMode('seasonEnd');
-      } else if (this.pendingAftermath) {
+      } else if (this.career.pendingAftermath) {
         this.setMode('aftermath');
       }
       return;
     }
     if (action.type === 'CHANGED') {
-      this.persist();
-      if (this.seasonTerminal(this.season)) {
+      this.career.persist();
+      if (this.career.isTerminal()) {
         clearSeasonSave();
         this.setMode('seasonEnd');
       } else {
-        this.ludus.refresh(this.season);
+        this.ludus.refresh(this.season!);
       }
     }
   }
@@ -450,14 +373,14 @@ export class App {
       return;
     }
     if (action.type === 'PICK') {
-      this.pendingOffer = action.offer;
+      this.career.pickOffer(action.offer);
       this.lineup.reset(action.offer);
       this.setMode('lineup');
     }
   }
 
   private pollLineup(): void {
-    if (!this.season || !this.pendingOffer) {
+    if (!this.season || !this.career.pendingOffer) {
       this.setMode('ludus');
       return;
     }
@@ -467,63 +390,23 @@ export class App {
       return;
     }
     if (action.type === 'FIGHT') {
-      this.pendingLineup = action.lineupIds;
-      const offer = this.pendingOffer;
-      const team0 = action.lineupIds.map((id) => {
-        const g = this.season!.roster.find((x) => x.id === id)!;
-        return g.armatura;
-      });
-      const team0Specs = spawnSpecsFromLineup(
-        this.season.roster,
-        action.lineupIds,
-        this.season.doctrina,
-      );
-      const boutSeed =
-        (this.season.seed + this.season.day * 1009 + offer.templateId.length) >>> 0;
-      const rivalRng = new SeededRNG(boutSeed ^ 0x51a7);
-      const tierMul = 1 + (offer.tier - 1) * 0.04;
-      const team1Specs = offer.opponents.map((armatura, i) => {
-        const rival = rollFighter(rivalRng, {
-          policy: 'rival',
-          id: 9000 + i,
-          armatura,
-          name: offer.rivalName && i === 0 ? offer.rivalName : undefined,
-        });
-        const base = spawnSpecFromGladiator(rival, 'PRESS');
-        return {
-          ...base,
-          hpMul: (base.hpMul ?? 1) * tierMul,
-          staminaMul: (base.staminaMul ?? 1) * tierMul,
-          poiseMul: (base.poiseMul ?? 1) * tierMul,
-          damageMul: (base.damageMul ?? 1) * tierMul,
-          pursueBiasAdd: (base.pursueBiasAdd ?? 0) + (offer.rivalName ? 0.06 : 0),
-        };
-      });
-      const config: SandboxConfig = {
-        teamSize: offer.teamSize,
-        seed: boutSeed,
-        team0,
-        team1: [...offer.opponents],
-        team0Specs,
-        team1Specs,
-        lockedMatchup: true,
-      };
+      this.career.setLineup(action.lineupIds);
+      if (action.orders) this.career.setOrders(action.orders);
+      const config = this.career.buildCareerConfig(action.lineupIds, this.career.pendingOffer);
       this.enterFight(config, 'career');
     }
   }
 
   private pollAftermath(): void {
-    if (!this.season || !this.pendingAftermath) {
+    if (!this.season || !this.career.pendingAftermath) {
       this.setMode('ludus');
       return;
     }
     const action = this.aftermathView.poll();
     if (action.type === 'CONTINUE') {
-      this.pendingAftermath = null;
-      this.pendingOffer = null;
-      this.pendingLineup = [];
-      this.persist();
-      if (this.seasonTerminal(this.season)) {
+      this.career.clearPending();
+      this.career.persist();
+      if (this.career.isTerminal()) {
         clearSeasonSave();
         this.setMode('seasonEnd');
       } else {
@@ -539,10 +422,7 @@ export class App {
     }
     const action = this.seasonEnd.poll();
     if (action.type === 'TITLE') {
-      const legacy = settleSeasonLegacy(this.season, loadLegacy());
-      saveLegacy(legacy);
-      clearSeasonSave();
-      this.season = null;
+      this.career.settleAndClear();
       this.goTitle();
     }
   }
@@ -551,36 +431,29 @@ export class App {
     if (action.type === 'NONE') return;
 
     if (action.type === 'CAREER_DONE') {
-      if (!this.season || !this.pendingOffer) {
-        this.fight?.dispose();
-        this.fight = null;
+      if (!this.season || !this.career.pendingOffer) {
+        this.fights.dispose();
         this.setMode('ludus');
         return;
       }
-      const summary = applyCareerFight(this.season, {
-        offer: this.pendingOffer,
-        lineupIds: this.pendingLineup,
+      this.career.applyFight({
         result: action.result,
         forfeited: action.forfeited,
         boutStats: action.boutStats,
       });
-      this.pendingAftermath = summary;
-      this.fight?.dispose();
-      this.fight = null;
+      this.fights.dispose();
       this.setMode('aftermath');
-      this.persist();
       return;
     }
 
     if (action.type === 'EXIT') {
-      this.fight?.dispose();
-      this.fight = null;
+      this.fights.dispose();
       this.setMode('sandbox');
       return;
     }
 
-    if (action.type === 'RESTART' && this.lastConfig) {
-      this.enterFight(this.lastConfig, 'lab');
+    if (action.type === 'RESTART' && this.fights.lastConfig) {
+      this.enterFight(this.fights.lastConfig, 'lab');
       return;
     }
     if (action.type === 'REROLL') {

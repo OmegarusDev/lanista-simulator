@@ -1,5 +1,14 @@
 import type { ArmaturaId } from '../../content/armatura';
 import type { BeastId } from '../../content/beasts';
+import type {
+  BodyPart,
+  EventRole,
+  FightStance,
+  InjurySeverity,
+  OriginId,
+  RelationKind,
+  TraitId,
+} from '../../content/identity';
 import type { MuneraKind, MuneraSlotReq, MuneraTier, TeamSize } from '../../content/munera';
 import type {
   DayAssignment,
@@ -12,28 +21,76 @@ import type {
 
 export type InjuryTier = 'NONE' | 'LIGHT' | 'SEVERE';
 
+export interface BodyInjury {
+  id: string;
+  part: BodyPart;
+  severity: InjurySeverity;
+  daysLeft: number;
+  permanent?: boolean;
+  sourceDay?: number;
+}
+
+export interface HistoryBeat {
+  day: number;
+  text: string;
+}
+
+export interface RelationshipEdge {
+  a: number;
+  b: number;
+  kind: RelationKind;
+  /** -1..1 */
+  intensity: number;
+}
+
+export interface FightOrders {
+  stance: FightStance;
+  /** Prefer weakest foe when multi. */
+  targetPriority: 'nearest' | 'weakest';
+  /** Request withdrawal / missio lean when badly losing. */
+  withdrawRequested: boolean;
+}
+
+export const DEFAULT_FIGHT_ORDERS: FightOrders = {
+  stance: 'BALANCED',
+  targetPriority: 'nearest',
+  withdrawRequested: false,
+};
+
 export interface Gladiator {
   id: number;
   name: string;
   armatura: ArmaturaId;
-  /** 0–1 readiness; heal restores toward 1. */
+  /** 0–1 readiness — kept in sync with vitality. */
   hpRatio: number;
+  /** Summary tier derived from injuries[]. */
   injury: InjuryTier;
+  injuries: BodyInjury[];
   fatigue: number;
   wins: number;
   losses: number;
-  /** Career RPG */
   xp: number;
   grade: GladiatorGrade;
   temperament: TemperamentId;
+  traits: TraitId[];
+  origin: OriginId;
+  appearanceSeed: number;
+  history: HistoryBeat[];
+  morale: number;
+  confidence: number;
+  /** Constitution-ish 0.7–1.3 — injury resist / recovery. */
+  constitution: number;
+  /** Showmanship — entertainment bias. */
+  showmanship: number;
+  /** Grit — poise under pressure. */
+  grit: number;
+  /** Soft readiness alias of hpRatio. */
+  vitality: number;
   fame: number;
-  /** Sessions in current armatura. */
   mastery: number;
   gearGrade: GearGrade;
   assignment: DayAssignment;
-  /** Soft flag — retired from active roster (kept in records). */
   retired?: boolean;
-  /** Approximate age in years — ticks on calendar advance. */
   age: number;
 }
 
@@ -51,15 +108,13 @@ export interface MuneraOffer {
   virtusLose: number;
   playerSlots: MuneraSlotReq[];
   opponents: ArmaturaId[];
-  /** Roster can field the class gates today. */
   eligible: boolean;
-  /** Flavor */
   location: string;
   editor: string;
   rivalName: string | null;
-  /** Optional multi-day contract id. */
   contractId: string | null;
   minGrade?: GladiatorGrade;
+  eventRole?: EventRole;
 }
 
 export interface RecruitOffer {
@@ -71,6 +126,8 @@ export interface RecruitOffer {
   price: number;
   fame: number;
   age?: number;
+  origin?: OriginId;
+  traits?: TraitId[];
 }
 
 export interface SeasonContract {
@@ -82,6 +139,9 @@ export interface SeasonContract {
   denariiBonus: number;
   completed: boolean;
   failed: boolean;
+  /** Optional concrete obligation. */
+  requireWin?: boolean;
+  rivalName?: string | null;
 }
 
 export interface SeasonRecord {
@@ -117,28 +177,23 @@ export interface SeasonState {
   restDaysLeft: number;
   nextGladiatorId: number;
   roster: Gladiator[];
-  /** Offers for current day (rerolled on advance). */
   offers: MuneraOffer[];
-  /** Living calendar — school fighters' bouts today. */
   slate: SlateBout[];
-  /** Idle / sim notes waiting to surface. */
   pendingNotes: string[];
-  /** True after a munera or rest resolved today. */
   dayResolved: boolean;
   record: SeasonRecord;
-  /** Set when insolvent or season finished. */
   status: 'ACTIVE' | 'BROKE' | 'SEASON_END';
   lastAftermath: AftermathSummary | null;
-  /** RPG / ludus */
   facilities: FacilityId[];
   market: RecruitOffer[];
   contracts: SeasonContract[];
   doctrina: DoctrinaId;
   rivalsBeaten: string[];
   retiredNames: string[];
-  /** Unix ms — for deferred idle recovery. */
   lastSeenAt: number;
   seasonIndex: number;
+  relationships: RelationshipEdge[];
+  pendingOrders: FightOrders;
 }
 
 export interface MissioVerdict {
@@ -154,13 +209,15 @@ export interface AftermathSummary {
   result: 'WIN' | 'LOSS' | 'DRAW' | 'FORFEIT';
   purseDelta: number;
   virtusDelta: number;
-  injuries: { name: string; injury: InjuryTier }[];
+  injuries: { name: string; injury: InjuryTier; detail?: string }[];
   notes: string[];
+  storyBeats?: string[];
   xpGains?: { name: string; xp: number; grade?: GladiatorGrade }[];
   missio?: MissioVerdict[];
+  moraleNotes?: string[];
+  relationNotes?: string[];
 }
 
-/** Persistent between seasons (patronage). */
 export interface LegacyState {
   patronage: number;
   seasonsCompleted: number;

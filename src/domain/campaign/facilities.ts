@@ -7,6 +7,7 @@ import {
   type GearGrade,
   type MedicusTier,
 } from '../../content/rpg';
+import { syncInjuryTier } from './injury';
 import type { SeasonState } from './types';
 
 export function hasFacility(state: SeasonState, id: FacilityId): boolean {
@@ -35,21 +36,37 @@ export function applyMedicus(state: SeasonState, gladiatorId: number, tier: Medi
   if (state.status !== 'ACTIVE') return false;
   const g = state.roster.find((x) => x.id === gladiatorId && !x.retired);
   if (!g) return false;
-  if (g.injury === 'NONE' && g.hpRatio >= 0.99 && g.fatigue <= 0) return false;
+  if (g.injury === 'NONE' && (g.vitality ?? g.hpRatio) >= 0.99 && g.fatigue <= 0) return false;
   const cost = medicusCost(state, tier);
   if (state.denarii < cost) return false;
   const care = MEDICUS[tier];
   state.denarii -= cost;
-  g.hpRatio = Math.min(1, g.hpRatio + care.hp);
+  g.vitality = Math.min(1, (g.vitality ?? g.hpRatio) + care.hp);
+  g.hpRatio = g.vitality;
   g.fatigue = Math.max(0, g.fatigue - care.fatigue);
-  for (let i = 0; i < care.injurySteps; i++) {
-    if (g.injury === 'SEVERE') g.injury = 'LIGHT';
-    else if (g.injury === 'LIGHT') g.injury = 'NONE';
+  const steps = care.injurySteps + (hasFacility(state, 'INFIRMARY') && tier === 'PHYSICIAN' ? 1 : 0);
+  for (let s = 0; s < steps; s++) {
+    // Heal worst non-permanent injury first
+    const sorted = [...g.injuries]
+      .filter((i) => !i.permanent)
+      .sort((a, b) => {
+        const rank = (x: typeof a) => (x.severity === 'critical' ? 3 : x.severity === 'serious' ? 2 : 1);
+        return rank(b) - rank(a);
+      });
+    const inj = sorted[0];
+    if (!inj) break;
+    if (inj.severity === 'critical') {
+      inj.severity = 'serious';
+      inj.daysLeft = Math.max(2, inj.daysLeft - 2);
+    } else if (inj.severity === 'serious') {
+      inj.severity = 'minor';
+      inj.daysLeft = Math.max(1, inj.daysLeft - 1);
+    } else {
+      const idx = g.injuries.indexOf(inj);
+      if (idx >= 0) g.injuries.splice(idx, 1);
+    }
   }
-  if (hasFacility(state, 'INFIRMARY') && tier === 'PHYSICIAN' && g.injury === 'LIGHT') {
-    // Extra chance to clear lingering hurt
-    g.injury = 'NONE';
-  }
+  syncInjuryTier(g);
   return true;
 }
 

@@ -6,12 +6,15 @@ import { resolvePendingSlate, rollDailySlate } from './calendar';
 import { maybeSpawnContract, tickContracts } from './contracts';
 import { applyMedicus } from './facilities';
 import { rosterCap } from './gladiator';
+import { tickInjuries } from './injury';
 import { emptyLegacy, patronageDenariiBonus } from './legacy';
 import { resolveAssignments } from './ludusDay';
 import { rollMarket } from './market';
 import { rollDailyOffers } from './offers';
+import { onMentorOpportunity, tickRelationshipMorale } from './relationships';
 import { rollFighter } from './rollFighter';
 import type { Gladiator, LegacyState, SeasonState } from './types';
+import { DEFAULT_FIGHT_ORDERS } from './types';
 
 export function createSeason(seed: number, legacy?: LegacyState): SeasonState {
   const leg = legacy ?? emptyLegacy();
@@ -53,6 +56,8 @@ export function createSeason(seed: number, legacy?: LegacyState): SeasonState {
     retiredNames: [],
     lastSeenAt: Date.now(),
     seasonIndex: leg.seasonsCompleted + 1,
+    relationships: [],
+    pendingOrders: { ...DEFAULT_FIGHT_ORDERS },
   };
   state.offers = rollDailyOffers(state, new SeededRNG(seed ^ 0x0ff3));
   state.slate = rollDailySlate(state, new SeededRNG(seed ^ 0x51a7));
@@ -122,8 +127,16 @@ export function endDay(state: SeasonState): boolean {
   for (const g of state.roster) {
     if (g.retired) continue;
     g.fatigue = Math.max(0, g.fatigue - 1);
-    if (g.injury === 'NONE') g.hpRatio = Math.min(1, g.hpRatio + 0.08);
+    const healBonus = state.facilities.includes('INFIRMARY') ? 1 : 0;
+    tickInjuries(g, healBonus);
+    if (g.injury === 'NONE') {
+      g.vitality = Math.min(1, (g.vitality ?? g.hpRatio) + 0.08);
+      g.hpRatio = g.vitality;
+    }
+    g.morale = Math.min(100, g.morale + 1);
   }
+  onMentorOpportunity(state, state.roster);
+  tickRelationshipMorale(state);
 
   tickAgingAndReplace(state, rng);
   tickContracts(state);
