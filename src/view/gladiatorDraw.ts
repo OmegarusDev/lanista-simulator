@@ -3,6 +3,7 @@ import { ARMATURA_LOOK, massScale, type ArmaturaLook } from '../content/appearan
 import { BEASTS, type BeastId } from '../content/beasts';
 import { colors } from '../content/palette';
 import type { FighterSnapshot } from '../domain/combat/types';
+import { SUN } from './arena';
 import { fontStack, typeScale } from './theme';
 import { bar } from './ui';
 
@@ -154,6 +155,7 @@ function drawBeastGlyph(
   ctx.save();
   ctx.translate(f.x, f.y);
   if (opts?.selected) drawSelectionRing(ctx, teamTint, scale);
+  drawGroundShadow(ctx, scale * 1.15, pose === 'fallen');
 
   if (pose === 'fallen') {
     ctx.rotate(f.facing + 0.5);
@@ -162,41 +164,69 @@ function drawBeastGlyph(
     ctx.rotate(f.facing);
   }
 
-  // Body ellipse
-  ctx.fillStyle = beast.color;
-  ctx.strokeStyle = teamTint;
-  ctx.lineWidth = 2;
+  // Body with volume
+  const brx = 14 * scale;
+  const bry = 9 * scale;
+  const bodyG = ctx.createRadialGradient(SUN.dx * 6, SUN.dy * 5, 1, 0, 0, brx);
+  bodyG.addColorStop(0, lighten(beast.color, 0.22));
+  bodyG.addColorStop(0.55, beast.color);
+  bodyG.addColorStop(1, darken(beast.color, 0.28));
+  ctx.fillStyle = bodyG;
   ctx.beginPath();
-  ctx.ellipse(0, 0, 14 * scale, 9 * scale, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, brx, bry, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = teamTint;
+  ctx.lineWidth = 2.2;
+  ctx.globalAlpha = 0.85;
   ctx.stroke();
+  ctx.globalAlpha = 1;
 
   // Head / snout forward
-  ctx.fillStyle = '#2a2018';
+  const headG = ctx.createRadialGradient(14 * scale, -1, 0, 11 * scale, 0, 7 * scale);
+  headG.addColorStop(0, '#4a3828');
+  headG.addColorStop(1, '#1a1410');
+  ctx.fillStyle = headG;
   ctx.beginPath();
   ctx.ellipse(11 * scale, 0, 6 * scale, 4.5 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Mane / bristling for lion & boar
   if (f.beastId === 'LION' || f.beastId === 'BOAR') {
-    ctx.strokeStyle = '#3a2a18';
-    ctx.lineWidth = 2;
-    for (let i = -3; i <= 3; i++) {
-      const a = (i / 3) * 0.9;
+    ctx.strokeStyle = f.beastId === 'LION' ? '#8a6a28' : '#3a2a18';
+    ctx.lineWidth = 2.2;
+    for (let i = -4; i <= 4; i++) {
+      const a = (i / 4) * 1.05;
       ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 8 * scale, Math.sin(a) * 7 * scale);
-      ctx.lineTo(Math.cos(a) * 13 * scale, Math.sin(a) * 11 * scale);
+      ctx.moveTo(Math.cos(a) * 7 * scale, Math.sin(a) * 6 * scale);
+      ctx.lineTo(Math.cos(a) * 14 * scale, Math.sin(a) * 11 * scale);
       ctx.stroke();
+    }
+  }
+
+  // Leopard spots
+  if (f.beastId === 'LEOPARD') {
+    ctx.fillStyle = 'rgba(40,28,12,0.45)';
+    for (const [sx, sy] of [
+      [-4, -3],
+      [2, 3],
+      [-6, 2],
+      [4, -2],
+      [0, 0],
+    ] as const) {
+      ctx.beginPath();
+      ctx.ellipse(sx * scale, sy * scale, 1.6 * scale, 1.2 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
   // Strike cue
   if (pose === 'strike' || pose === 'windup') {
-    ctx.strokeStyle = `rgba(220,180,80,${pose === 'strike' ? 0.7 : 0.35})`;
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = `rgba(232,196,122,${pose === 'strike' ? 0.75 : 0.4})`;
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(12 * scale, 0);
-    ctx.lineTo(22 * scale, 0);
+    ctx.lineTo(24 * scale, 0);
     ctx.stroke();
   }
 
@@ -226,6 +256,7 @@ function drawGladiatorGlyph(
   ctx.translate(f.x, f.y);
 
   if (opts?.selected) drawSelectionRing(ctx, teamTint, scale);
+  drawGroundShadow(ctx, scale, pose === 'fallen');
   drawAuras(ctx, f, scale);
 
   if (pose === 'fallen') {
@@ -263,7 +294,7 @@ function drawGladiatorGlyph(
   drawHelm(ctx, look, scale, pose);
 
   if (f.flash > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillStyle = `rgba(255,245,220,${0.2 + f.flash * 0.08})`;
     ctx.beginPath();
     ctx.ellipse(0, 0, look.bodyRx * scale, look.bodyRy * scale, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -287,22 +318,52 @@ function drawGladiatorGlyph(
   if (withBars) drawBars(ctx, f, opts?.showSelectedName === true);
 }
 
+function drawGroundShadow(
+  ctx: CanvasRenderingContext2D,
+  scale: number,
+  fallen: boolean,
+): void {
+  const ox = -SUN.dx * 10 * scale;
+  const oy = -SUN.dy * 8 * scale;
+  ctx.fillStyle = fallen ? 'rgba(20,12,6,0.28)' : 'rgba(20,12,6,0.32)';
+  ctx.beginPath();
+  ctx.ellipse(ox, oy + 3, (fallen ? 20 : 15) * scale, (fallen ? 9 : 7) * scale, 0.35, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function lighten(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, ((n >> 16) & 255) + Math.round(255 * amt));
+  const g = Math.min(255, ((n >> 8) & 255) + Math.round(255 * amt));
+  const b = Math.min(255, (n & 255) + Math.round(255 * amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+function darken(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, ((n >> 16) & 255) - Math.round(255 * amt));
+  const g = Math.max(0, ((n >> 8) & 255) - Math.round(255 * amt));
+  const b = Math.max(0, (n & 255) - Math.round(255 * amt));
+  return `rgb(${r},${g},${b})`;
+}
+
 function drawSelectionRing(
   ctx: CanvasRenderingContext2D,
   teamTint: string,
   scale: number,
 ): void {
-  ctx.strokeStyle = teamTint;
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.ellipse(0, 2, 16 * scale, 10 * scale, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.globalAlpha = 0.2;
+  // Soft washed ellipse — structural team cue, not a neon ring
   ctx.fillStyle = teamTint;
+  ctx.globalAlpha = 0.1;
   ctx.beginPath();
-  ctx.ellipse(0, 2, 16 * scale, 10 * scale, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 3, 19 * scale, 11.5 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = teamTint;
+  ctx.globalAlpha = 0.22;
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.ellipse(0, 3, 18 * scale, 11 * scale, 0, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.globalAlpha = 1;
 }
 
@@ -409,22 +470,31 @@ function drawBody(
   const rx = look.bodyRx * scale * (pose === 'sidestep' ? 0.92 : 1);
   const ry = look.bodyRy * scale * (pose === 'guard' ? 1.08 : 1);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  ctx.beginPath();
-  ctx.ellipse(1, 2, rx * 1.05, ry * 0.85, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = look.bodyFill;
+  // Volume fill
+  const g = ctx.createRadialGradient(SUN.dx * rx * 0.5, SUN.dy * ry * 0.5, 1, 0, 0, rx * 1.1);
+  g.addColorStop(0, lighten(look.bodyFill, 0.18));
+  g.addColorStop(0.5, look.bodyFill);
+  g.addColorStop(1, darken(look.bodyFill, 0.22));
+  ctx.fillStyle = g;
   ctx.beginPath();
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = teamTint;
-  ctx.lineWidth = 3 * scale;
-  ctx.beginPath();
-  ctx.moveTo(-rx * 0.75, -ry * 0.15);
-  ctx.lineTo(rx * 0.35, -ry * 0.15);
+  // Outline
+  ctx.strokeStyle = 'rgba(20,14,10,0.45)';
+  ctx.lineWidth = 1.2 * scale;
   ctx.stroke();
+
+  // Team sash
+  ctx.strokeStyle = teamTint;
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 2.8 * scale;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-rx * 0.72, -ry * 0.12);
+  ctx.lineTo(rx * 0.32, -ry * 0.12);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
 
   ctx.strokeStyle = look.leather;
   ctx.lineWidth = 2 * scale;
@@ -433,8 +503,12 @@ function drawBody(
   ctx.stroke();
 
   if (look.breastplate) {
-    ctx.fillStyle = look.metal;
-    ctx.globalAlpha = 0.85;
+    const mg = ctx.createLinearGradient(-rx * 0.3, -ry * 0.4, rx * 0.4, ry * 0.4);
+    mg.addColorStop(0, lighten(look.metal, 0.25));
+    mg.addColorStop(0.5, look.metal);
+    mg.addColorStop(1, darken(look.metal, 0.2));
+    ctx.fillStyle = mg;
+    ctx.globalAlpha = 0.9;
     ctx.beginPath();
     ctx.ellipse(1 * scale, 0, rx * 0.55, ry * 0.7, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -467,23 +541,38 @@ function drawHelm(
     return;
   }
 
-  ctx.fillStyle = look.metal;
+  const hy0 = hy + brokenTip * 3;
+  const metalFill = (cx: number, cy: number, r: number): void => {
+    const hg = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, 0, cx, cy, r);
+    hg.addColorStop(0, lighten(look.metal, 0.38));
+    hg.addColorStop(0.45, look.metal);
+    hg.addColorStop(1, darken(look.metal, 0.28));
+    ctx.fillStyle = hg;
+  };
+
   if (look.smoothHelm) {
     // Secutor / Scissor: round bowl, tiny eye slits
+    metalFill(hx, hy0, 5.8 * scale);
     ctx.beginPath();
-    ctx.arc(hx, hy + brokenTip * 3, 5.8 * scale, 0, Math.PI * 2);
+    ctx.arc(hx, hy0, 5.8 * scale, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#1a1410';
     ctx.fillRect(hx + 1.5 * scale, hy - 1 * scale, 2.2 * scale, 1.2 * scale);
     return;
   }
 
+  metalFill(hx, hy0, 5.5 * scale);
   ctx.beginPath();
-  ctx.ellipse(hx, hy + brokenTip * 3, 5.5 * scale, 4.5 * scale, 0, 0, Math.PI * 2);
+  ctx.ellipse(hx, hy0, 5.5 * scale, 4.5 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
 
   if (!look.crest) {
-    // Thraex / Hop brim
+    // Thraex / Hop brim — lit from sunward edge
+    const brim = ctx.createLinearGradient(hx - 6 * scale, hy, hx + 7 * scale, hy - 2 * scale);
+    brim.addColorStop(0, darken(look.metal, 0.2));
+    brim.addColorStop(0.4, lighten(look.metal, 0.22));
+    brim.addColorStop(1, look.metal);
+    ctx.fillStyle = brim;
     ctx.beginPath();
     ctx.moveTo(hx - 6 * scale, hy);
     ctx.lineTo(hx + 7 * scale, hy - 2 * scale);
@@ -523,16 +612,24 @@ function drawShield(
   ctx.save();
   ctx.translate(sx, sy);
   ctx.rotate(angle + Math.PI / 2 + (pose === 'broken' ? 0.5 : 0));
-  ctx.fillStyle = look.metal;
+  const sg = ctx.createRadialGradient(-rw * 0.3, -rh * 0.3, 0, 0, 0, Math.max(rw, rh));
+  sg.addColorStop(0, lighten(look.metal, 0.35));
+  sg.addColorStop(0.45, look.metal);
+  sg.addColorStop(1, darken(look.metal, 0.25));
+  ctx.fillStyle = sg;
   ctx.beginPath();
   ctx.ellipse(0, 0, rw, rh, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = look.leather;
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = 1.4;
   ctx.stroke();
-  ctx.fillStyle = '#d8c8a0';
+  // Boss
+  const boss = ctx.createRadialGradient(-0.5, -0.5, 0, 0, 0, 2.2 * scale);
+  boss.addColorStop(0, '#f0e6c8');
+  boss.addColorStop(1, '#8a7850');
+  ctx.fillStyle = boss;
   ctx.beginPath();
-  ctx.arc(0, 0, 1.6 * scale, 0, Math.PI * 2);
+  ctx.arc(0, 0, 1.8 * scale, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -600,17 +697,27 @@ function drawWeapon(
   ctx.strokeStyle = '#2a2218';
   ctx.lineJoin = 'round';
 
+  const bladeMetal = (x0: number, y0: number, x1: number, y1: number): CanvasGradient => {
+    const bg = ctx.createLinearGradient(x0, y0, x1, y1);
+    bg.addColorStop(0, darken(look.metal, 0.22));
+    bg.addColorStop(0.35, lighten(look.metal, 0.4));
+    bg.addColorStop(0.65, look.metal);
+    bg.addColorStop(1, darken(look.metal, 0.18));
+    return bg;
+  };
+
   if (look.spear) {
     ctx.lineWidth = 2 * scale;
     ctx.beginPath();
     ctx.moveTo(grip - 4 * scale, 0);
     ctx.lineTo(grip + length, 0);
     ctx.stroke();
-    ctx.fillStyle = look.metal;
+    const tipX = grip + length;
+    ctx.fillStyle = bladeMetal(tipX - 1, -2.5 * scale, tipX + 7 * scale, 2.5 * scale);
     ctx.beginPath();
-    ctx.moveTo(grip + length - 1, -2.5 * scale);
-    ctx.lineTo(grip + length + 7 * scale, 0);
-    ctx.lineTo(grip + length - 1, 2.5 * scale);
+    ctx.moveTo(tipX - 1, -2.5 * scale);
+    ctx.lineTo(tipX + 7 * scale, 0);
+    ctx.lineTo(tipX - 1, 2.5 * scale);
     ctx.closePath();
     ctx.fill();
   } else if (look.trident) {
@@ -620,6 +727,7 @@ function drawWeapon(
     ctx.lineTo(grip + length, 0);
     ctx.stroke();
     const tip = grip + length;
+    ctx.strokeStyle = bladeMetal(tip, -4 * scale, tip + 6 * scale, 4 * scale);
     ctx.lineWidth = 1.8 * scale;
     ctx.beginPath();
     ctx.moveTo(tip, 0);
@@ -635,7 +743,12 @@ function drawWeapon(
     ctx.moveTo(grip, 0);
     ctx.quadraticCurveTo(grip + length * 0.55, -5 * scale, grip + length, 3 * scale);
     ctx.stroke();
-    ctx.strokeStyle = look.metal;
+    ctx.strokeStyle = bladeMetal(
+      grip + length * 0.7,
+      -2 * scale,
+      grip + length,
+      3 * scale,
+    );
     ctx.lineWidth = 1.5 * scale;
     ctx.beginPath();
     ctx.moveTo(grip + length * 0.7, -2 * scale);
@@ -647,11 +760,12 @@ function drawWeapon(
     ctx.moveTo(grip, 0);
     ctx.lineTo(grip + length, 0);
     ctx.stroke();
-    ctx.fillStyle = look.metal;
+    const tipX = grip + length;
+    ctx.fillStyle = bladeMetal(tipX - 2, -2.2 * scale, tipX + 4 * scale, 2.2 * scale);
     ctx.beginPath();
-    ctx.moveTo(grip + length - 2, -2.2 * scale);
-    ctx.lineTo(grip + length + 4 * scale, 0);
-    ctx.lineTo(grip + length - 2, 2.2 * scale);
+    ctx.moveTo(tipX - 2, -2.2 * scale);
+    ctx.lineTo(tipX + 4 * scale, 0);
+    ctx.lineTo(tipX - 2, 2.2 * scale);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = look.leather;
@@ -683,10 +797,19 @@ function drawScissorArm(
   ctx.save();
   ctx.translate(sx, sy);
   ctx.rotate(angle + (pose === 'strike' ? 0.2 : 0));
-  ctx.fillStyle = look.metal;
+  const tube = ctx.createLinearGradient(-2 * scale, -3 * scale, 8 * scale, 3 * scale);
+  tube.addColorStop(0, lighten(look.metal, 0.32));
+  tube.addColorStop(0.45, look.metal);
+  tube.addColorStop(1, darken(look.metal, 0.25));
+  ctx.fillStyle = tube;
   ctx.fillRect(-2 * scale, -3 * scale, 10 * scale, 6 * scale);
   ctx.strokeStyle = look.leather;
   ctx.strokeRect(-2 * scale, -3 * scale, 10 * scale, 6 * scale);
+  const blade = ctx.createLinearGradient(8 * scale, -2.5 * scale, 14 * scale, 2.5 * scale);
+  blade.addColorStop(0, look.metal);
+  blade.addColorStop(0.4, lighten(look.metal, 0.42));
+  blade.addColorStop(1, darken(look.metal, 0.2));
+  ctx.fillStyle = blade;
   ctx.beginPath();
   ctx.moveTo(8 * scale, -2.5 * scale);
   ctx.lineTo(14 * scale, 0);

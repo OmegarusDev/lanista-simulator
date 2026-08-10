@@ -23,15 +23,54 @@ export function hit(r: Rect, x: number, y: number): boolean {
 }
 
 export function panel(ctx: CanvasRenderingContext2D, r: Rect, title?: string): void {
-  ctx.fillStyle = surface.panel;
-  ctx.strokeStyle = surface.panelBorder;
+  // Carved stone plate — depth without card clutter
+  ctx.fillStyle = 'rgba(10,7,5,0.35)';
+  roundRect(ctx, r.x + 2, r.y + 3, r.w, r.h, radius.lg);
+  ctx.fill();
+
+  const g = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+  g.addColorStop(0, 'rgba(48,38,28,0.94)');
+  g.addColorStop(0.5, 'rgba(28,22,16,0.92)');
+  g.addColorStop(1, 'rgba(18,14,10,0.94)');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = 'rgba(160,130,95,0.55)';
   ctx.lineWidth = stroke.emphasis;
   roundRect(ctx, r.x, r.y, r.w, r.h, radius.lg);
   ctx.fill();
   ctx.stroke();
+
+  // Inner highlight lip
+  ctx.strokeStyle = 'rgba(220,190,140,0.12)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3, radius.md);
+  ctx.stroke();
+
   if (title) {
     label(ctx, title, r.x + space.md + 2, r.y + space.md + 2, { variant: 'title' });
   }
+}
+
+/** Soft sky + vignette behind chrome for menu shells (title/sandbox/ludus). */
+export function shellAtmosphere(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#3a281c');
+  sky.addColorStop(0.4, '#241810');
+  sky.addColorStop(1, colors.bg);
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+
+  const glow = ctx.createRadialGradient(w / 2, h * 0.28, 10, w / 2, h * 0.45, Math.max(w, h) * 0.58);
+  glow.addColorStop(0, 'rgba(200,130,60,0.1)');
+  glow.addColorStop(0.55, 'rgba(60,40,24,0.05)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+
+  const vig = ctx.createRadialGradient(w / 2, h * 0.42, Math.min(w, h) * 0.22, w / 2, h / 2, Math.max(w, h) * 0.75);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(8,5,3,0.42)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
 }
 
 /** Thin rule for chrome structure (not a card). */
@@ -195,18 +234,54 @@ export function buttonChrome(
   const hovered = !opts?.disabled && hit(r, pointer.x, pointer.y);
   const pressed = hovered && pointer.down;
   const accent = opts?.accent;
-  ctx.fillStyle = opts?.disabled
-    ? surface.buttonDisabled
-    : opts?.active
-      ? (accent ?? surface.buttonActive)
-      : hovered
-        ? surface.buttonHot
-        : surface.button;
+  const y = r.y + (pressed ? 1 : 0);
+
+  // Drop shadow / carved depth
+  if (!opts?.disabled && !pressed) {
+    ctx.fillStyle = 'rgba(8,5,3,0.4)';
+    roundRect(ctx, r.x + 1, r.y + 2, r.w, r.h, radius.md);
+    ctx.fill();
+  }
+
+  let top: string;
+  let mid: string;
+  let bot: string;
+  if (opts?.disabled) {
+    top = mid = bot = surface.buttonDisabled;
+  } else if (opts?.active) {
+    const a = accent ?? surface.buttonActive;
+    top = accent ? a : '#b04a36';
+    mid = a;
+    bot = accent ? 'rgba(0,0,0,0.45)' : '#5a2418';
+  } else if (hovered) {
+    top = '#6a5240';
+    mid = surface.buttonHot;
+    bot = '#3a2a1e';
+  } else {
+    top = '#4a3c30';
+    mid = surface.button;
+    bot = '#2a2018';
+  }
+
+  const g = ctx.createLinearGradient(r.x, y, r.x, y + r.h);
+  g.addColorStop(0, top);
+  g.addColorStop(0.45, mid);
+  g.addColorStop(1, bot);
+  ctx.fillStyle = g;
   ctx.strokeStyle = opts?.active ? (accent ?? colors.accentHot) : surface.panelBorder;
   ctx.lineWidth = stroke.emphasis;
-  roundRect(ctx, r.x, r.y + (pressed ? 1 : 0), r.w, r.h, radius.md);
+  roundRect(ctx, r.x, y, r.w, r.h, radius.md);
   ctx.fill();
   ctx.stroke();
+
+  // Inner highlight lip (pressed = darker inset)
+  if (!opts?.disabled) {
+    ctx.strokeStyle = pressed ? 'rgba(0,0,0,0.35)' : 'rgba(230,200,150,0.14)';
+    ctx.lineWidth = 1;
+    roundRect(ctx, r.x + 1.5, y + 1.5, r.w - 3, r.h - 3, radius.sm);
+    ctx.stroke();
+  }
+
   const clicked = Boolean(hovered && pointer.clicked && !opts?.disabled);
   // First handler wins — prevent one click from activating stacked controls.
   if (clicked) pointer.clicked = false;
@@ -257,7 +332,14 @@ export function segmentedControl(
   const n = options.length;
   if (n === 0) return null;
   const segW = r.w / n;
-  ctx.fillStyle = surface.button;
+  // Carved trough
+  ctx.fillStyle = 'rgba(8,5,3,0.35)';
+  roundRect(ctx, r.x + 1, r.y + 2, r.w, r.h, radius.md);
+  ctx.fill();
+  const trough = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+  trough.addColorStop(0, '#2a221a');
+  trough.addColorStop(1, '#3a3028');
+  ctx.fillStyle = trough;
   ctx.strokeStyle = surface.panelBorder;
   ctx.lineWidth = stroke.border;
   roundRect(ctx, r.x, r.y, r.w, r.h, radius.md);
@@ -270,7 +352,11 @@ export function segmentedControl(
     const hovered = hit(sr, pointer.x, pointer.y);
     const active = i === activeIndex;
     if (active) {
-      ctx.fillStyle = surface.buttonActive;
+      const ag = ctx.createLinearGradient(sr.x, sr.y, sr.x, sr.y + sr.h);
+      ag.addColorStop(0, '#b04a36');
+      ag.addColorStop(0.5, surface.buttonActive);
+      ag.addColorStop(1, '#5a2418');
+      ctx.fillStyle = ag;
       roundRect(ctx, sr.x + 1, sr.y + 1, sr.w - 2, sr.h - 2, radius.sm);
       ctx.fill();
     } else if (hovered) {

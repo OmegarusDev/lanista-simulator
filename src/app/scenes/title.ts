@@ -4,7 +4,7 @@ import { hasSeasonSave } from '../../shell/save';
 import { getDesign } from '../../shell/canvas';
 import type { Synth } from '../../view/audio';
 import { titleLayout } from '../../view/layout';
-import { button, label } from '../../view/ui';
+import { button, label, shellAtmosphere } from '../../view/ui';
 import { typeScale } from '../../view/theme';
 
 export type TitleAction =
@@ -20,21 +20,18 @@ export class TitleScene {
     const { w, h } = getDesign();
     const layout = titleLayout(w, h);
 
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, w, h);
+    shellAtmosphere(ctx, w, h);
 
-    const g = ctx.createRadialGradient(
-      w / 2,
-      h * 0.35,
-      40,
-      w / 2,
-      h * 0.55,
-      Math.max(w, h) * 0.55,
-    );
-    g.addColorStop(0, '#3a281c');
-    g.addColorStop(1, colors.bg);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
+    // Soft arena oval silhouette behind brand
+    ctx.strokeStyle = 'rgba(160,120,70,0.18)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(w / 2, layout.brandY + 8, Math.min(w * 0.42, 220), Math.min(h * 0.08, 48), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,90,50,0.12)';
+    ctx.beginPath();
+    ctx.ellipse(w / 2, layout.brandY + 8, Math.min(w * 0.36, 180), Math.min(h * 0.06, 36), 0, 0, Math.PI * 2);
+    ctx.stroke();
 
     label(ctx, 'LANISTA', w / 2, layout.brandY, {
       size: layout.orientation === 'portrait' || w < 520 ? 44 : 52,

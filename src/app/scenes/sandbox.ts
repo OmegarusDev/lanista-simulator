@@ -17,7 +17,7 @@ import { drawGladiator } from '../../view/gladiatorDraw';
 import { designToWorld, buttonRow, isPortrait, shellPad } from '../../view/layout';
 import { posedCardsToSnapshots } from '../../view/posedPreview';
 import { space, touchTarget, typeScale } from '../../view/theme';
-import { button, buttonChrome, label, labelFitted, panel, type Rect } from '../../view/ui';
+import { button, buttonChrome, label, labelFitted, panel, shellAtmosphere, type Rect } from '../../view/ui';
 
 export interface SandboxConfig {
   teamSize: TeamSize;
@@ -165,8 +165,7 @@ export class SandboxScene {
     const portrait = isPortrait(w, h);
     let action: SandboxAction = { type: 'NONE' };
 
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, w, h);
+    shellAtmosphere(ctx, w, h);
 
     // Compact chrome
     if (button(ctx, { x: pad, y: pad, w: touchTarget, h: touchTarget }, '←', input.pointer)) {
@@ -230,6 +229,20 @@ export class SandboxScene {
       });
     }
     ctx.restore();
+    // Soft edge falloff over the preview band
+    const av = this.arenaView;
+    const bandVig = ctx.createRadialGradient(
+      av.x + av.w / 2,
+      av.y + av.h * 0.45,
+      Math.min(av.w, av.h) * 0.2,
+      av.x + av.w / 2,
+      av.y + av.h / 2,
+      Math.max(av.w, av.h) * 0.62,
+    );
+    bandVig.addColorStop(0, 'rgba(0,0,0,0)');
+    bandVig.addColorStop(1, 'rgba(8,5,3,0.38)');
+    ctx.fillStyle = bandVig;
+    ctx.fillRect(av.x, av.y, av.w, av.h);
     ctx.restore();
 
     // Team cam chips + fighter focus strip
@@ -348,8 +361,7 @@ export class SandboxScene {
     const portrait = isPortrait(w, h);
     let action: SandboxAction = { type: 'NONE' };
 
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, w, h);
+    shellAtmosphere(ctx, w, h);
 
     if (button(ctx, { x: pad, y: pad, w: touchTarget, h: touchTarget }, '←', input.pointer)) {
       this.mode = 'quick';

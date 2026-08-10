@@ -150,21 +150,15 @@ export class ArenaCamera {
         this.zoom += (want - this.zoom) * 0.04;
       }
     }
-
-    // Smooth follow
-    this.smoothX += (this.targetX - this.smoothX) * 0.12;
-    this.smoothY += (this.targetY - this.smoothY) * 0.12;
+    // Easing lives only in tickSmooth() — callers invoke both each frame.
   }
 
   /** Call once per frame even when not autocam so focus/manual ease. */
   tickSmooth(): void {
-    if (this.mode === 'manual' || this.dragging) {
-      this.smoothX += (this.targetX - this.smoothX) * 0.2;
-      this.smoothY += (this.targetY - this.smoothY) * 0.2;
-      return;
-    }
-    this.smoothX += (this.targetX - this.smoothX) * 0.12;
-    this.smoothY += (this.targetY - this.smoothY) * 0.12;
+    const k =
+      this.dragging ? 0.35 : this.mode === 'focus' ? 0.18 : this.mode === 'manual' ? 0.16 : 0.1;
+    this.smoothX += (this.targetX - this.smoothX) * k;
+    this.smoothY += (this.targetY - this.smoothY) * k;
   }
 
   beginDrag(designX: number, designY: number, scale: number): void {
