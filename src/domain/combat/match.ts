@@ -680,7 +680,7 @@ export class Match {
     this.stareTicks = 0;
   }
 
-  /** If both idle in measure too long, INVITE or ANGLE — breaks the mirror stare. */
+  /** If both idle in measure — or jammed in a clinch — INVITE/ANGLE to break the freeze. */
   private updateStareRhythm(): void {
     const alive = this.fighters.filter((f) => f.alive);
     if (alive.length < 2) {
@@ -688,30 +688,49 @@ export class Match {
       return;
     }
 
-    const idleInMeasure = alive.every((f) => {
+    const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
+    const idleStuck = alive.every((f) => {
       const foe = nearestEnemy(f, this.fighters);
       if (!foe || f.phase !== 'IDLE' || f.action !== 'NONE') return false;
-      if (f.activeIntention(this.tick) !== 'NONE') return false;
+      // Intentions like mutual PRESS in a jam still count as stuck if no attack
       const dd = dist(f.x, f.y, foe.x, foe.y);
-      return dd >= f.def().measureMin * 0.9 && dd <= f.def().measureMax * 1.1;
+      const inMeasure = dd >= f.def().measureMin * 0.9 && dd <= f.def().measureMax * 1.1;
+      const inClinch = dd < clinchDist * 1.2;
+      const intent = f.activeIntention(this.tick);
+      if (inClinch) return intent === 'NONE' || intent === 'PRESS' || intent === 'INVITE';
+      if (intent !== 'NONE') return false;
+      return inMeasure;
     });
 
-    if (!idleInMeasure) {
+    if (!idleStuck) {
       this.stareTicks = 0;
       return;
     }
 
     this.stareTicks++;
-    if (this.stareTicks < combatTuning.staleStareTicks) return;
+    const threshold =
+      alive.some((f) => {
+        const foe = nearestEnemy(f, this.fighters);
+        return foe && dist(f.x, f.y, foe.x, foe.y) < clinchDist * 1.2;
+      })
+        ? Math.floor(combatTuning.staleStareTicks * 0.55)
+        : combatTuning.staleStareTicks;
+    if (this.stareTicks < threshold) return;
 
     const pick = this.rng.pick(alive);
-    const inviteLean = pick.def().clinchPanic * 0.4 + (1 - pick.def().pursueBias) * 0.3;
-    this.assignIntention(pick, this.rng.chance(0.4 + inviteLean) ? 'INVITE' : 'ANGLE');
+    this.assignIntention(pick, 'ANGLE');
+    pick.desiredDist = Math.max(
+      pick.desiredDist,
+      (pick.def().measureMin + pick.def().measureMax) * 0.55,
+    );
     pick.tempoUntil = Math.max(pick.tempoUntil, this.tick + 12);
-    const other = alive.find((f) => f.id !== pick.id);
+    const other = nearestEnemy(pick, this.fighters);
     if (other) {
-      // INVITE raises foe urge via cutUrge; slight YIELD keeps asymmetry
-      this.assignIntention(other, 'YIELD');
+      this.assignIntention(other, this.rng.chance(0.5) ? 'YIELD' : 'ANGLE');
+      other.desiredDist = Math.max(
+        other.desiredDist,
+        (other.def().measureMin + other.def().measureMax) * 0.5,
+      );
     }
     this.stareTicks = 0;
   }
@@ -727,13 +746,26 @@ export class Match {
         const dy = b.y - a.y;
         const dd = Math.hypot(dx, dy) || 0.01;
         if (dd >= min) continue;
-        const push = ((min - dd) / 2) * 0.6;
+        // Stronger shove when deeply overlapped so clinch jams don't persist
+        const depth = (min - dd) / min;
+        const push = ((min - dd) / 2) * (0.75 + depth * 0.85);
         const nx = dx / dd;
         const ny = dy / dd;
         a.x -= nx * push;
         a.y -= ny * push;
         b.x += nx * push;
         b.y += ny * push;
+        // Kill inward spring velocity so they don't immediately re-collide
+        const va = a.vx * nx + a.vy * ny;
+        if (va > 0) {
+          a.vx -= nx * va;
+          a.vy -= ny * va;
+        }
+        const vb = b.vx * -nx + b.vy * -ny;
+        if (vb > 0) {
+          b.vx += nx * vb;
+          b.vy += ny * vb;
+        }
       }
     }
     for (const f of this.fighters) {

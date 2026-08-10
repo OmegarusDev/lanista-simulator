@@ -340,6 +340,7 @@ export interface SandboxLayout {
   center: {
     size1: Rect;
     size2: Rect;
+    size3: Rect;
     vsY: number;
     seedY: number;
     reroll: Rect;
@@ -389,9 +390,14 @@ export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxL
     const ctrlY = presetsBottom + 18;
     const midX = dw / 2;
     const sizeH = 40;
+    const sizeW = 72;
+    const sizeGap = 6;
+    const sizesW = sizeW * 3 + sizeGap * 2;
+    const sizeX0 = midX - sizesW / 2;
     center = {
-      size1: { x: midX - 86, y: ctrlY, w: 78, h: sizeH },
-      size2: { x: midX + 8, y: ctrlY, w: 78, h: sizeH },
+      size1: { x: sizeX0, y: ctrlY, w: sizeW, h: sizeH },
+      size2: { x: sizeX0 + sizeW + sizeGap, y: ctrlY, w: sizeW, h: sizeH },
+      size3: { x: sizeX0 + (sizeW + sizeGap) * 2, y: ctrlY, w: sizeW, h: sizeH },
       vsY: ctrlY + 34,
       seedY: ctrlY + 52,
       reroll: { x: midX - 56, y: ctrlY + 62, w: 112, h: 36 },
@@ -415,9 +421,14 @@ export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxL
     leftPanel = { x: leftX, y: panelY, w: sideW, h: panelH };
     rightPanel = { x: rightX, y: panelY, w: sideW, h: panelH };
     const midX = dw / 2;
+    const sizeW = 70;
+    const sizeGap = 6;
+    const sizesW = sizeW * 3 + sizeGap * 2;
+    const sizeX0 = midX - sizesW / 2;
     center = {
-      size1: { x: midX - 86, y: panelY + 32, w: 78, h: 40 },
-      size2: { x: midX + 8, y: panelY + 32, w: 78, h: 40 },
+      size1: { x: sizeX0, y: panelY + 32, w: sizeW, h: 40 },
+      size2: { x: sizeX0 + sizeW + sizeGap, y: panelY + 32, w: sizeW, h: 40 },
+      size3: { x: sizeX0 + (sizeW + sizeGap) * 2, y: panelY + 32, w: sizeW, h: 40 },
       vsY: panelY + 112,
       seedY: panelY + 152,
       reroll: { x: midX - 56, y: panelY + 164, w: 112, h: 36 },

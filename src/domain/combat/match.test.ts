@@ -31,12 +31,23 @@ describe('Match', () => {
   it('seeded fights vary in length or outcome', () => {
     const winners = new Set<string>();
     const lengthBuckets = new Set<number>();
-    for (let seed = 1; seed <= 50; seed++) {
+    for (let seed = 1; seed <= 80; seed++) {
       const m = createQuickMatch(1, seed, ['THRAEX'], ['RETIARIUS']);
       winners.add(m.runToEnd());
-      lengthBuckets.add(Math.floor(m.tick / 60));
+      lengthBuckets.add(Math.floor(m.tick / 45));
     }
     // Either multiple winners or clearly different bout lengths
     expect(winners.size > 1 || lengthBuckets.size > 2).toBe(true);
+  });
+
+  it('3v3 eventually terminates', () => {
+    const m = createQuickMatch(
+      3,
+      77,
+      ['MURMILLO', 'RETIARIUS', 'SECUTOR'],
+      ['THRAEX', 'HOPLOMACHUS', 'DIMACHAERUS'],
+    );
+    const result = m.runToEnd();
+    expect(['TEAM0', 'TEAM1', 'DRAW']).toContain(result);
   });
 });

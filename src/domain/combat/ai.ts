@@ -108,9 +108,11 @@ export function computeDesiredDist(
 
   // Clinch panic when jammed — ease out, don't teleport d* to max reach
   const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
-  if (distance < clinchDist && d.clinchPanic > 0.4) {
+  if (distance < clinchDist) {
+    // Everyone scrambles out of a jam — not only high clinchPanic kits
     const midNow = (d.measureMin + d.measureMax) * 0.5;
-    target = Math.max(target, midNow + (d.measureMax - midNow) * d.clinchPanic * 0.85);
+    const panic = Math.max(0.45, d.clinchPanic);
+    target = Math.max(target, midNow + (d.measureMax - midNow) * panic * 0.7);
   }
 
   const cap = self.poiseBroken || tier === 'BROKEN' ? d.measureMax * 1.45 : d.measureMax * 1.25;
@@ -401,9 +403,10 @@ export function decideCommit(
   const intent = self.activeIntention(tick);
   const onTempo = tick < self.tempoUntil;
   const guardArc = self.effectiveGuardArc();
-  // Cut range uses weapon reach — measure spring may sit slightly outside class band
+  // Cut range uses weapon reach. Allow clinch-range cuts so pairs don't freeze
+  // inside measureMin with no legal attack and no stare-break.
   const inCutRange =
-    distance <= d.attackRange * 1.02 && distance >= d.measureMin * 0.72;
+    distance <= d.attackRange * 1.02 && distance >= combatTuning.bodyRadius * 1.2;
 
   const enemyToMe = angleTo(enemy.x, enemy.y, self.x, self.y);
   const enemyArc = effectiveAttackArc(enemy.def(), enemy.footwork);

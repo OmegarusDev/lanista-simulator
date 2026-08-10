@@ -11,7 +11,7 @@ import { typeMin, typeScale } from '../../view/theme';
 import { button, buttonChrome, label, labelFitted, panel, type Rect } from '../../view/ui';
 
 export interface SandboxConfig {
-  /** Instant Match: 1|2. Career munera may pass 3. */
+  /** Instant Match / career: 1|2|3. */
   teamSize: TeamSize;
   seed: number;
   team0: ArmaturaId[];
@@ -37,11 +37,11 @@ function resolvePick(pick: SlotPick, salt: number): ArmaturaId {
 }
 
 export class SandboxScene {
-  teamSize: 1 | 2 = 1;
+  teamSize: TeamSize = 1;
   seed = 42;
   /** Per-fighter kit on each team (supports mixed lineups). */
-  slots0: SlotPick[] = ['RANDOM', 'RANDOM'];
-  slots1: SlotPick[] = ['RANDOM', 'RANDOM'];
+  slots0: SlotPick[] = ['RANDOM', 'RANDOM', 'RANDOM'];
+  slots1: SlotPick[] = ['RANDOM', 'RANDOM', 'RANDOM'];
   editSlot0 = 0;
   editSlot1 = 0;
 
@@ -167,6 +167,10 @@ export class SandboxScene {
       this.setTeamSize(2);
       this.synth.play('ui');
     }
+    if (button(ctx, c.size3, '3v3', input.pointer, { active: this.teamSize === 3 })) {
+      this.setTeamSize(3);
+      this.synth.play('ui');
+    }
 
     if (!L.stacked) {
       label(ctx, 'VS', w / 2, c.vsY, {
@@ -204,10 +208,10 @@ export class SandboxScene {
     return action;
   }
 
-  private setTeamSize(n: 1 | 2): void {
+  private setTeamSize(n: TeamSize): void {
     this.teamSize = n;
-    while (this.slots0.length < 2) this.slots0.push('RANDOM');
-    while (this.slots1.length < 2) this.slots1.push('RANDOM');
+    while (this.slots0.length < 3) this.slots0.push('RANDOM');
+    while (this.slots1.length < 3) this.slots1.push('RANDOM');
     this.editSlot0 = Math.min(this.editSlot0, n - 1);
     this.editSlot1 = Math.min(this.editSlot1, n - 1);
   }
@@ -216,8 +220,8 @@ export class SandboxScene {
     const p = PAIRING_PRESETS.find((x) => x.id === id);
     if (!p) return this.makeConfig();
     this.teamSize = 1;
-    this.slots0 = [p.team0[0]!, 'RANDOM'];
-    this.slots1 = [p.team1[0]!, 'RANDOM'];
+    this.slots0 = [p.team0[0]!, 'RANDOM', 'RANDOM'];
+    this.slots1 = [p.team1[0]!, 'RANDOM', 'RANDOM'];
     this.editSlot0 = 0;
     this.editSlot1 = 0;
     return this.makeConfig();
@@ -239,10 +243,12 @@ export class SandboxScene {
     const narrow = w < 300;
 
     const slotY = y + 40;
-    if (this.teamSize === 2) {
-      const slotW = Math.min(148, (w - 32 - 8) / 2);
-      for (let s = 0; s < 2; s++) {
-        const r: Rect = { x: x + 16 + s * (slotW + 8), y: slotY, w: slotW, h: 56 };
+    const n = this.teamSize;
+    if (n >= 2) {
+      const gap = 6;
+      const slotW = Math.min(130, (w - 32 - gap * (n - 1)) / n);
+      for (let s = 0; s < n; s++) {
+        const r: Rect = { x: x + 16 + s * (slotW + gap), y: slotY, w: slotW, h: 56 };
         const pick = slots[s]!;
         const active = edit === s;
         const { pressed, clicked } = buttonChrome(ctx, r, input.pointer, {
@@ -251,30 +257,30 @@ export class SandboxScene {
         });
         const gy = r.y + 22 + (pressed ? 1 : 0);
         if (pick === 'RANDOM') {
-          label(ctx, '?', r.x + 28, gy + 6, {
+          label(ctx, '?', r.x + Math.min(28, slotW * 0.35), gy + 6, {
             size: typeScale.display,
             align: 'center',
             color: colors.buttonText,
           });
         } else {
-          drawArmaturaPreview(ctx, pick, r.x + 28, gy, {
+          drawArmaturaPreview(ctx, pick, r.x + Math.min(28, slotW * 0.35), gy, {
             team,
             facing,
-            scale: 0.72,
+            scale: n === 3 ? 0.58 : 0.72,
           });
         }
-        label(ctx, `Fighter ${s + 1}`, r.x + r.w / 2 + (narrow ? 0 : 20), r.y + 18 + (pressed ? 1 : 0), {
-          size: typeScale.meta,
+        label(ctx, `F${s + 1}`, r.x + r.w / 2, r.y + 14 + (pressed ? 1 : 0), {
+          size: typeScale.eyebrow,
           align: 'center',
           color: colors.muted,
         });
         label(
           ctx,
-          pick === 'RANDOM' ? 'Random' : ARMATURAE[pick].name,
-          r.x + r.w / 2 + (narrow ? 0 : 20),
-          r.y + 38 + (pressed ? 1 : 0),
+          pick === 'RANDOM' ? 'Rnd' : ARMATURAE[pick].short,
+          r.x + r.w / 2,
+          r.y + 40 + (pressed ? 1 : 0),
           {
-            size: narrow ? typeScale.meta : typeScale.body,
+            size: typeScale.meta,
             align: 'center',
             color: colors.buttonText,
           },
