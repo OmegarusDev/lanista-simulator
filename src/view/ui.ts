@@ -1,6 +1,14 @@
 import { colors } from '../content/palette';
 import type { PointerState } from '../shell/input';
 import {
+  bronzeStroke,
+  carveFrame,
+  mosaicFill,
+  mosaicPalettes,
+  roundPath,
+  woodFill,
+} from './materials';
+import {
   fontStack,
   radius,
   space,
@@ -22,78 +30,189 @@ export function hit(r: Rect, x: number, y: number): boolean {
   return x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h;
 }
 
-export function panel(ctx: CanvasRenderingContext2D, r: Rect, title?: string): void {
-  // Carved stone plate — depth without card clutter
-  ctx.fillStyle = 'rgba(8,5,3,0.42)';
-  roundRect(ctx, r.x + 2, r.y + 3, r.w, r.h, radius.lg);
+/** Carved wood plaque with mosaic inlay strip — menu / inspect containers. */
+export function plaque(ctx: CanvasRenderingContext2D, r: Rect, title?: string): void {
+  ctx.fillStyle = 'rgba(8,4,2,0.5)';
+  roundRect(ctx, r.x + 3, r.y + 4, r.w, r.h, radius.lg);
   ctx.fill();
 
-  const g = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
-  g.addColorStop(0, 'rgba(52,42,32,0.96)');
-  g.addColorStop(0.35, 'rgba(34,27,20,0.94)');
-  g.addColorStop(1, 'rgba(18,14,10,0.96)');
-  ctx.fillStyle = g;
-  ctx.strokeStyle = 'rgba(168,136,96,0.58)';
-  ctx.lineWidth = stroke.emphasis;
-  roundRect(ctx, r.x, r.y, r.w, r.h, radius.lg);
-  ctx.fill();
-  ctx.stroke();
+  ctx.save();
+  roundPath(ctx, r.x, r.y, r.w, r.h, radius.lg);
+  ctx.clip();
+  woodFill(ctx, r.x, r.y, r.w, r.h, { seed: (r.x * 13 + r.y * 7) | 0, tone: 'warm' });
+  // Mosaic header band
+  mosaicFill(ctx, r.x, r.y, r.w, Math.min(28, r.h * 0.22), {
+    seed: ((r.x + r.y) * 31) | 0,
+    palette: mosaicPalettes.bronze,
+    cell: 6,
+    grout: colors.grout,
+  });
+  ctx.restore();
 
-  // Bronze edge catch-light (top) + deep inset (bottom)
-  ctx.strokeStyle = 'rgba(230,200,150,0.16)';
-  ctx.lineWidth = 1;
-  roundRect(ctx, r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3, radius.md);
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
-  roundRect(ctx, r.x + 2.5, r.y + 2.5, r.w - 5, r.h - 5, radius.sm);
-  ctx.stroke();
+  bronzeStroke(ctx, () => roundPath(ctx, r.x, r.y, r.w, r.h, radius.lg), 1.75);
+  carveFrame(ctx, r.x, r.y, r.w, r.h, radius.lg);
 
   if (title) {
-    label(ctx, title, r.x + space.md + 2, r.y + space.md + 2, { variant: 'title' });
+    label(ctx, title, r.x + space.md + 2, r.y + space.md + 4, { variant: 'title' });
   }
 }
 
+/** Alias — panels are plaques. */
+export function panel(ctx: CanvasRenderingContext2D, r: Rect, title?: string): void {
+  plaque(ctx, r, title);
+}
+
+/** Full-width carved wood rail with mosaic lip. */
+export function rail(
+  ctx: CanvasRenderingContext2D,
+  r: Rect,
+  opts?: { edge?: 'bottom' | 'top' | 'none' },
+): void {
+  const edge = opts?.edge ?? 'none';
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(r.x, r.y, r.w, r.h);
+  ctx.clip();
+  woodFill(ctx, r.x, r.y, r.w, r.h, { seed: 0x241 + (r.y | 0), tone: 'dark' });
+
+  // Mosaic accent strip on the world-facing edge
+  if (edge === 'bottom') {
+    mosaicFill(ctx, r.x, r.y + r.h - 10, r.w, 10, {
+      seed: 0x71,
+      palette: mosaicPalettes.bronze,
+      cell: 5,
+      grout: colors.grout,
+    });
+  } else if (edge === 'top') {
+    mosaicFill(ctx, r.x, r.y, r.w, 10, {
+      seed: 0x72,
+      palette: mosaicPalettes.bronze,
+      cell: 5,
+      grout: colors.grout,
+    });
+  }
+  ctx.restore();
+
+  // Fade into stage
+  const fade = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+  if (edge === 'bottom') {
+    fade.addColorStop(0.75, 'rgba(0,0,0,0)');
+    fade.addColorStop(1, 'rgba(10,6,3,0.35)');
+  } else if (edge === 'top') {
+    fade.addColorStop(0, 'rgba(10,6,3,0.35)');
+    fade.addColorStop(0.25, 'rgba(0,0,0,0)');
+  }
+  ctx.fillStyle = fade;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+
+  ctx.strokeStyle = 'rgba(196,154,85,0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (edge === 'bottom') {
+    ctx.moveTo(r.x + 6, r.y + r.h - 0.5);
+    ctx.lineTo(r.x + r.w - 6, r.y + r.h - 0.5);
+  } else if (edge === 'top') {
+    ctx.moveTo(r.x + 6, r.y + 0.5);
+    ctx.lineTo(r.x + r.w - 6, r.y + 0.5);
+  }
+  ctx.stroke();
+}
+
+/** Carved favor / crowd meter ( amphitheatre, not debug ). */
+export function meter(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  ratio01: number,
+  leftFill: string,
+  rightFill: string,
+): void {
+  const rr = Math.min(3, h / 2);
+  ctx.fillStyle = 'rgba(6,4,2,0.5)';
+  roundRect(ctx, x + 1, y + 1, w, h, rr);
+  ctx.fill();
+  const trough = ctx.createLinearGradient(x, y, x, y + h);
+  trough.addColorStop(0, '#2a2218');
+  trough.addColorStop(1, '#1a1410');
+  ctx.fillStyle = trough;
+  ctx.strokeStyle = surface.railBorder;
+  ctx.lineWidth = stroke.border;
+  roundRect(ctx, x, y, w, h, rr);
+  ctx.fill();
+  ctx.stroke();
+
+  const t = Math.min(1, Math.max(0, ratio01));
+  const lw = w * t;
+  const rw = w - lw;
+  if (lw > 0.5) {
+    const lg = ctx.createLinearGradient(x, y, x, y + h);
+    lg.addColorStop(0, lightenHex(leftFill, 0.12));
+    lg.addColorStop(1, darkenHex(leftFill, 0.15));
+    ctx.fillStyle = lg;
+    roundRect(ctx, x + 1, y + 1, Math.max(0, lw - 1), h - 2, rr);
+    ctx.fill();
+  }
+  if (rw > 0.5) {
+    const rg = ctx.createLinearGradient(x + lw, y, x + lw, y + h);
+    rg.addColorStop(0, lightenHex(rightFill, 0.12));
+    rg.addColorStop(1, darkenHex(rightFill, 0.15));
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    // Simple rect for right side to avoid roundRect clipping issues
+    ctx.fillRect(x + lw, y + 1, rw - 1, h - 2);
+  }
+  // Center seam
+  ctx.fillStyle = 'rgba(236,208,160,0.35)';
+  ctx.fillRect(x + lw - 1, y, 2, h);
+}
+
 /**
- * Soft sky + vignette behind chrome for menu shells (title/sandbox/ludus/flow).
- * Bottom/edge stops meet `colors.bg` exactly so letterbox + band edges never seam.
+ * Sword-and-sandal shell: dark timber hall + mosaic floor suggestion.
+ * Edges meet `colors.bg` so letterbox never seams.
  */
 export function shellAtmosphere(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-  const sky = ctx.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, '#3c2a1c');
-  sky.addColorStop(0.22, '#2c2016');
-  sky.addColorStop(0.55, '#221810');
-  sky.addColorStop(0.82, '#1c1612');
-  sky.addColorStop(1, colors.bg);
-  ctx.fillStyle = sky;
+  ctx.fillStyle = colors.bg;
   ctx.fillRect(0, 0, w, h);
 
-  const glow = ctx.createRadialGradient(
-    w / 2,
-    h * 0.26,
-    8,
-    w / 2,
-    h * 0.42,
-    Math.max(w, h) * 0.62,
-  );
-  glow.addColorStop(0, 'rgba(200,130,60,0.11)');
-  glow.addColorStop(0.45, 'rgba(120,80,40,0.045)');
-  glow.addColorStop(0.8, 'rgba(40,28,16,0.02)');
+  // Timber wall wash
+  woodFill(ctx, 0, 0, w, h, { seed: 0x5ae11, tone: 'dark' });
+  ctx.fillStyle = 'rgba(14,10,6,0.55)';
+  ctx.fillRect(0, 0, w, h);
+
+  // Mosaic floor band (lower third)
+  const floorY = h * 0.55;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, floorY, w, h - floorY);
+  ctx.clip();
+  mosaicFill(ctx, 0, floorY, w, h - floorY, {
+    seed: 0x40ca,
+    palette: mosaicPalettes.sand,
+    cell: 9,
+    grout: colors.grout,
+  });
+  ctx.restore();
+  const floorFade = ctx.createLinearGradient(0, floorY, 0, h);
+  floorFade.addColorStop(0, 'rgba(14,10,6,0.75)');
+  floorFade.addColorStop(0.35, 'rgba(14,10,6,0.25)');
+  floorFade.addColorStop(1, colors.bg);
+  ctx.fillStyle = floorFade;
+  ctx.fillRect(0, floorY, w, h - floorY);
+
+  // Warm torch haze
+  const glow = ctx.createRadialGradient(w / 2, h * 0.28, 4, w / 2, h * 0.4, Math.max(w, h) * 0.55);
+  glow.addColorStop(0, 'rgba(220,140,60,0.12)');
+  glow.addColorStop(0.5, 'rgba(120,70,30,0.05)');
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, w, h);
 
-  const vig = ctx.createRadialGradient(
-    w / 2,
-    h * 0.4,
-    Math.min(w, h) * 0.26,
-    w / 2,
-    h / 2,
-    Math.max(w, h) * 0.82,
-  );
+  const vig = ctx.createRadialGradient(w / 2, h * 0.42, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.85);
   vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(0.7, 'rgba(8,5,3,0.12)');
-  vig.addColorStop(0.9, 'rgba(8,5,3,0.28)');
-  vig.addColorStop(1, 'rgba(8,5,3,0.38)');
+  vig.addColorStop(0.75, 'rgba(8,5,3,0.2)');
+  vig.addColorStop(1, 'rgba(8,5,3,0.45)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
 }
@@ -261,54 +380,49 @@ export function buttonChrome(
   const accent = opts?.accent;
   const y = r.y + (pressed ? 1 : 0);
 
-  // Drop shadow / carved depth
   if (!opts?.disabled && !pressed) {
-    ctx.fillStyle = 'rgba(6,4,2,0.48)';
-    roundRect(ctx, r.x + 1.5, r.y + 3, r.w, r.h, radius.md);
+    ctx.fillStyle = 'rgba(6,3,1,0.55)';
+    roundRect(ctx, r.x + 2, r.y + 3, r.w, r.h, radius.md);
     ctx.fill();
   }
 
-  let top: string;
-  let mid: string;
-  let bot: string;
+  ctx.save();
+  roundPath(ctx, r.x, y, r.w, r.h, radius.md);
+  ctx.clip();
   if (opts?.disabled) {
-    top = mid = bot = surface.buttonDisabled;
+    ctx.fillStyle = surface.buttonDisabled;
+    ctx.fillRect(r.x, y, r.w, r.h);
   } else if (opts?.active) {
-    const a = accent ?? surface.buttonActive;
-    top = accent ? lightenHex(a, 0.12) : '#c4563c';
-    mid = a;
-    bot = accent ? 'rgba(0,0,0,0.5)' : '#4a1e14';
-  } else if (hovered) {
-    top = '#72604c';
-    mid = surface.buttonHot;
-    bot = '#3a2a1e';
+    const pal = accent
+      ? [accent, lightenHex(accent, 0.1), darkenHex(accent, 0.15)]
+      : mosaicPalettes.bronze;
+    mosaicFill(ctx, r.x, y, r.w, r.h, {
+      seed: (r.x * 3 + r.y) | 0,
+      palette: pal,
+      cell: 5,
+      grout: colors.grout,
+    });
   } else {
-    top = '#564636';
-    mid = surface.button;
-    bot = '#261c14';
+    woodFill(ctx, r.x, y, r.w, r.h, {
+      seed: (r.x + r.y * 5) | 0,
+      tone: hovered ? 'warm' : 'dark',
+    });
+    if (hovered) {
+      ctx.fillStyle = 'rgba(220,160,80,0.1)';
+      ctx.fillRect(r.x, y, r.w, r.h);
+    }
   }
+  ctx.restore();
 
-  const g = ctx.createLinearGradient(r.x, y, r.x, y + r.h);
-  g.addColorStop(0, top);
-  g.addColorStop(0.4, mid);
-  g.addColorStop(1, bot);
-  ctx.fillStyle = g;
-  ctx.strokeStyle = opts?.active ? (accent ?? colors.accentHot) : surface.panelBorder;
-  ctx.lineWidth = stroke.emphasis;
-  roundRect(ctx, r.x, y, r.w, r.h, radius.md);
-  ctx.fill();
-  ctx.stroke();
-
-  // Inner bronze lip (pressed = darker inset)
+  bronzeStroke(ctx, () => roundPath(ctx, r.x, y, r.w, r.h, radius.md), opts?.active ? 2 : 1.5);
   if (!opts?.disabled) {
-    ctx.strokeStyle = pressed ? 'rgba(0,0,0,0.4)' : 'rgba(236,208,160,0.18)';
+    ctx.strokeStyle = pressed ? 'rgba(0,0,0,0.45)' : 'rgba(255,220,160,0.12)';
     ctx.lineWidth = 1;
     roundRect(ctx, r.x + 1.5, y + 1.5, r.w - 3, r.h - 3, radius.sm);
     ctx.stroke();
   }
 
   const clicked = Boolean(hovered && pointer.clicked && !opts?.disabled);
-  // First handler wins — prevent one click from activating stacked controls.
   if (clicked) pointer.clicked = false;
   return { hovered, pressed, clicked };
 }
@@ -327,6 +441,22 @@ export function button(
   ctx.textBaseline = 'middle';
   ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2 + (pressed ? 1 : 0));
   return clicked;
+}
+
+/** Primary bronze CTA — Lab Fight / Title Instant Match. */
+export function cta(
+  ctx: CanvasRenderingContext2D,
+  r: Rect,
+  text: string,
+  pointer: PointerState,
+  opts?: { disabled?: boolean; size?: number },
+): boolean {
+  return button(ctx, r, text, pointer, {
+    active: true,
+    disabled: opts?.disabled,
+    accent: colors.bronze,
+    size: opts?.size ?? typeScale.title,
+  });
 }
 
 export function bar(
@@ -369,20 +499,15 @@ export function segmentedControl(
   const n = options.length;
   if (n === 0) return null;
   const segW = r.w / n;
-  // Carved trough
-  ctx.fillStyle = 'rgba(6,4,2,0.4)';
-  roundRect(ctx, r.x + 1, r.y + 2, r.w, r.h, radius.md);
-  ctx.fill();
-  const trough = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
-  trough.addColorStop(0, '#241c14');
-  trough.addColorStop(0.5, '#2e261e');
-  trough.addColorStop(1, '#3a3028');
-  ctx.fillStyle = trough;
-  ctx.strokeStyle = surface.panelBorder;
-  ctx.lineWidth = stroke.border;
-  roundRect(ctx, r.x, r.y, r.w, r.h, radius.md);
-  ctx.fill();
-  ctx.stroke();
+  // Carved wood trough
+  ctx.save();
+  roundPath(ctx, r.x, r.y, r.w, r.h, radius.md);
+  ctx.clip();
+  woodFill(ctx, r.x, r.y, r.w, r.h, { seed: 0x5e9, tone: 'dark' });
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.restore();
+  bronzeStroke(ctx, () => roundPath(ctx, r.x, r.y, r.w, r.h, radius.md), 1.25);
 
   let clicked: number | null = null;
   for (let i = 0; i < n; i++) {
@@ -390,19 +515,18 @@ export function segmentedControl(
     const hovered = hit(sr, pointer.x, pointer.y);
     const active = i === activeIndex;
     if (active) {
-      const ag = ctx.createLinearGradient(sr.x, sr.y, sr.x, sr.y + sr.h);
-      ag.addColorStop(0, '#c4563c');
-      ag.addColorStop(0.45, surface.buttonActive);
-      ag.addColorStop(1, '#4a1e14');
-      ctx.fillStyle = ag;
-      roundRect(ctx, sr.x + 1.5, sr.y + 1.5, sr.w - 3, sr.h - 3, radius.sm);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(236,208,160,0.2)';
-      ctx.lineWidth = 1;
-      roundRect(ctx, sr.x + 2, sr.y + 2, sr.w - 4, sr.h - 4, radius.sm);
-      ctx.stroke();
+      ctx.save();
+      roundPath(ctx, sr.x + 1.5, sr.y + 1.5, sr.w - 3, sr.h - 3, radius.sm);
+      ctx.clip();
+      mosaicFill(ctx, sr.x, sr.y, sr.w, sr.h, {
+        seed: 0xac7 + i,
+        palette: mosaicPalettes.bronze,
+        cell: 4,
+        grout: colors.grout,
+      });
+      ctx.restore();
     } else if (hovered) {
-      ctx.fillStyle = surface.buttonHot;
+      ctx.fillStyle = 'rgba(196,154,85,0.15)';
       roundRect(ctx, sr.x + 1.5, sr.y + 1.5, sr.w - 3, sr.h - 3, radius.sm);
       ctx.fill();
     }

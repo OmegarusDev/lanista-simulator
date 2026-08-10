@@ -47,4 +47,16 @@ describe('ArenaCamera', () => {
     expect(br.x).toBeCloseTo(ARENA_WORLD_W, 5);
     expect(br.y).toBeCloseTo(ARENA_WORLD_H, 5);
   });
+
+  it('cover-fills a tall Lab viewport with no letterbox bands', () => {
+    const box = { x: 0, y: 0, w: 390, h: 844 };
+    const cam = new ArenaCamera();
+    cam.reset(1, 'cover');
+    const t = cam.toTransform(box);
+    const cover = Math.max(box.w / ARENA_WORLD_W, box.h / ARENA_WORLD_H);
+    expect(t.scale).toBeCloseTo(cover, 5);
+    // Cover scale must beat contain (otherwise you get the picture-window bars).
+    const contain = Math.min(box.w / ARENA_WORLD_W, box.h / ARENA_WORLD_H);
+    expect(t.scale).toBeGreaterThan(contain + 0.01);
+  });
 });

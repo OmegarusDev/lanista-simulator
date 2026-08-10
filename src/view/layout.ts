@@ -5,7 +5,7 @@ import {
   orientationOf,
   type Orientation,
 } from '../shell/canvas';
-import { space, touchTarget } from './theme';
+import { labRails, space, touchTarget } from './theme';
 import type { Rect } from './ui';
 
 export type { Orientation };
@@ -126,6 +126,7 @@ export interface FightStageLayout {
  * Fight chrome + arena viewport for the current design size.
  * Portrait: stacked HUD — arena in the upper band, roster + controls below.
  * Landscape: arena fills the stage; chrome overlays top/bottom margins.
+ * Rail heights from `labRails` (fight chrome bands).
  */
 export function fightStageLayout(w?: number, h?: number): FightStageLayout {
   const d = getDesign();
@@ -134,10 +135,9 @@ export function fightStageLayout(w?: number, h?: number): FightStageLayout {
   const orientation = orientationOf(dw, dh);
   const portrait = orientation === 'portrait';
 
-  // Readable chrome + ~44px touch rows; arena still claims the middle band.
-  const topBandH = portrait ? 52 : 48;
-  const rosterLabelH = 14;
-  const rosterH = portrait ? touchTarget : 40;
+  const topBandH = portrait ? labRails.topHPortrait : labRails.topH;
+  const rosterLabelH = labRails.rosterLabelH;
+  const rosterH = portrait ? labRails.rosterHPortrait : labRails.rosterH;
   const bottomRows = 1 as const;
   const rowH = portrait ? touchTarget : 40;
   const bottomCtrlH = rowH;
@@ -290,29 +290,6 @@ export function flowHeaderLayout(w?: number, h?: number): FlowHeaderLayout {
   };
 }
 
-/** Wrap equal-width chips into a grid. */
-export function wrapGrid(
-  count: number,
-  area: Rect,
-  cellW: number,
-  cellH: number,
-  gap: number,
-): Rect[] {
-  const cols = Math.max(1, Math.floor((area.w + gap) / (cellW + gap)));
-  const rects: Rect[] = [];
-  for (let i = 0; i < count; i++) {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    rects.push({
-      x: area.x + col * (cellW + gap),
-      y: area.y + row * (cellH + gap),
-      w: cellW,
-      h: cellH,
-    });
-  }
-  return rects;
-}
-
 /** Distribute `n` buttons across a row (or wrap). */
 export function buttonRow(
   x: number,
@@ -329,133 +306,4 @@ export function buttonRow(
     out.push({ x: x + i * (bw + gap), y, w: bw, h });
   }
   return out;
-}
-
-export interface SandboxLayout {
-  orientation: Orientation;
-  w: number;
-  h: number;
-  pad: number;
-  titleBtn: Rect;
-  brandY: number;
-  subtitleY: number;
-  historicalLabelY: number;
-  presetRects: Rect[];
-  leftPanel: Rect;
-  rightPanel: Rect;
-  center: {
-    size1: Rect;
-    size2: Rect;
-    size3: Rect;
-    vsY: number;
-    seedY: number;
-    reroll: Rect;
-    fight: Rect;
-  };
-  footerY: number;
-  stacked: boolean;
-}
-
-export function sandboxLayout(w?: number, h?: number, presetCount = 4): SandboxLayout {
-  const d = getDesign();
-  const dw = w ?? d.w;
-  const dh = h ?? d.h;
-  const orientation = orientationOf(dw, dh);
-  const stacked = orientation === 'portrait' || dw < 780;
-  const pad = shellPad(dw);
-
-  const titleBtn: Rect = { x: pad, y: pad, w: touchTarget, h: touchTarget };
-  const brandY = stacked ? 32 : 38;
-  const subtitleY = brandY + 22;
-  const historicalLabelY = subtitleY + 20;
-
-  // Two-line full armatura names (e.g. "Murmillo" / "vs Thraex") need taller cells.
-  const presetH = touchTarget;
-  const presetGap = 8;
-  const presetCols = stacked ? 2 : Math.min(3, Math.max(1, presetCount));
-  const presetCellW = (dw - pad * 2 - presetGap * (presetCols - 1)) / presetCols;
-  const presetRows = Math.ceil(presetCount / presetCols);
-  const presetArea: Rect = {
-    x: pad,
-    y: historicalLabelY + 10,
-    w: dw - pad * 2,
-    h: presetRows * presetH + Math.max(0, presetRows - 1) * presetGap,
-  };
-  const presetRects = wrapGrid(presetCount, presetArea, presetCellW, presetH, presetGap);
-
-  const presetsBottom =
-    presetRects.length > 0
-      ? Math.max(...presetRects.map((r) => r.y + r.h))
-      : historicalLabelY + 40;
-
-  let leftPanel: Rect;
-  let rightPanel: Rect;
-  let center: SandboxLayout['center'];
-
-  if (stacked) {
-    const ctrlY = presetsBottom + 18;
-    const midX = dw / 2;
-    const sizeH = 40;
-    const sizeW = 72;
-    const sizeGap = 6;
-    const sizesW = sizeW * 3 + sizeGap * 2;
-    const sizeX0 = midX - sizesW / 2;
-    center = {
-      size1: { x: sizeX0, y: ctrlY, w: sizeW, h: sizeH },
-      size2: { x: sizeX0 + sizeW + sizeGap, y: ctrlY, w: sizeW, h: sizeH },
-      size3: { x: sizeX0 + (sizeW + sizeGap) * 2, y: ctrlY, w: sizeW, h: sizeH },
-      vsY: ctrlY + 34,
-      seedY: ctrlY + 52,
-      reroll: { x: midX - 56, y: ctrlY + 62, w: 112, h: 36 },
-      fight: { x: midX - 100, y: ctrlY + 108, w: 200, h: 56 },
-    };
-    const panelY = ctrlY + 180;
-    const panelH = Math.max(200, (dh - panelY - 32 - 8) / 2);
-    leftPanel = { x: pad, y: panelY, w: dw - pad * 2, h: panelH };
-    rightPanel = {
-      x: pad,
-      y: panelY + panelH + 8,
-      w: dw - pad * 2,
-      h: Math.max(180, dh - (panelY + panelH + 8) - 32),
-    };
-  } else {
-    const panelY = presetsBottom + 16;
-    const sideW = Math.min(350, (dw - 200) / 2);
-    const leftX = pad;
-    const rightX = dw - pad - sideW;
-    const panelH = dh - panelY - 40;
-    leftPanel = { x: leftX, y: panelY, w: sideW, h: panelH };
-    rightPanel = { x: rightX, y: panelY, w: sideW, h: panelH };
-    const midX = dw / 2;
-    const sizeW = 70;
-    const sizeGap = 6;
-    const sizesW = sizeW * 3 + sizeGap * 2;
-    const sizeX0 = midX - sizesW / 2;
-    center = {
-      size1: { x: sizeX0, y: panelY + 32, w: sizeW, h: 40 },
-      size2: { x: sizeX0 + sizeW + sizeGap, y: panelY + 32, w: sizeW, h: 40 },
-      size3: { x: sizeX0 + (sizeW + sizeGap) * 2, y: panelY + 32, w: sizeW, h: 40 },
-      vsY: panelY + 112,
-      seedY: panelY + 152,
-      reroll: { x: midX - 56, y: panelY + 164, w: 112, h: 36 },
-      fight: { x: midX - 100, y: panelY + 212, w: 200, h: 56 },
-    };
-  }
-
-  return {
-    orientation,
-    w: dw,
-    h: dh,
-    pad,
-    titleBtn,
-    brandY,
-    subtitleY,
-    historicalLabelY,
-    presetRects,
-    leftPanel,
-    rightPanel,
-    center,
-    footerY: dh - 14,
-    stacked,
-  };
 }

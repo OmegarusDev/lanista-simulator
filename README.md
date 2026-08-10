@@ -6,7 +6,7 @@
 
 <p align="center"><strong>No install.</strong> Works in the browser (desktop &amp; mobile).</p>
 
-<p align="center"><sub>Offline shortcut: download <a href="PLAY.html"><code>PLAY.html</code></a> and open it locally — it launches the hosted game.</sub></p>
+<p align="center"><sub>Offline shortcut: open <a href="PLAY.html"><code>PLAY.html</code></a> for local Lab / Pages links.</sub></p>
 
 # Lanista Simulator
 
@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5299` (dedicated port so it doesn’t collide with other local games).
+Open `http://127.0.0.1:5299/lanista-simulator/` (Vite base path; port 5299 avoids colliding with other local games).
 
 ```bash
 npm test
@@ -32,8 +32,8 @@ npm run build
 ## Flow
 
 **Title:** Instant Match (one click) · New Season · Continue (if saved).  
-**Instant Match:** existing 1v1/2v2 sandbox — no career side effects.  
-**Season:** Ludus hub → Munera board (class-gated classics + spectacles/melees up to 3v3) → slot Lineup → Fight → Aftermath → End Day (12 days). Heal, rest days, upkeep, virtus tiers. Insolvency or day 12 ends the run.
+**Instant Match:** Lab amphitheatre — 1v1/2v2/3v3, Match/Venatio — no career side effects.  
+**Season:** Ludus hub → Munera board (class-gated classics + spectacles/melees up to 3v3) → slot Lineup → Fight → Aftermath → End Day (`economy.seasonDays`, currently 14). Heal, rest days, upkeep, virtus tiers. Insolvency or season end closes the run.
 
 ## Controls
 

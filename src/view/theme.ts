@@ -12,12 +12,11 @@
  * 4. Team color is structural — stripe, chip edge, selection ring — not rainbow UI.
  * 5. Debug chrome must look distinct from player chrome (DEV strip, FEEL badge).
  *
- * Prefer helpers in `ui.ts` (panel, button, rosterChip, inspectCard, segmentedControl,
- * hairline, label variants). Layout geometry lives in `layout.ts`. Colors in
- * `content/palette.ts`; spacing/type/z here.
+ * Prefer helpers in `ui.ts` (rail, plaque, cta/button, meter, segmentedControl,
+ * shellAtmosphere, hairline, label variants). Fight layout in `layout.ts`;
+ * Instant Match stage in `labStage.ts`. Colors in `content/palette.ts`.
  */
 
-import { getDesign } from '../shell/canvas';
 import { colors } from '../content/palette';
 
 /** 4px base spacing scale */
@@ -33,7 +32,6 @@ export const space = {
 /**
  * Palatino type scale (design px) — use with font stack in ui.ts.
  * Hierarchy: banner > display > title > label > body > meta > eyebrow.
- * Floors are phone-readable at design≈CSS (scale≈1); avoid one-off sizes.
  */
 export const typeScale = {
   eyebrow: 12,
@@ -70,60 +68,31 @@ export const radius = {
   lg: 8,
 } as const;
 
-/** Panel / button surface tokens (aliases into palette) */
+/** Surface tokens used by chrome helpers */
 export const surface = {
-  panel: colors.panel,
   panelBorder: colors.panelBorder,
-  panelFillSolid: colors.panelSolid,
+  railBorder: colors.railBorder,
   button: colors.button,
   buttonHot: colors.buttonHot,
   buttonActive: colors.accent,
   buttonDisabled: colors.buttonDisabled,
-  ink: colors.ink,
   parchment: colors.parchment,
   muted: colors.muted,
   buttonText: colors.buttonText,
   team0: colors.ally,
   team1: colors.foe,
-  debug: colors.debug,
-  debugText: colors.debugText,
   hairline: colors.hairline,
 } as const;
 
-/**
- * Paint order bands (documentation / future layering).
- * Canvas2D draws in call order; keep world → fx → chrome → modal.
- */
-export const zBand = {
-  world: 0,
-  worldFx: 1,
-  chrome: 10,
-  inspect: 11,
-  debug: 12,
-  modal: 20,
-} as const;
-
-/** Fight chrome geometry defaults (landscape reference). Prefer fightStageLayout(). */
-export const fightLayout = {
-  topBandH: 48,
-  /** Team eyebrow + chip row */
-  rosterLabelH: 14,
+/** Fight chrome band heights (portrait / landscape via fightStageLayout). */
+export const labRails = {
+  topH: 52,
+  topHPortrait: 56,
   rosterH: 40,
-  bottomCtrlH: 40,
-  bottomPad: 8,
-  inspectW: 240,
-  inspectMaxH: 320,
-  inspectPad: 12,
-  chipGap: 6,
-  hitRadius: 26,
+  rosterHPortrait: touchTarget,
+  rosterLabelH: 14,
 } as const;
 
 export function teamAccent(team: 0 | 1): string {
   return team === 0 ? surface.team0 : surface.team1;
-}
-
-/** Live design canvas size for chrome math */
-export function canvasSize(): { w: number; h: number } {
-  const d = getDesign();
-  return { w: d.w, h: d.h };
 }

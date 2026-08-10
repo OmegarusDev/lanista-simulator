@@ -38,7 +38,9 @@ import {
   hairline,
   inspectCard,
   label,
-  panel,
+  meter,
+  plaque,
+  rail,
   rosterChip,
   segmentedControl,
 } from '../../view/ui';
@@ -243,13 +245,19 @@ export class FightScene {
 
     drawArenaChromeVignette(ctx, stage);
 
-    // —— Chrome bands (design space) ——
+    // —— Chrome bands (design space) — stone rails ——
     const chromePtr = this.paused ? DEAD_POINTER : input.pointer;
+    rail(ctx, { x: 0, y: 0, w: stage.w, h: stage.topBandH }, { edge: 'bottom' });
     this.drawTopBand(ctx, stage);
+    this.drawCrowdFeedback(ctx, stage);
+    rail(
+      ctx,
+      { x: 0, y: stage.rosterBandTop - 4, w: stage.w, h: stage.h - stage.rosterBandTop + 4 },
+      { edge: 'top' },
+    );
     let action = this.drawBottomChrome(ctx, chromePtr, stage);
     this.drawRoster(ctx, chromePtr, snaps, stage);
     this.drawInspect(ctx, snaps, stage);
-    this.drawCrowdFeedback(ctx, stage);
 
     if (this.debugFeel) {
       debugBadge(ctx, stage.w - 56, 8);
@@ -269,7 +277,7 @@ export class FightScene {
   }
 
   private drawTopBand(ctx: CanvasRenderingContext2D, stage: FightStageLayout): void {
-    const yTitle = stage.orientation === 'portrait' ? 30 : 28;
+    const yTitle = stage.orientation === 'portrait' ? 28 : 26;
     label(ctx, `${this.config.teamSize}v${this.config.teamSize}`, 16, yTitle, {
       size: typeScale.title,
       color: colors.parchment,
@@ -291,10 +299,13 @@ export class FightScene {
       color: colors.muted,
     });
 
-    label(ctx, `seed ${this.config.seed}`, 16, yTitle + 18, {
-      variant: 'eyebrow',
-      color: colors.muted,
-    });
+    if (!this.career) {
+      label(ctx, `seed ${this.config.seed}`, stage.w - 16, yTitle, {
+        variant: 'eyebrow',
+        align: 'right',
+        color: colors.muted,
+      });
+    }
   }
 
   private careerLeave(): FightAction {
@@ -341,48 +352,32 @@ export class FightScene {
       }
       if (bestFavor >= 0.62) {
         lean = `Crowd favors ${best.name}`;
-        leanColor = colors.stamina;
+        leanColor = colors.bronzeHot;
       }
     }
 
-    const leanY =
-      stage.orientation === 'portrait'
-        ? stage.worldBox.y + 20
-        : stage.topBandH + 16;
-    label(ctx, lean, stage.w / 2, leanY, {
-      size: typeScale.meta,
-      align: 'center',
-      color: leanColor,
-    });
-
-    // Team Blue vs Red favor bar — amphitheatre meter, not debug strip
+    // Captions + favor live in the top rail (broadcast), not on sand
     const blueFavor = this.match.teamCrowdFavor(0);
     const redFavor = this.match.teamCrowdFavor(1);
     const favorSum = blueFavor + redFavor;
     const favor = favorSum > 0 ? blueFavor / favorSum : 0.5;
-    const barW = Math.min(200, stage.w * 0.42);
+    const barW = Math.min(200, stage.w * 0.4);
     const barX = stage.w / 2 - barW / 2;
-    const barY = leanY + 10;
-    const barH = 6;
-    ctx.fillStyle = 'rgba(6,4,2,0.5)';
-    ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-    ctx.fillStyle = colors.ally;
-    ctx.fillRect(barX, barY, barW * favor, barH);
-    ctx.fillStyle = colors.foe;
-    ctx.fillRect(barX + barW * favor, barY, barW * (1 - favor), barH);
-    ctx.strokeStyle = 'rgba(168,136,96,0.35)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX, barY, barW, barH);
+    meter(ctx, barX, 6, barW, 7, favor, colors.ally, colors.foe);
 
+    const captionY = stage.topBandH - 8;
     if (this.crowdShout && this.crowdShoutLife > 0) {
       const alpha = Math.min(1, this.crowdShoutLife / 30);
-      const sw = Math.min(280, stage.w * 0.7);
-      ctx.fillStyle = `rgba(12,8,6,${(0.35 * alpha).toFixed(2)})`;
-      ctx.fillRect(stage.w / 2 - sw / 2, leanY + 20, sw, 22);
-      label(ctx, this.crowdShout.text, stage.w / 2, leanY + 36, {
+      label(ctx, this.crowdShout.text, stage.w / 2, captionY, {
         size: typeScale.label,
         align: 'center',
         color: `rgba(242, 232, 212, ${alpha.toFixed(2)})`,
+      });
+    } else {
+      label(ctx, lean, stage.w / 2, captionY, {
+        size: typeScale.meta,
+        align: 'center',
+        color: leanColor,
       });
     }
   }
@@ -464,7 +459,7 @@ export class FightScene {
     const panelX = (stage.w - panelW) / 2;
     const panelY = Math.max(space.lg, (stage.h - panelH) / 2 - (portrait ? 12 : 0));
     const pr = { x: panelX, y: panelY, w: panelW, h: panelH };
-    panel(ctx, pr, 'Paused');
+    plaque(ctx, pr, 'Paused');
 
     const btnX = panelX + space.md;
     const btnW = panelW - space.md * 2;
@@ -720,6 +715,9 @@ export class FightScene {
     snaps: FighterSnapshot[],
     stage: FightStageLayout,
   ): void {
+    if (input.wheelDelta !== 0) {
+      this.cam.nudgeZoom(-Math.sign(input.wheelDelta) * 0.06);
+    }
     const p = input.pointer;
     const v = stage.worldBox;
     const t = this.worldT ?? this.cam.toTransform(v);

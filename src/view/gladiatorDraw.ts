@@ -1,9 +1,10 @@
-import { ARMATURAE, effectiveAttackArc, type ArmaturaId } from '../content/armatura';
+import { ARMATURAE, effectiveAttackArc } from '../content/armatura';
 import { ARMATURA_LOOK, massScale, type ArmaturaLook } from '../content/appearance';
-import { BEASTS, type BeastId } from '../content/beasts';
+import { BEASTS } from '../content/beasts';
 import { colors } from '../content/palette';
 import type { FighterSnapshot } from '../domain/combat/types';
 import { SUN } from './arena';
+import { mosaicFill, mosaicPalettes } from './materials';
 import { fontStack, typeScale } from './theme';
 import { bar } from './ui';
 
@@ -22,114 +23,13 @@ function poseOf(f: FighterSnapshot): Pose {
   return 'idle';
 }
 
-/** Static preview glyph for menus / sandbox picks. */
-export function drawArmaturaPreview(
-  ctx: CanvasRenderingContext2D,
-  armatura: ArmaturaId,
-  x: number,
-  y: number,
-  opts?: { facing?: number; team?: 0 | 1; scale?: number },
-): void {
-  const facing = opts?.facing ?? -Math.PI / 2;
-  const team = opts?.team ?? 0;
-  const scale = opts?.scale ?? 1;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
-  drawGladiatorGlyph(
-    ctx,
-    {
-      id: 0,
-      team,
-      kind: 'gladiator',
-      armatura,
-      beastId: null,
-      name: ARMATURAE[armatura].short,
-      x: 0,
-      y: 0,
-      facing,
-      hp: 1,
-      maxHp: 1,
-      stamina: 1,
-      maxStamina: 1,
-      poise: 1,
-      maxPoise: 1,
-      action: 'NONE',
-      phase: 'IDLE',
-      phaseT: 0,
-      phaseMax: 0,
-      footwork: 'HOLD',
-      intention: 'NONE',
-      desiredDist: 45,
-      poiseTier: 'SOLID',
-      stunned: false,
-      tangled: false,
-      poiseBroken: false,
-      guarding: false,
-      alive: true,
-      flash: 0,
-    },
-    false,
-  );
-}
-
-/** Static beast preview for Instant Match venatio. */
-export function drawBeastPreview(
-  ctx: CanvasRenderingContext2D,
-  beast: BeastId,
-  x: number,
-  y: number,
-  opts?: { facing?: number; team?: 0 | 1; scale?: number },
-): void {
-  const facing = opts?.facing ?? -Math.PI / 2;
-  const team = opts?.team ?? 1;
-  const scale = opts?.scale ?? 1;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
-  drawBeastGlyph(
-    ctx,
-    {
-      id: 0,
-      team,
-      kind: 'beast',
-      armatura: 'MURMILLO',
-      beastId: beast,
-      name: BEASTS[beast].short,
-      x: 0,
-      y: 0,
-      facing,
-      hp: 1,
-      maxHp: 1,
-      stamina: 1,
-      maxStamina: 1,
-      poise: 1,
-      maxPoise: 1,
-      action: 'NONE',
-      phase: 'IDLE',
-      phaseT: 0,
-      phaseMax: 0,
-      footwork: 'HOLD',
-      intention: 'NONE',
-      desiredDist: 45,
-      poiseTier: 'SOLID',
-      stunned: false,
-      tangled: false,
-      poiseBroken: false,
-      guarding: false,
-      alive: true,
-      flash: 0,
-    },
-    false,
-  );
-  ctx.restore();
-}
-
 export interface DrawGladiatorOpts {
   /** Team-tinted ring under glyph */
   selected?: boolean;
   /** Small name under bars only while selected */
   showSelectedName?: boolean;
+  /** Menu / posed preview — glyphs only, no combat meters. */
+  hideBars?: boolean;
 }
 
 /** Top-down class glyph: silhouette matches kit geometry. */
@@ -138,7 +38,7 @@ export function drawGladiator(
   f: FighterSnapshot,
   opts?: DrawGladiatorOpts,
 ): void {
-  drawGladiatorGlyph(ctx, f, true, opts);
+  drawGladiatorGlyph(ctx, f, opts?.hideBars !== true, opts);
 }
 
 function drawBeastGlyph(
@@ -164,22 +64,25 @@ function drawBeastGlyph(
     ctx.rotate(f.facing);
   }
 
-  // Body with volume
+  // Mosaic beast mass
   const brx = 14 * scale;
   const bry = 9 * scale;
-  const bodyG = ctx.createRadialGradient(SUN.dx * 6, SUN.dy * 5, 1, 0, 0, brx);
-  bodyG.addColorStop(0, lighten(beast.color, 0.22));
-  bodyG.addColorStop(0.55, beast.color);
-  bodyG.addColorStop(1, darken(beast.color, 0.28));
-  ctx.fillStyle = bodyG;
+  ctx.save();
   ctx.beginPath();
   ctx.ellipse(0, 0, brx, bry, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.clip();
+  mosaicFill(ctx, -brx - 2, -bry - 2, brx * 2 + 4, bry * 2 + 4, {
+    seed: (f.beastId?.length ?? 1) * 41,
+    palette: [beast.color, lighten(beast.color, 0.15), darken(beast.color, 0.2), ...mosaicPalettes.cavea],
+    cell: Math.max(3, 4 * scale),
+    grout: colors.grout,
+  });
+  ctx.restore();
   ctx.strokeStyle = teamTint;
   ctx.lineWidth = 2.2;
-  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, brx, bry, 0, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.globalAlpha = 1;
 
   // Head / snout forward
   const headG = ctx.createRadialGradient(14 * scale, -1, 0, 11 * scale, 0, 7 * scale);
@@ -329,9 +232,9 @@ function drawGroundShadow(
   const rx = (fallen ? 21 : 16) * scale;
   const ry = (fallen ? 10 : 7.5) * scale;
   const g = ctx.createRadialGradient(ox, oy + 3, 0, ox, oy + 3, rx);
-  g.addColorStop(0, fallen ? 'rgba(20,12,6,0.38)' : 'rgba(20,12,6,0.34)');
-  g.addColorStop(0.55, fallen ? 'rgba(20,12,6,0.16)' : 'rgba(20,12,6,0.14)');
-  g.addColorStop(1, 'rgba(20,12,6,0)');
+  g.addColorStop(0, fallen ? 'rgba(16,10,5,0.48)' : 'rgba(16,10,5,0.42)');
+  g.addColorStop(0.5, fallen ? 'rgba(16,10,5,0.2)' : 'rgba(16,10,5,0.18)');
+  g.addColorStop(1, 'rgba(16,10,5,0)');
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.ellipse(ox, oy + 3, rx, ry, 0.35, 0, Math.PI * 2);
@@ -476,32 +379,48 @@ function drawBody(
 ): void {
   const rx = look.bodyRx * scale * (pose === 'sidestep' ? 0.92 : 1);
   const ry = look.bodyRy * scale * (pose === 'guard' ? 1.08 : 1);
+  const teamPal = teamTint === colors.ally ? mosaicPalettes.team0 : mosaicPalettes.team1;
 
-  // Volume fill
-  const g = ctx.createRadialGradient(SUN.dx * rx * 0.5, SUN.dy * ry * 0.5, 1, 0, 0, rx * 1.1);
-  g.addColorStop(0, lighten(look.bodyFill, 0.18));
-  g.addColorStop(0.5, look.bodyFill);
-  g.addColorStop(1, darken(look.bodyFill, 0.22));
-  ctx.fillStyle = g;
+  // Mosaic tessera body — inlaid figure, not soft blob
+  ctx.save();
   ctx.beginPath();
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.clip();
+  mosaicFill(ctx, -rx - 2, -ry - 2, rx * 2 + 4, ry * 2 + 4, {
+    seed: Math.round(look.bodyRx * 100 + look.bodyRy * 50),
+    palette: [...teamPal, look.bodyFill, look.leather],
+    cell: Math.max(3, 4.5 * scale),
+    grout: colors.grout,
+    jitter: 0.45,
+  });
+  // Flesh/leather wash so kit still reads
+  const wash = ctx.createRadialGradient(SUN.dx * rx * 0.4, SUN.dy * ry * 0.4, 0, 0, 0, rx);
+  wash.addColorStop(0, 'rgba(255,230,190,0.12)');
+  wash.addColorStop(0.55, 'rgba(0,0,0,0)');
+  wash.addColorStop(1, 'rgba(20,10,5,0.28)');
+  ctx.fillStyle = wash;
+  ctx.fillRect(-rx, -ry, rx * 2, ry * 2);
+  ctx.restore();
 
-  // Outline
-  ctx.strokeStyle = 'rgba(20,14,10,0.45)';
-  ctx.lineWidth = 1.2 * scale;
+  ctx.strokeStyle = 'rgba(20,12,6,0.75)';
+  ctx.lineWidth = 1.6 * scale;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.strokeStyle = colors.bronze;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 1 * scale;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
 
-  // Team sash
+  // Team sash — bronze-edged cloth
   ctx.strokeStyle = teamTint;
-  ctx.globalAlpha = 0.9;
-  ctx.lineWidth = 2.8 * scale;
+  ctx.lineWidth = 3.2 * scale;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(-rx * 0.72, -ry * 0.12);
   ctx.lineTo(rx * 0.32, -ry * 0.12);
   ctx.stroke();
-  ctx.globalAlpha = 1;
 
   ctx.strokeStyle = look.leather;
   ctx.lineWidth = 2 * scale;
@@ -510,18 +429,21 @@ function drawBody(
   ctx.stroke();
 
   if (look.breastplate) {
-    const mg = ctx.createLinearGradient(-rx * 0.3, -ry * 0.4, rx * 0.4, ry * 0.4);
-    mg.addColorStop(0, lighten(look.metal, 0.25));
-    mg.addColorStop(0.5, look.metal);
-    mg.addColorStop(1, darken(look.metal, 0.2));
-    ctx.fillStyle = mg;
-    ctx.globalAlpha = 0.9;
+    ctx.save();
     ctx.beginPath();
     ctx.ellipse(1 * scale, 0, rx * 0.55, ry * 0.7, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.clip();
+    mosaicFill(ctx, -rx, -ry, rx * 2, ry * 2, {
+      seed: 99,
+      palette: mosaicPalettes.bronze,
+      cell: 3.5 * scale,
+      grout: '#3a2a18',
+    });
+    ctx.restore();
     ctx.strokeStyle = look.leather;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(1 * scale, 0, rx * 0.55, ry * 0.7, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
@@ -826,7 +748,7 @@ function drawScissorArm(
   ctx.restore();
 }
 
-/** Bars-only overhead; optional selected name under the stack. */
+/** Bars-only overhead — carved meter language, optional selected name. */
 function drawBars(
   ctx: CanvasRenderingContext2D,
   f: FighterSnapshot,
@@ -834,9 +756,9 @@ function drawBars(
 ): void {
   const def = ARMATURAE[f.armatura];
   const scale = massScale(def.mass);
-  const bw = 46;
+  const bw = 48;
   const bx = f.x - bw / 2;
-  const by = f.y - (28 + 8 * scale);
+  const by = f.y - (30 + 8 * scale);
   const stam = f.stamina / f.maxStamina;
   const poise = f.poise / f.maxPoise;
   const poiseColor =
@@ -847,12 +769,17 @@ function drawBars(
         : f.poiseTier === 'SOFT'
           ? '#c9a227'
           : colors.poise;
-  bar(ctx, bx, by, bw, 5, f.hp / f.maxHp, colors.hp);
-  bar(ctx, bx, by + 6, bw, 5, stam, stam < 0.38 ? colors.accentHot : colors.stamina);
-  bar(ctx, bx, by + 12, bw, 4, poise, poiseColor);
+
+  // Tiny plaque behind meters so they read as broadcast chrome, not debug
+  ctx.fillStyle = 'rgba(12,8,5,0.45)';
+  ctx.fillRect(bx - 3, by - 3, bw + 6, 22);
+
+  bar(ctx, bx, by, bw, 4, f.hp / f.maxHp, colors.hp);
+  bar(ctx, bx, by + 6, bw, 4, stam, stam < 0.38 ? colors.accentHot : colors.stamina);
+  bar(ctx, bx, by + 12, bw, 3, poise, poiseColor);
   if (showSelectedName) {
-    ctx.fillStyle = colors.ink;
-    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = colors.parchment;
+    ctx.globalAlpha = 0.9;
     ctx.font = `600 ${typeScale.meta}px ${fontStack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';

@@ -6,16 +6,16 @@ import {
   fightInspectRect,
   fightStageLayout,
   fitWorldInRect,
-  sandboxLayout,
   titleLayout,
 } from './layout';
+import { labChromeRects, labStageGeom, placeLabFighters, pickLabFighter } from './labStage';
+import type { FighterSnapshot } from '../domain/combat/types';
 
 describe('fightStageLayout', () => {
   it('stacks arena above chrome in portrait', () => {
     const stage = fightStageLayout(390, 844);
     expect(stage.orientation).toBe('portrait');
     expect(stage.bottomRows).toBe(1);
-    // Zoom may crop L/R past the band, but the painted world stays in the band vertically.
     expect(stage.world.view.y).toBeGreaterThanOrEqual(stage.topBandH - 0.5);
     expect(stage.world.view.y + stage.world.view.h).toBeLessThanOrEqual(
       stage.rosterBandTop + 0.5,
@@ -28,7 +28,6 @@ describe('fightStageLayout', () => {
 
   it('zooms mobile portrait so the world is wider than the stage', () => {
     const stage = fightStageLayout(390, 844);
-    // Effective scale should beat plain contain-by-width.
     expect(stage.world.scale).toBeGreaterThan(390 / ARENA_WORLD_W + 0.01);
     expect(stage.world.view.w).toBeGreaterThan(390);
     expect(fightArenaZoom(390, 844)).toBeGreaterThan(1);
@@ -40,7 +39,6 @@ describe('fightStageLayout', () => {
     expect(stage.worldBox.y).toBe(stage.topBandH);
     expect(stage.worldBox.w).toBe(390);
     expect(stage.worldBox.h).toBeCloseTo(stage.rosterBandTop - stage.topBandH);
-    // Static fit may overflow the box; the box itself stays inside chrome bands.
     expect(stage.worldBox.y + stage.worldBox.h).toBeLessThanOrEqual(stage.rosterBandTop + 0.5);
   });
 
@@ -101,23 +99,99 @@ describe('titleLayout', () => {
   });
 });
 
-describe('sandboxLayout', () => {
-  it('stacks team panels in portrait', () => {
-    const L = sandboxLayout(390, 844, 4);
-    expect(L.stacked).toBe(true);
-    expect(L.leftPanel.y).toBeLessThan(L.rightPanel.y);
-    expect(L.leftPanel.w).toBeCloseTo(L.rightPanel.w);
-    expect(L.presetRects.length).toBe(4);
-    expect(L.titleBtn.h).toBeGreaterThanOrEqual(44);
-    for (const r of L.presetRects) {
-      expect(r.h).toBeGreaterThanOrEqual(44);
-    }
+describe('labStage', () => {
+  it('builds design-space slots for both teams', () => {
+    const g = labStageGeom(390, 844, 2);
+    expect(g.fighterSlots).toHaveLength(4);
+    expect(g.fighterSlots.filter((s) => s.team === 0)).toHaveLength(2);
+    expect(g.rx).toBeGreaterThan(g.w * 0.5);
   });
 
-  it('keeps side-by-side panels in wide landscape', () => {
-    const L = sandboxLayout(960, 540, 4);
-    expect(L.stacked).toBe(false);
-    expect(L.leftPanel.x).toBeLessThan(L.rightPanel.x);
-    expect(L.leftPanel.y).toBeCloseTo(L.rightPanel.y);
+  it('places fighters onto Lab slots', () => {
+    const g = labStageGeom(390, 844, 1);
+    const stub = (id: number, team: 0 | 1): FighterSnapshot =>
+      ({
+        id,
+        team,
+        kind: 'gladiator',
+        armatura: 'MURMILLO',
+        beastId: null,
+        name: 'X',
+        x: 0,
+        y: 0,
+        facing: 0,
+        hp: 1,
+        maxHp: 1,
+        stamina: 1,
+        maxStamina: 1,
+        poise: 1,
+        maxPoise: 1,
+        action: 'NONE',
+        phase: 'IDLE',
+        phaseT: 0,
+        phaseMax: 0,
+        footwork: 'HOLD',
+        intention: 'NONE',
+        desiredDist: 45,
+        poiseTier: 'SOLID',
+        stunned: false,
+        tangled: false,
+        poiseBroken: false,
+        guarding: false,
+        alive: true,
+        flash: 0,
+      }) as FighterSnapshot;
+    const placed = placeLabFighters([stub(1, 0), stub(2, 1)], g);
+    expect(placed[0]!.x).toBe(g.fighterSlots[0]!.x);
+    expect(placed[1]!.x).toBe(g.fighterSlots[1]!.x);
+  });
+
+  it('picks the nearest fighter in design space', () => {
+    const g = labStageGeom(390, 844, 1);
+    const snaps = placeLabFighters(
+      [
+        {
+          id: 1,
+          team: 0,
+          kind: 'gladiator',
+          armatura: 'MURMILLO',
+          beastId: null,
+          name: 'A',
+          x: 0,
+          y: 0,
+          facing: 0,
+          hp: 1,
+          maxHp: 1,
+          stamina: 1,
+          maxStamina: 1,
+          poise: 1,
+          maxPoise: 1,
+          action: 'NONE',
+          phase: 'IDLE',
+          phaseT: 0,
+          phaseMax: 0,
+          footwork: 'HOLD',
+          intention: 'NONE',
+          desiredDist: 45,
+          poiseTier: 'SOLID',
+          stunned: false,
+          tangled: false,
+          poiseBroken: false,
+          guarding: false,
+          alive: true,
+          flash: 0,
+        },
+      ],
+      g,
+    );
+    const hit = pickLabFighter(snaps, snaps[0]!.x + 2, snaps[0]!.y - 2, 40);
+    expect(hit?.id).toBe(1);
+  });
+
+  it('carves beam and shelf chrome bands', () => {
+    const c = labChromeRects(390, 844);
+    expect(c.beam.y).toBe(0);
+    expect(c.shelf.y + c.shelf.h).toBe(844);
+    expect(c.beam.h + c.shelf.h).toBeLessThan(844);
   });
 });

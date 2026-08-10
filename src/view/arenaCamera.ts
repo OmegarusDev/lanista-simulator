@@ -12,6 +12,11 @@ export type CamMode = 'autocam' | 'manual' | 'focus';
  */
 export class ArenaCamera {
   mode: CamMode = 'autocam';
+  /**
+   * `contain` — whole arena visible (fight default).
+   * `cover` — amphitheatre fills the viewport; no letterbox “picture window” (Lab).
+   */
+  fill: 'contain' | 'cover' = 'contain';
   /** Desired look-at in world space. */
   targetX = ARENA_WORLD_W * 0.5;
   targetY = ARENA_WORLD_H * 0.5;
@@ -21,7 +26,7 @@ export class ArenaCamera {
   /** Manual drag offset in world units. */
   panX = 0;
   panY = 0;
-  /** Desired multiplier on contain-fit (>1 crops in). */
+  /** Desired multiplier on base fit (>1 crops in). */
   zoom = 1.12;
   /** Smoothed zoom used for rendering. */
   smoothZoom = 1.12;
@@ -38,8 +43,9 @@ export class ArenaCamera {
   /** Frames to stay in focus before easing back to autocam (0 = hold). */
   private focusHold = 0;
 
-  reset(zoom = 1.12): void {
+  reset(zoom = 1.12, fill: 'contain' | 'cover' = this.fill): void {
     this.mode = 'autocam';
+    this.fill = fill;
     this.targetX = ARENA_WORLD_W * 0.5;
     this.targetY = ARENA_WORLD_H * 0.5;
     this.smoothX = this.targetX;
@@ -96,6 +102,16 @@ export class ArenaCamera {
     this.focusedTeam = null;
     this.focusHold = 0;
     this.zoom = Math.min(this.zoom, 1.14);
+  }
+
+  /** Desktop Lab / Fight — wheel nudge; clamps to cinematic band. */
+  nudgeZoom(delta: number): void {
+    this.zoom = Math.max(0.95, Math.min(1.45, this.zoom + delta));
+    if (this.mode === 'autocam') {
+      // Keep manual zoom intent briefly
+      this.mode = 'manual';
+      this.focusHold = 0;
+    }
   }
 
   /**
@@ -165,6 +181,18 @@ export class ArenaCamera {
     this.smoothY += (this.targetY - this.smoothY) * k;
     const zk = this.dragging ? 0.25 : 0.08;
     this.smoothZoom += (this.zoom - this.smoothZoom) * zk;
+
+    // Soft return from pan when not dragging (director settles back to action)
+    if (!this.dragging && this.mode !== 'manual') {
+      this.panX *= 0.92;
+      this.panY *= 0.92;
+      if (Math.abs(this.panX) < 0.15) this.panX = 0;
+      this.panY = Math.abs(this.panY) < 0.15 ? 0 : this.panY;
+    } else if (!this.dragging && this.mode === 'manual') {
+      // Slow drift home so manual pan doesn't strand the frame forever
+      this.panX *= 0.985;
+      this.panY *= 0.985;
+    }
   }
 
   beginDrag(designX: number, designY: number, scale: number): void {
@@ -225,9 +253,13 @@ export class ArenaCamera {
    * Pass the clip box (arena band / stage), never a pre-scaled world footprint.
    */
   toTransform(viewRect: Rect): WorldViewTransform {
-    const contain = Math.min(viewRect.w / ARENA_WORLD_W, viewRect.h / ARENA_WORLD_H);
-    const z = Math.max(0.8, Math.min(1.55, this.smoothZoom));
-    const scale = contain * z;
+    const base =
+      this.fill === 'cover'
+        ? Math.max(viewRect.w / ARENA_WORLD_W, viewRect.h / ARENA_WORLD_H)
+        : Math.min(viewRect.w / ARENA_WORLD_W, viewRect.h / ARENA_WORLD_H);
+    const zMax = this.fill === 'cover' ? 1.35 : 1.55;
+    const z = Math.max(0.85, Math.min(zMax, this.smoothZoom));
+    const scale = base * z;
     // Look-at pivot: world point (cx,cy) maps to viewport center.
     const cx = this.smoothX + this.panX;
     const cy = this.smoothY + this.panY;
@@ -241,22 +273,4 @@ export class ArenaCamera {
       oy,
     };
   }
-}
-
-/** Spawn-style posed positions for menu preview (mirrors Match.spawnTeam spacing). */
-export function posedSpawnPoints(
-  teamSize: number,
-  team: 0 | 1,
-): { x: number; y: number; facing: number }[] {
-  const baseX = ARENA_WORLD_W * 0.5 + (team === 0 ? -140 : 140);
-  const baseY = ARENA_WORLD_H * 0.5;
-  const spreadStep = teamSize >= 3 ? 36 : 42;
-  const facing = team === 0 ? 0 : Math.PI;
-  const out: { x: number; y: number; facing: number }[] = [];
-  for (let i = 0; i < teamSize; i++) {
-    const spread = (i - (teamSize - 1) / 2) * spreadStep;
-    const x = baseX + (teamSize >= 3 ? (i - 1) * 8 * (team === 0 ? 1 : -1) : 0);
-    out.push({ x, y: baseY + spread, facing });
-  }
-  return out;
 }

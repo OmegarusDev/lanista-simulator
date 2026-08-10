@@ -3,15 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta http-equiv="refresh" content="0; url=https://omegarusdev.github.io/lanista-simulator/" />
   <title>Play Lanista Simulator</title>
   <style>
     :root {
       --bg: #1a1410;
-      --fg: #f2e6d4;
-      --muted: #b8a48c;
-      --accent: #c45c26;
-      --accent-hover: #d96a30;
+      --fg: #f2e8d4;
+      --muted: #a09078;
+      --accent: #c49a55;
     }
     * { box-sizing: border-box; }
     body {
@@ -37,42 +35,37 @@
       letter-spacing: 0.04em;
     }
     p {
-      margin: 0 0 1.5rem;
+      margin: 0 0 1.25rem;
       color: var(--muted);
-      font-size: 0.95rem;
-      line-height: 1.4;
+      line-height: 1.45;
     }
-    a.play {
+    a.btn {
       display: inline-block;
-      padding: 0.95rem 2.4rem;
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
+      margin: 0.35rem;
+      padding: 0.85rem 1.4rem;
+      color: var(--fg);
       text-decoration: none;
-      text-transform: uppercase;
-      color: #fff8ef;
-      background: var(--accent);
-      border: 2px solid #e8c4a0;
-      border-radius: 4px;
-      box-shadow: 0 4px 0 #7a3514;
-      transition: background 0.15s ease, transform 0.1s ease;
+      border: 1.5px solid var(--accent);
+      background: #3a2818;
+      font-weight: 600;
     }
-    a.play:hover { background: var(--accent-hover); }
-    a.play:active { transform: translateY(2px); box-shadow: 0 2px 0 #7a3514; }
-    noscript p { margin-top: 1rem; }
+    a.btn.primary {
+      background: #6a4e2a;
+    }
+    .note {
+      margin-top: 1.25rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
   </style>
-  <script>
-    location.replace('https://omegarusdev.github.io/lanista-simulator/');
-  </script>
 </head>
 <body>
   <main>
-    <h1>Lanista Simulator</h1>
-    <p>Opening the live game… If nothing happens, use the button below.</p>
-    <a class="play" href="https://omegarusdev.github.io/lanista-simulator/">▶ Play Now</a>
-    <noscript>
-      <p><a href="https://omegarusdev.github.io/lanista-simulator/">Continue to the game</a></p>
-    </noscript>
+    <h1>LANISTA</h1>
+    <p>Local Lab first — use the dev server, not a stale Pages deploy.</p>
+    <a class="btn primary" href="http://127.0.0.1:5299/lanista-simulator/">Play local (5299)</a>
+    <a class="btn" href="https://omegarusdev.github.io/lanista-simulator/">GitHub Pages</a>
+    <p class="note">Run <code>npm run dev</code> in the project, then hard-refresh (Cmd+Shift+R).</p>
   </main>
 </body>
 </html>

@@ -2,9 +2,11 @@ import { ARMATURAE } from '../content/armatura';
 import { BEASTS } from '../content/beasts';
 import type { QuickCard } from '../domain/combat/quickGen';
 import type { FighterSnapshot, TeamSize } from '../domain/combat/types';
-import { posedSpawnPoints } from './arenaCamera';
 
-/** Build static FighterSnapshots for Instant Match sand preview (no Match). */
+/**
+ * Build FighterSnapshots for Instant Match preview.
+ * Positions are placeholders — Lab overwrites via `placeLabFighters`.
+ */
 export function posedCardsToSnapshots(
   team0: QuickCard[],
   team1: QuickCard[],
@@ -13,11 +15,9 @@ export function posedCardsToSnapshots(
   const snaps: FighterSnapshot[] = [];
   let id = 1;
   const pushTeam = (cards: QuickCard[], team: 0 | 1) => {
-    const pts = posedSpawnPoints(teamSize, team);
     for (let i = 0; i < teamSize; i++) {
       const c = cards[i];
-      const p = pts[i];
-      if (!c || !p) continue;
+      if (!c) continue;
       const beast = c.beastId ? BEASTS[c.beastId] : null;
       const kit = beast ?? ARMATURAE[c.armatura];
       snaps.push({
@@ -27,9 +27,9 @@ export function posedCardsToSnapshots(
         armatura: c.armatura,
         beastId: c.beastId ?? null,
         name: c.name,
-        x: p.x,
-        y: p.y,
-        facing: p.facing,
+        x: 0,
+        y: 0,
+        facing: team === 0 ? 0 : Math.PI,
         hp: kit.maxHealth,
         maxHp: kit.maxHealth,
         stamina: kit.maxStamina,

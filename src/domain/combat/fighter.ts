@@ -211,11 +211,6 @@ export class Fighter {
     return this.alive && !this.stunned && !this.tangled;
   }
 
-  /** @deprecated use canGuard / canDodge */
-  get canDefend(): boolean {
-    return this.canGuard;
-  }
-
   get poiseTier(): PoiseTier {
     return poiseTierOf(this.poise, this.maxPoise, this.poiseBroken);
   }

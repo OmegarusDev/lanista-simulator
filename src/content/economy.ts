@@ -12,8 +12,6 @@ export const economy = {
   upkeepPerGladiator: 8,
   /** Extra upkeep per gear grade point on roster. */
   upkeepPerGearGrade: 2,
-  /** Legacy healCost kept for tests / cheap bandage reference. */
-  healCost: 12,
   restDaysPerSeason: 2,
   virtusTier2: 8,
   virtusTier3: 20,

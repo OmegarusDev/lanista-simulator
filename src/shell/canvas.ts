@@ -2,11 +2,6 @@
 export const ARENA_WORLD_W = 960;
 export const ARENA_WORLD_H = 540;
 
-/** @deprecated Prefer getDesign() — kept for combat defaults / tests. */
-export const DESIGN_W = ARENA_WORLD_W;
-/** @deprecated Prefer getDesign() — kept for combat defaults / tests. */
-export const DESIGN_H = ARENA_WORLD_H;
-
 /** Cap design longest side so 4K doesn't explode the backing store. */
 export const MAX_DESIGN_LONG_SIDE = 1400;
 /** Letterbox only outside this aspect band (ultrawide / absurdly tall). */

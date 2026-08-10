@@ -7,6 +7,8 @@ export interface PointerState {
 
 export class Input {
   readonly pointer: PointerState = { x: 0, y: 0, down: false, clicked: false };
+  /** Accumulated wheel delta this frame (positive = scroll down). Cleared in endFrame. */
+  wheelDelta = 0;
   private readonly keys = new Set<string>();
   private readonly keyPressed = new Set<string>();
 
@@ -51,12 +53,18 @@ export class Input {
       this.keys.delete(e.code);
     };
 
+    const onWheel = (e: WheelEvent) => {
+      if (e.cancelable) e.preventDefault();
+      this.wheelDelta += e.deltaY;
+    };
+
     // Pointer Events cover mouse, touch, and pen — prefer over separate touch/mouse APIs.
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointerup', onUp);
     el.addEventListener('pointercancel', onUp);
     el.addEventListener('lostpointercapture', onUp);
+    el.addEventListener('wheel', onWheel, { passive: false });
     // Non-passive so preventDefault can block scroll/zoom on the canvas.
     el.addEventListener('touchstart', silenceTouch, { passive: false });
     el.addEventListener('touchmove', silenceTouch, { passive: false });
@@ -69,6 +77,7 @@ export class Input {
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onUp);
       el.removeEventListener('lostpointercapture', onUp);
+      el.removeEventListener('wheel', onWheel);
       el.removeEventListener('touchstart', silenceTouch);
       el.removeEventListener('touchmove', silenceTouch);
       window.removeEventListener('keydown', onKeyDown);
@@ -78,6 +87,7 @@ export class Input {
 
   endFrame(): void {
     this.pointer.clicked = false;
+    this.wheelDelta = 0;
     this.keyPressed.clear();
   }
 

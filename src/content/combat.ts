@@ -57,8 +57,6 @@ export const combatTuning = {
   aiFootworkIntervalTicks: 3,
   /** Slower commit clock for cut / guard / dodge */
   aiCommitIntervalTicks: 9,
-  /** Legacy single-clock alias — prefer split clocks above */
-  aiIntervalTicks: 9,
 
   /**
    * Measure spring: accel toward desired distance d*.
