@@ -2,12 +2,11 @@ import { colors } from '../content/palette';
 import { combatTuning } from '../content/combat';
 import { SeededRNG } from '../domain/rng';
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
-import type { FightStageLayout } from './layout';
 import {
   bronzeStroke,
   materialCacheTag,
-  mosaicFill,
-  mosaicPalettes,
+  paintCenterRing,
+  sandFill,
   stoneFill,
   woodFill,
 } from './materials';
@@ -24,7 +23,6 @@ export interface DustParticle {
 
 export interface ArenaDrawOpts {
   seed?: number;
-  stage?: FightStageLayout;
 }
 
 /** Afternoon sun — light from upper-left. */
@@ -55,11 +53,7 @@ function getPlate(seed: number): HTMLCanvasElement | OffscreenCanvas {
   return c;
 }
 
-export function drawArena(
-  ctx: CanvasRenderingContext2D,
-  shake = 0,
-  opts?: ArenaDrawOpts,
-): void {
+export function drawArena(ctx: CanvasRenderingContext2D, shake = 0, opts?: ArenaDrawOpts): void {
   ctx.save();
   if (shake > 0) {
     ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
@@ -75,7 +69,6 @@ function paintStaticPlate(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {
   const rx = combatTuning.arenaRX;
   const ry = combatTuning.arenaRY;
 
-  // Cave darkness behind the amphitheatre
   const sky = ctx.createLinearGradient(0, 0, 0, ARENA_WORLD_H);
   sky.addColorStop(0, '#2a1c12');
   sky.addColorStop(0.5, '#1e1610');
@@ -83,7 +76,7 @@ function paintStaticPlate(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, ARENA_WORLD_W, ARENA_WORLD_H);
 
-  // Outer cavea — mosaic stone seating mass
+  // Cavea — flat stone value bands (not mosaic)
   for (let band = 4; band >= 0; band--) {
     const orx = rx + 22 + band * 15;
     const ory = ry + 18 + band * 12;
@@ -92,12 +85,12 @@ function paintStaticPlate(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {
     ctx.ellipse(cx, cy, orx, ory, 0, 0, Math.PI * 2);
     ctx.ellipse(cx, cy, orx - 14, ory - 11, 0, 0, Math.PI * 2);
     ctx.clip('evenodd');
-    mosaicFill(ctx, cx - orx, cy - ory, orx * 2, ory * 2, {
+    stoneFill(ctx, cx - orx, cy - ory, orx * 2, ory * 2, {
       seed: rng.int(1, 999999) + band * 97,
-      palette: mosaicPalettes.cavea,
-      cell: 8 + band,
-      grout: colors.grout,
+      cool: band % 2 === 0,
     });
+    ctx.fillStyle = `rgba(12,8,4,${0.12 + band * 0.04})`;
+    ctx.fillRect(cx - orx, cy - ory, orx * 2, ory * 2);
     ctx.restore();
 
     ctx.strokeStyle = `rgba(12,8,4,${0.25 + band * 0.05})`;
@@ -107,19 +100,26 @@ function paintStaticPlate(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {
     ctx.stroke();
   }
 
-  // Crowd as denser mosaic flecks (no stick people)
+  // Soft crowd mass — value flecks, not mosaic
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx + 78, ry + 62, 0, 0, Math.PI * 2);
   ctx.ellipse(cx, cy, rx + 24, ry + 18, 0, 0, Math.PI * 2);
   ctx.clip('evenodd');
-  mosaicFill(ctx, cx - rx - 80, cy - ry - 64, (rx + 80) * 2, (ry + 64) * 2, {
+  stoneFill(ctx, cx - rx - 80, cy - ry - 64, (rx + 80) * 2, (ry + 64) * 2, {
     seed: rng.int(1, 999999),
-    palette: [...mosaicPalettes.cavea, ...mosaicPalettes.ivory, ...mosaicPalettes.blood],
-    cell: 6,
-    grout: '#1e1812',
-    jitter: 0.5,
   });
+  const crowdRng = new SeededRNG(rng.int(1, 999999));
+  for (let i = 0; i < 420; i++) {
+    const a = crowdRng.next() * Math.PI * 2;
+    const t = 0.35 + crowdRng.next() * 0.65;
+    const px = cx + Math.cos(a) * (rx + 28 + t * 48);
+    const py = cy + Math.sin(a) * (ry + 20 + t * 40);
+    ctx.fillStyle = crowdRng.chance(0.2)
+      ? 'rgba(200,160,120,0.18)'
+      : 'rgba(30,20,14,0.35)';
+    ctx.fillRect(px, py, 1.5 + crowdRng.next() * 2, 2 + crowdRng.next() * 3);
+  }
   ctx.restore();
 
   // Podium wall — rough stone ring
@@ -155,20 +155,13 @@ function paintStaticPlate(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {
     ctx.restore();
   }
 
-  // —— Mosaic sand floor (the spectacle) ——
+  // Sand floor
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
   ctx.clip();
-  mosaicFill(ctx, cx - rx, cy - ry, rx * 2, ry * 2, {
-    seed: rng.int(1, 999999),
-    palette: mosaicPalettes.sand,
-    cell: 7,
-    grout: '#6a5438',
-    jitter: 0.4,
-  });
+  sandFill(ctx, cx - rx, cy - ry, rx * 2, ry * 2, { seed: rng.int(1, 999999) });
 
-  // Soft sun wash over tesserae
   const wash = ctx.createRadialGradient(
     cx + SUN.dx * 90,
     cy + SUN.dy * 70,
@@ -183,19 +176,10 @@ function paintStaticPlate(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {
   ctx.fillStyle = wash;
   ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
 
-  // Central mosaic medallion
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, 48, 22, 0, 0, Math.PI * 2);
-  ctx.clip();
-  mosaicFill(ctx, cx - 50, cy - 24, 100, 48, {
-    seed: rng.int(1, 999999),
-    palette: mosaicPalettes.bronze,
-    cell: 5,
-    grout: '#3a2a18',
-  });
+  paintCenterRing(ctx, cx, cy, 48, 22);
   ctx.restore();
 
-  // Arena lip — bronze + stone
+  // Arena lip
   ctx.strokeStyle = 'rgba(20,12,6,0.65)';
   ctx.lineWidth = 4;
   ctx.beginPath();
@@ -209,42 +193,6 @@ function paintStaticPlate(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {
     },
     1.25,
   );
-}
-
-export function drawArenaChromeVignette(
-  ctx: CanvasRenderingContext2D,
-  stage: FightStageLayout,
-): void {
-  const { w, h } = stage;
-  const box = stage.worldBox;
-
-  if (stage.orientation === 'portrait') {
-    ctx.fillStyle = colors.bg;
-    if (box.y > stage.topBandH) {
-      ctx.fillRect(0, stage.topBandH, w, box.y - stage.topBandH);
-    }
-    const below = box.y + box.h;
-    if (below < stage.rosterBandTop) {
-      ctx.fillRect(0, below, w, stage.rosterBandTop - below);
-    }
-  }
-
-  // Soft vignette only in chrome bands — sand stays clean
-  const topEnd = stage.topBandH + 36;
-  const topG = ctx.createLinearGradient(0, 0, 0, topEnd);
-  topG.addColorStop(0, 'rgba(18,12,8,0.78)');
-  topG.addColorStop(0.55, 'rgba(18,12,8,0.28)');
-  topG.addColorStop(1, 'rgba(18,12,8,0)');
-  ctx.fillStyle = topG;
-  ctx.fillRect(0, 0, w, topEnd);
-
-  const botStart = stage.rosterBandTop - 32;
-  const botG = ctx.createLinearGradient(0, botStart, 0, h);
-  botG.addColorStop(0, 'rgba(18,12,8,0)');
-  botG.addColorStop(0.4, 'rgba(18,12,8,0.32)');
-  botG.addColorStop(1, 'rgba(18,12,8,0.72)');
-  ctx.fillStyle = botG;
-  ctx.fillRect(0, botStart, w, h - botStart);
 }
 
 export function spawnDust(

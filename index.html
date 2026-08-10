@@ -10,41 +10,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Lanista — Combat Sandbox</title>
-    <style>
-      :root {
-        color-scheme: dark;
-        --shell-bg: #1a1410;
-      }
-      html, body {
-        margin: 0;
-        width: 100%;
-        height: 100%;
-        height: 100dvh;
-        background: var(--shell-bg);
-        overflow: hidden;
-        overscroll-behavior: none;
-        touch-action: none;
-        -webkit-user-select: none;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-      /* Stage sized by JS to the usable viewport (portrait/landscape reflow). */
-      #game {
-        display: block;
-        position: absolute;
-        left: 0;
-        top: 0;
-        margin: 0;
-        padding: 0;
-        touch-action: none;
-        -webkit-user-select: none;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-    </style>
   </head>
   <body>
-    <canvas id="game"></canvas>
+    <div id="app">
+      <div id="chrome" aria-live="polite"></div>
+      <div id="stage-wrap" class="is-hidden" aria-hidden="true">
+        <canvas id="stage"></canvas>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

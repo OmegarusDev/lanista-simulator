@@ -100,11 +100,11 @@ describe('titleLayout', () => {
 });
 
 describe('labStage', () => {
-  it('builds design-space slots for both teams', () => {
+  it('builds world-space slots for both teams', () => {
     const g = labStageGeom(390, 844, 2);
     expect(g.fighterSlots).toHaveLength(4);
     expect(g.fighterSlots.filter((s) => s.team === 0)).toHaveLength(2);
-    expect(g.rx).toBeGreaterThan(g.w * 0.5);
+    expect(g.rx).toBeGreaterThan(100);
   });
 
   it('places fighters onto Lab slots', () => {

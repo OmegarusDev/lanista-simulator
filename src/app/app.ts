@@ -1,4 +1,3 @@
-import { colors } from '../content/palette';
 import { applyCareerFight } from '../domain/campaign/aftermath';
 import { findSlateBout, slateToOffer } from '../domain/campaign/calendar';
 import { spawnSpecFromGladiator, spawnSpecsFromLineup } from '../domain/campaign/combatMods';
@@ -7,13 +6,6 @@ import { SeededRNG } from '../domain/rng';
 import { settleSeasonLegacy } from '../domain/campaign/legacy';
 import { createSeason, endDay } from '../domain/campaign/season';
 import type { AftermathSummary, MuneraOffer, SeasonState } from '../domain/campaign/types';
-import {
-  bindCanvasResize,
-  clientToDesign,
-  createCanvasLayout,
-  getDesign,
-  resizeCanvas,
-} from '../shell/canvas';
 import { Input } from '../shell/input';
 import {
   clearSeasonSave,
@@ -22,15 +14,25 @@ import {
   saveLegacy,
   saveSeason,
 } from '../shell/save';
+import { applyCssTokens } from '../shell/tokens';
+import {
+  mountShell,
+  resizeStageCanvas,
+  setStageVisible,
+  type AppShell,
+} from '../shell/viewport';
 import { Synth } from '../view/audio';
-import { AftermathScene } from './scenes/aftermath';
+import { ArenaCamera } from '../view/arenaCamera';
+import { defaultStageZoom, paintStageWorld, pickFighterWorld, stagePointerToWorld } from '../view/stagePaint';
+import { AftermathView } from '../ui/aftermathView';
+import { FightHud } from '../ui/fightHud';
+import { LineupView } from '../ui/lineupView';
+import { LudusView } from '../ui/ludusView';
+import { OffersView } from '../ui/offersView';
+import { PracticeView, type SandboxConfig } from '../ui/practiceView';
+import { SeasonEndView } from '../ui/seasonEndView';
+import { TitleView } from '../ui/titleView';
 import { FightScene, type FightAction } from './scenes/fight';
-import { LineupScene } from './scenes/lineup';
-import { LudusScene } from './scenes/ludus';
-import { OffersScene } from './scenes/offers';
-import { SandboxScene, type SandboxConfig } from './scenes/sandbox';
-import { SeasonEndScene } from './scenes/seasonEnd';
-import { TitleScene } from './scenes/title';
 
 type Mode =
   | 'title'
@@ -45,22 +47,22 @@ type Mode =
 type FightContext = 'lab' | 'career';
 
 export class App {
-  private readonly layout;
+  private readonly shell: AppShell;
   private readonly input = new Input();
   private readonly synth = new Synth();
 
-  private readonly title: TitleScene;
-  private readonly sandbox: SandboxScene;
-  private readonly ludus: LudusScene;
-  private readonly offers: OffersScene;
-  private readonly lineup: LineupScene;
-  private readonly aftermathScene: AftermathScene;
-  private readonly seasonEnd: SeasonEndScene;
+  private readonly title: TitleView;
+  private readonly practice: PracticeView;
+  private readonly ludus: LudusView;
+  private readonly offers: OffersView;
+  private readonly lineup: LineupView;
+  private readonly aftermathView: AftermathView;
+  private readonly seasonEnd: SeasonEndView;
+  private readonly fightHud: FightHud;
 
   private fight: FightScene | null = null;
   private mode: Mode = 'title';
   private lastConfig: SandboxConfig | null = null;
-  /** Where Instant Match Title button should return. */
   private labReturn: 'title' | 'ludus' = 'title';
 
   private season: SeasonState | null = null;
@@ -68,26 +70,62 @@ export class App {
   private pendingLineup: number[] = [];
   private pendingAftermath: AftermathSummary | null = null;
 
+  private readonly previewCam = new ArenaCamera();
+  private previewPtrWasDown = false;
+
   private last = 0;
   private acc = 0;
   private readonly step = 1 / 60;
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.layout = createCanvasLayout(canvas);
-    this.title = new TitleScene(this.synth);
-    this.sandbox = new SandboxScene(this.synth);
-    this.ludus = new LudusScene(this.synth);
-    this.offers = new OffersScene(this.synth);
-    this.lineup = new LineupScene(this.synth);
-    this.aftermathScene = new AftermathScene(this.synth);
-    this.seasonEnd = new SeasonEndScene(this.synth);
-    resizeCanvas(this.layout);
+  constructor() {
+    applyCssTokens();
+    this.shell = mountShell();
+    const beep = () => this.synth.ensure();
+
+    this.title = new TitleView(beep);
+    this.practice = new PracticeView(this.synth, beep);
+    this.ludus = new LudusView(beep);
+    this.offers = new OffersView(beep);
+    this.lineup = new LineupView(beep);
+    this.aftermathView = new AftermathView(beep);
+    this.seasonEnd = new SeasonEndView(beep);
+    this.fightHud = new FightHud(beep);
+
+    this.title.mount(this.shell.chrome);
+    this.ludus.mount(this.shell.chrome);
+    this.offers.mount(this.shell.chrome);
+    this.lineup.mount(this.shell.chrome);
+    this.aftermathView.mount(this.shell.chrome);
+    this.seasonEnd.mount(this.shell.chrome);
+    this.practice.mount(this.shell.chrome);
+    this.fightHud.mount(this.shell.chrome);
+
+    this.setMode('title');
   }
 
   start(): void {
-    this.input.attach(this.layout.canvas, (cx, cy) => clientToDesign(this.layout, cx, cy));
-    bindCanvasResize(() => resizeCanvas(this.layout));
-    resizeCanvas(this.layout);
+    this.input.attach(this.shell.stage, (cx, cy) => {
+      const rect = this.shell.stage.getBoundingClientRect();
+      const w = rect.width || 1;
+      const h = rect.height || 1;
+      return {
+        x: ((cx - rect.left) / w) * w,
+        y: ((cy - rect.top) / h) * h,
+      };
+    });
+    // Keyboard works even when stage is hidden (window listeners in Input).
+    const onResize = () => {
+      if (this.shell.app.classList.contains('has-stage')) {
+        resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', onResize);
+      vv.addEventListener('scroll', onResize);
+    }
     this.last = performance.now();
     requestAnimationFrame(this.frame);
   }
@@ -118,28 +156,60 @@ export class App {
     }
   }
 
+  private setMode(mode: Mode): void {
+    this.mode = mode;
+    const stageOn = mode === 'fight' || mode === 'sandbox';
+    setStageVisible(this.shell, stageOn);
+
+    this.title.show(mode === 'title');
+    this.ludus.show(mode === 'ludus', this.season);
+    this.offers.show(mode === 'offers', this.season);
+    this.lineup.show(mode === 'lineup', this.season, this.pendingOffer);
+    this.aftermathView.show(mode === 'aftermath', this.season, this.pendingAftermath);
+    this.seasonEnd.show(mode === 'seasonEnd', this.season);
+    this.practice.show(mode === 'sandbox');
+    if (mode !== 'fight') this.fightHud.show(false);
+
+    if (mode === 'sandbox') {
+      this.previewCam.reset(defaultStageZoom(400, 400), 'contain');
+      this.applyStagePads(72, 150);
+    } else if (mode === 'fight') {
+      const pads = this.fightHud.getStagePads();
+      this.applyStagePads(pads.top, pads.bottom);
+    } else {
+      this.applyStagePads(0, 0);
+    }
+  }
+
+  private applyStagePads(top: number, bottom: number): void {
+    this.shell.app.style.setProperty('--stage-pad-top', `${top}px`);
+    this.shell.app.style.setProperty('--stage-pad-bottom', `${bottom}px`);
+  }
+
   private goTitle(): void {
-    this.mode = 'title';
+    this.fight?.dispose();
     this.fight = null;
     this.pendingOffer = null;
     this.pendingLineup = [];
     this.pendingAftermath = null;
+    this.setMode('title');
   }
 
   private enterLab(from: 'title' | 'ludus'): void {
     this.labReturn = from;
-    this.mode = 'sandbox';
+    this.setMode('sandbox');
   }
 
   private enterFight(config: SandboxConfig, context: FightContext): void {
     this.synth.ensure();
     this.lastConfig = config;
-    this.sandbox.seed = config.seed;
-    this.fight = new FightScene(config, this.synth, {
+    this.practice.seed = config.seed;
+    this.fight?.dispose();
+    this.fight = new FightScene(config, this.synth, this.fightHud, {
       career: context === 'career',
       lineupIds: context === 'career' ? [...this.pendingLineup] : undefined,
     });
-    this.mode = 'fight';
+    this.setMode('fight');
     this.input.pointer.clicked = false;
     this.input.pointer.down = false;
   }
@@ -149,44 +219,80 @@ export class App {
   }
 
   private render(): void {
-    const ctx = this.layout.ctx;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    const { w, h } = getDesign();
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, w, h);
-
     switch (this.mode) {
       case 'title':
-        this.renderTitle(ctx);
+        this.pollTitle();
         break;
       case 'sandbox':
-        this.renderSandbox(ctx);
+        this.pollPractice();
+        this.paintPracticeStage();
         break;
       case 'ludus':
-        this.renderLudus(ctx);
+        this.pollLudus();
         break;
       case 'offers':
-        this.renderOffers(ctx);
+        this.pollOffers();
         break;
       case 'lineup':
-        this.renderLineup(ctx);
+        this.pollLineup();
         break;
       case 'fight':
-        if (this.fight) this.applyFightAction(this.fight.draw(ctx, this.input));
+        this.paintFight();
         break;
       case 'aftermath':
-        this.renderAftermath(ctx);
+        this.pollAftermath();
         break;
       case 'seasonEnd':
-        this.renderSeasonEnd(ctx);
+        this.pollSeasonEnd();
         break;
     }
   }
 
-  private renderTitle(ctx: CanvasRenderingContext2D): void {
-    const action = this.title.draw(ctx, this.input);
+  private paintFight(): void {
+    if (!this.fight) return;
+    const pads = this.fightHud.getStagePads();
+    this.applyStagePads(pads.top, pads.bottom);
+    const { cssW, cssH } = resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
+    this.applyFightAction(this.fight.paint(this.shell.stageCtx, cssW, cssH, this.input));
+  }
+
+  private paintPracticeStage(): void {
+    const { cssW, cssH } = resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
+    this.previewCam.zoom = defaultStageZoom(cssW, cssH);
+    this.previewCam.tickSmooth();
+    const snaps = this.practice.previewSnapshots();
+    const t = paintStageWorld(this.shell.stageCtx, {
+      cssW,
+      cssH,
+      cam: this.previewCam,
+      seed: this.practice.seed,
+      fighters: snaps,
+      selectedId: this.practice.selectedPreviewId,
+      hideBars: true,
+    });
+
+    // Custom sheet owns taps; Quick can pick fighters on the sand.
+    if (this.practice.mode === 'custom') {
+      this.previewPtrWasDown = this.input.pointer.down;
+      return;
+    }
+    const p = this.input.pointer;
+    if (p.down && !this.previewPtrWasDown) {
+      const world = stagePointerToWorld(p.x, p.y, t);
+      const hit = pickFighterWorld(snaps, world.x, world.y, 36 / Math.max(0.001, t.scale));
+      if (hit) {
+        this.practice.selectedPreviewId = hit.id;
+        this.synth.play('ui');
+      } else {
+        this.practice.selectedPreviewId = null;
+      }
+      this.input.pointer.clicked = false;
+    }
+    this.previewPtrWasDown = p.down;
+  }
+
+  private pollTitle(): void {
+    const action = this.title.poll();
     if (action.type === 'INSTANT_MATCH') {
       this.enterLab('title');
       return;
@@ -196,7 +302,7 @@ export class App {
       this.season = createSeason(seed, loadLegacy());
       clearSeasonSave();
       saveSeason(this.season);
-      this.mode = 'ludus';
+      this.setMode('ludus');
       return;
     }
     if (action.type === 'CONTINUE') {
@@ -204,18 +310,23 @@ export class App {
       if (loaded) {
         this.season = loaded;
         if (loaded.status === 'BROKE' || loaded.status === 'SEASON_END') {
-          this.mode = 'seasonEnd';
+          this.setMode('seasonEnd');
         } else {
-          this.mode = 'ludus';
+          this.setMode('ludus');
         }
       }
     }
   }
 
-  private renderSandbox(ctx: CanvasRenderingContext2D): void {
-    const action = this.sandbox.draw(ctx, this.input);
+  private pollPractice(): void {
+    const key = this.practice.handleKeys(this.input);
+    if (key.type === 'START') {
+      this.enterFight(key.config, 'lab');
+      return;
+    }
+    const action = this.practice.poll();
     if (action.type === 'BACK') {
-      this.mode = this.labReturn === 'ludus' && this.season ? 'ludus' : 'title';
+      this.setMode(this.labReturn === 'ludus' && this.season ? 'ludus' : 'title');
       return;
     }
     if (action.type === 'START') {
@@ -223,24 +334,24 @@ export class App {
     }
   }
 
-  private renderLudus(ctx: CanvasRenderingContext2D): void {
+  private pollLudus(): void {
     if (!this.season) {
       this.goTitle();
       return;
     }
     if (this.seasonTerminal(this.season)) {
-      this.mode = 'seasonEnd';
       clearSeasonSave();
+      this.setMode('seasonEnd');
       return;
     }
 
-    const action = this.ludus.draw(ctx, this.input, this.season);
+    const action = this.ludus.poll();
     if (action.type === 'INSTANT_MATCH') {
       this.enterLab('ludus');
       return;
     }
     if (action.type === 'MUNERA') {
-      this.mode = 'offers';
+      this.setMode('offers');
       return;
     }
     if (action.type === 'WATCH_SLATE') {
@@ -295,7 +406,9 @@ export class App {
       this.persist();
       if (this.seasonTerminal(this.season)) {
         clearSeasonSave();
-        this.mode = 'seasonEnd';
+        this.setMode('seasonEnd');
+      } else {
+        this.ludus.refresh(this.season);
       }
       return;
     }
@@ -309,9 +422,9 @@ export class App {
       this.persist();
       if (this.seasonTerminal(this.season)) {
         clearSeasonSave();
-        this.mode = 'seasonEnd';
+        this.setMode('seasonEnd');
       } else if (this.pendingAftermath) {
-        this.mode = 'aftermath';
+        this.setMode('aftermath');
       }
       return;
     }
@@ -319,36 +432,38 @@ export class App {
       this.persist();
       if (this.seasonTerminal(this.season)) {
         clearSeasonSave();
-        this.mode = 'seasonEnd';
+        this.setMode('seasonEnd');
+      } else {
+        this.ludus.refresh(this.season);
       }
     }
   }
 
-  private renderOffers(ctx: CanvasRenderingContext2D): void {
+  private pollOffers(): void {
     if (!this.season) {
       this.goTitle();
       return;
     }
-    const action = this.offers.draw(ctx, this.input, this.season);
+    const action = this.offers.poll();
     if (action.type === 'BACK') {
-      this.mode = 'ludus';
+      this.setMode('ludus');
       return;
     }
     if (action.type === 'PICK') {
       this.pendingOffer = action.offer;
       this.lineup.reset(action.offer);
-      this.mode = 'lineup';
+      this.setMode('lineup');
     }
   }
 
-  private renderLineup(ctx: CanvasRenderingContext2D): void {
+  private pollLineup(): void {
     if (!this.season || !this.pendingOffer) {
-      this.mode = 'ludus';
+      this.setMode('ludus');
       return;
     }
-    const action = this.lineup.draw(ctx, this.input, this.season, this.pendingOffer);
+    const action = this.lineup.poll();
     if (action.type === 'BACK') {
-      this.mode = 'offers';
+      this.setMode('offers');
       return;
     }
     if (action.type === 'FIGHT') {
@@ -397,12 +512,12 @@ export class App {
     }
   }
 
-  private renderAftermath(ctx: CanvasRenderingContext2D): void {
+  private pollAftermath(): void {
     if (!this.season || !this.pendingAftermath) {
-      this.mode = 'ludus';
+      this.setMode('ludus');
       return;
     }
-    const action = this.aftermathScene.draw(ctx, this.input, this.season, this.pendingAftermath);
+    const action = this.aftermathView.poll();
     if (action.type === 'CONTINUE') {
       this.pendingAftermath = null;
       this.pendingOffer = null;
@@ -410,19 +525,19 @@ export class App {
       this.persist();
       if (this.seasonTerminal(this.season)) {
         clearSeasonSave();
-        this.mode = 'seasonEnd';
+        this.setMode('seasonEnd');
       } else {
-        this.mode = 'ludus';
+        this.setMode('ludus');
       }
     }
   }
 
-  private renderSeasonEnd(ctx: CanvasRenderingContext2D): void {
+  private pollSeasonEnd(): void {
     if (!this.season) {
       this.goTitle();
       return;
     }
-    const action = this.seasonEnd.draw(ctx, this.input, this.season);
+    const action = this.seasonEnd.poll();
     if (action.type === 'TITLE') {
       const legacy = settleSeasonLegacy(this.season, loadLegacy());
       saveLegacy(legacy);
@@ -437,8 +552,9 @@ export class App {
 
     if (action.type === 'CAREER_DONE') {
       if (!this.season || !this.pendingOffer) {
-        this.mode = 'ludus';
+        this.fight?.dispose();
         this.fight = null;
+        this.setMode('ludus');
         return;
       }
       const summary = applyCareerFight(this.season, {
@@ -449,16 +565,17 @@ export class App {
         boutStats: action.boutStats,
       });
       this.pendingAftermath = summary;
+      this.fight?.dispose();
       this.fight = null;
-      this.mode = 'aftermath';
+      this.setMode('aftermath');
       this.persist();
       return;
     }
 
     if (action.type === 'EXIT') {
-      // Lab fights always return to Instant Match sandbox.
+      this.fight?.dispose();
       this.fight = null;
-      this.mode = 'sandbox';
+      this.setMode('sandbox');
       return;
     }
 
@@ -467,7 +584,7 @@ export class App {
       return;
     }
     if (action.type === 'REROLL') {
-      this.enterFight(this.sandbox.rerollLab(), 'lab');
+      this.enterFight(this.practice.rerollLab(), 'lab');
     }
   }
 }

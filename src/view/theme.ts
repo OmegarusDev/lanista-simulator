@@ -14,7 +14,7 @@
  *
  * Prefer helpers in `ui.ts` (rail, plaque, cta/button, meter, segmentedControl,
  * shellAtmosphere, hairline, label variants). Fight layout in `layout.ts`;
- * Instant Match stage in `labStage.ts`. Colors in `content/palette.ts`.
+ * Practice/Fight stage paint in `stagePaint.ts`. Colors in `content/palette.ts`.
  */
 
 import { colors } from '../content/palette';

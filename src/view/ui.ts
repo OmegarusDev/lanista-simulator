@@ -4,8 +4,6 @@ import {
   bronzeStroke,
   carveFrame,
   carvedBand,
-  mosaicFill,
-  mosaicPalettes,
   roundPath,
   woodFill,
 } from './materials';
@@ -31,7 +29,7 @@ export function hit(r: Rect, x: number, y: number): boolean {
   return x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h;
 }
 
-/** Carved wood plaque with mosaic inlay strip — menu / inspect containers. */
+/** Carved wood plaque with bronze header strip — menu / inspect containers. */
 export function plaque(ctx: CanvasRenderingContext2D, r: Rect, title?: string): void {
   ctx.fillStyle = 'rgba(8,4,2,0.5)';
   roundRect(ctx, r.x + 3, r.y + 4, r.w, r.h, radius.lg);
@@ -41,13 +39,8 @@ export function plaque(ctx: CanvasRenderingContext2D, r: Rect, title?: string): 
   roundPath(ctx, r.x, r.y, r.w, r.h, radius.lg);
   ctx.clip();
   woodFill(ctx, r.x, r.y, r.w, r.h, { seed: (r.x * 13 + r.y * 7) | 0, tone: 'warm' });
-  // Mosaic header band
-  mosaicFill(ctx, r.x, r.y, r.w, Math.min(28, r.h * 0.22), {
-    seed: ((r.x + r.y) * 31) | 0,
-    palette: mosaicPalettes.bronze,
-    cell: 6,
-    grout: colors.grout,
-  });
+  ctx.fillStyle = 'rgba(196, 154, 85, 0.35)';
+  ctx.fillRect(r.x, r.y, r.w, Math.min(28, r.h * 0.22));
   ctx.restore();
 
   bronzeStroke(ctx, () => roundPath(ctx, r.x, r.y, r.w, r.h, radius.lg), 1.75);
@@ -156,39 +149,24 @@ export function meter(
 }
 
 /**
- * Sword-and-sandal shell: dark timber hall + mosaic floor suggestion.
+ * Sword-and-sandal shell: dark timber hall (no mosaic floor).
  * Edges meet `colors.bg` so letterbox never seams.
  */
 export function shellAtmosphere(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   ctx.fillStyle = colors.bg;
   ctx.fillRect(0, 0, w, h);
 
-  // Timber wall wash
   woodFill(ctx, 0, 0, w, h, { seed: 0x5ae11, tone: 'dark' });
   ctx.fillStyle = 'rgba(14,10,6,0.55)';
   ctx.fillRect(0, 0, w, h);
 
-  // Mosaic floor band (lower third)
   const floorY = h * 0.55;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, floorY, w, h - floorY);
-  ctx.clip();
-  mosaicFill(ctx, 0, floorY, w, h - floorY, {
-    seed: 0x40ca,
-    palette: mosaicPalettes.sand,
-    cell: 9,
-    grout: colors.grout,
-  });
-  ctx.restore();
   const floorFade = ctx.createLinearGradient(0, floorY, 0, h);
-  floorFade.addColorStop(0, 'rgba(14,10,6,0.75)');
-  floorFade.addColorStop(0.35, 'rgba(14,10,6,0.25)');
+  floorFade.addColorStop(0, 'rgba(14,10,6,0.2)');
   floorFade.addColorStop(1, colors.bg);
   ctx.fillStyle = floorFade;
   ctx.fillRect(0, floorY, w, h - floorY);
 
-  // Warm torch haze
   const glow = ctx.createRadialGradient(w / 2, h * 0.28, 4, w / 2, h * 0.4, Math.max(w, h) * 0.55);
   glow.addColorStop(0, 'rgba(220,140,60,0.12)');
   glow.addColorStop(0.5, 'rgba(120,70,30,0.05)');
@@ -380,15 +358,12 @@ export function buttonChrome(
     ctx.fillStyle = surface.buttonDisabled;
     ctx.fillRect(r.x, y, r.w, r.h);
   } else if (opts?.active) {
-    const pal = accent
-      ? [accent, lightenHex(accent, 0.1), darkenHex(accent, 0.15)]
-      : mosaicPalettes.bronze;
-    mosaicFill(ctx, r.x, y, r.w, r.h, {
-      seed: (r.x * 3 + r.y) | 0,
-      palette: pal,
-      cell: 5,
-      grout: colors.grout,
-    });
+    const fill = accent ?? colors.accent;
+    const g = ctx.createLinearGradient(r.x, y, r.x, y + r.h);
+    g.addColorStop(0, lightenHex(fill, 0.12));
+    g.addColorStop(1, darkenHex(fill, 0.12));
+    ctx.fillStyle = g;
+    ctx.fillRect(r.x, y, r.w, r.h);
   } else {
     woodFill(ctx, r.x, y, r.w, r.h, {
       seed: (r.x + r.y * 5) | 0,
@@ -505,12 +480,11 @@ export function segmentedControl(
       ctx.save();
       roundPath(ctx, sr.x + 1.5, sr.y + 1.5, sr.w - 3, sr.h - 3, radius.sm);
       ctx.clip();
-      mosaicFill(ctx, sr.x, sr.y, sr.w, sr.h, {
-        seed: 0xac7 + i,
-        palette: mosaicPalettes.bronze,
-        cell: 4,
-        grout: colors.grout,
-      });
+      const g = ctx.createLinearGradient(sr.x, sr.y, sr.x, sr.y + sr.h);
+      g.addColorStop(0, lightenHex(colors.accent, 0.1));
+      g.addColorStop(1, colors.accent);
+      ctx.fillStyle = g;
+      ctx.fillRect(sr.x, sr.y, sr.w, sr.h);
       ctx.restore();
     } else if (hovered) {
       ctx.fillStyle = 'rgba(196,154,85,0.15)';

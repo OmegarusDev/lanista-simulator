@@ -2,7 +2,7 @@
  * Mosaic + sword-and-sandal material system (zero assets).
  * Heavy fills are cached OffscreenCanvases — safe for 60Hz mobile.
  */
-import { colors, PALETTE_REV } from '../content/palette';
+import { PALETTE_REV } from '../content/palette';
 import { SeededRNG } from '../domain/rng';
 import { getDesign } from '../shell/canvas';
 
@@ -296,19 +296,15 @@ export function carvedBand(
   ctx.clip();
   woodFill(ctx, x, y, w, h, { seed: opts.seed, tone });
   if (lip === 'bottom') {
-    mosaicFill(ctx, x, y + h - lipH, w, lipH, {
-      seed: opts.seed ^ 0x71,
-      palette: mosaicPalettes.bronze,
-      cell: 5,
-      grout: colors.grout,
-    });
+    ctx.fillStyle = 'rgba(196, 154, 85, 0.45)';
+    ctx.fillRect(x, y + h - lipH, w, lipH);
+    ctx.fillStyle = 'rgba(40, 24, 10, 0.35)';
+    ctx.fillRect(x, y + h - lipH, w, 1);
   } else if (lip === 'top') {
-    mosaicFill(ctx, x, y, w, lipH, {
-      seed: opts.seed ^ 0x72,
-      palette: mosaicPalettes.bronze,
-      cell: 5,
-      grout: colors.grout,
-    });
+    ctx.fillStyle = 'rgba(196, 154, 85, 0.45)';
+    ctx.fillRect(x, y, w, lipH);
+    ctx.fillStyle = 'rgba(40, 24, 10, 0.35)';
+    ctx.fillRect(x, y + lipH - 1, w, 1);
   }
   const shade = opts.shade ?? 0;
   if (shade > 0) {
@@ -379,7 +375,7 @@ export function roundPath(
   ctx.closePath();
 }
 
-/** Mosaic palette packs for different surfaces. */
+/** Mosaic palette packs — rare accents only (not sand / cavea / shell). */
 export const mosaicPalettes = {
   sand: ['#e0c490', '#c9a978', '#b89560', '#d4b888', '#a88858', '#8a7048'],
   cavea: ['#5a4a3a', '#4a3c30', '#6a5848', '#3a3028', '#7a6450', '#2e261e'],
@@ -390,3 +386,87 @@ export const mosaicPalettes = {
   team0: ['#3a6a88', '#2a5070', '#4a88a8', '#1a3850', '#5a98b0'],
   team1: ['#8a3a30', '#6a2820', '#a85040', '#4a1c14', '#c06850'],
 } as const;
+
+/**
+ * Arena sand — gradient + value noise / speckles (not tesserae).
+ * Shared by Fight + Practice stage plates.
+ */
+export function sandFill(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  opts?: { seed?: number },
+): void {
+  const seed = opts?.seed ?? 3;
+  const pw = Math.max(1, Math.ceil(w));
+  const ph = Math.max(1, Math.ceil(h));
+  const key = `sand:${materialCacheTag()}:${seed}:${pw}x${ph}`;
+  const plate = cacheGet(key, pw, ph, (c) => {
+    paintSand(c, pw, ph, seed);
+  });
+  ctx.drawImage(plate as CanvasImageSource, x, y, w, h);
+}
+
+function paintSand(ctx: CanvasRenderingContext2D, w: number, h: number, seed: number): void {
+  const rng = new SeededRNG((seed ^ 0x5a12d) >>> 0);
+  const base = ctx.createLinearGradient(0, 0, w * 0.15, h);
+  base.addColorStop(0, '#d8bc88');
+  base.addColorStop(0.45, '#c4a46e');
+  base.addColorStop(1, '#a88858');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, w, h);
+
+  const n = Math.floor((w * h) / 55);
+  for (let i = 0; i < n; i++) {
+    const px = rng.next() * w;
+    const py = rng.next() * h;
+    const s = 0.6 + rng.next() * 2.4;
+    const lit = rng.chance(0.48);
+    ctx.fillStyle = lit
+      ? `rgba(255,236,190,${0.04 + rng.next() * 0.1})`
+      : `rgba(70,48,22,${0.05 + rng.next() * 0.12})`;
+    ctx.fillRect(px, py, s, s * (0.45 + rng.next() * 0.7));
+  }
+
+  // Soft dune streaks
+  const streaks = Math.max(6, Math.floor(h / 28));
+  for (let i = 0; i < streaks; i++) {
+    const yy = (i / streaks) * h + (rng.next() - 0.5) * 8;
+    ctx.strokeStyle = `rgba(90,64,34,${0.04 + rng.next() * 0.07})`;
+    ctx.lineWidth = 1 + rng.next() * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, yy);
+    let x = 0;
+    while (x < w) {
+      const nx = x + 18 + rng.next() * 36;
+      const ny = yy + (rng.next() - 0.5) * 4;
+      ctx.lineTo(nx, ny);
+      x = nx;
+    }
+    ctx.stroke();
+  }
+}
+
+/** Faded red center ellipse on sand (replaces bronze mosaic medallion). */
+export function paintCenterRing(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(138, 58, 42, 0.14)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(138, 58, 42, 0.38)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(192, 96, 64, 0.18)';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.restore();
+}

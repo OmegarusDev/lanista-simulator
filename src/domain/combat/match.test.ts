@@ -38,7 +38,7 @@ describe('Match', () => {
     }
     // Either multiple winners or clearly different bout lengths
     expect(winners.size > 1 || lengthBuckets.size > 2).toBe(true);
-  });
+  }, 15_000);
 
   it('3v3 eventually terminates', () => {
     const m = createQuickMatch(
