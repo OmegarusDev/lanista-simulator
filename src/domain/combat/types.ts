@@ -1,6 +1,8 @@
 import type { ArmaturaId } from '../../content/armatura';
+import type { BeastId } from '../../content/beasts';
 
 export type TeamId = 0 | 1;
+export type CombatantKind = 'gladiator' | 'beast';
 export type ActionKind = 'NONE' | 'ATTACK' | 'GUARD' | 'SIDESTEP';
 export type Phase = 'IDLE' | 'WINDUP' | 'ACTIVE' | 'RECOVER';
 export type Footwork = 'HOLD' | 'CLOSE' | 'DISENGAGE' | 'CIRCLE_L' | 'CIRCLE_R';
@@ -34,7 +36,9 @@ export interface CombatEvent {
 export interface FighterSnapshot {
   id: number;
   team: TeamId;
+  kind: CombatantKind;
   armatura: ArmaturaId;
+  beastId: BeastId | null;
   name: string;
   x: number;
   y: number;
@@ -67,8 +71,13 @@ export type TeamSize = 1 | 2 | 3;
 
 /** Optional career / lab spawn overrides applied after class kit. */
 export interface FighterSpawnSpec {
-  armatura: ArmaturaId;
+  kind?: CombatantKind;
+  /** Required for gladiators; ignored for beasts (placeholder kit). */
+  armatura?: ArmaturaId;
+  beast?: BeastId;
   name?: string;
+  /** Optional future armory hook — part ids assembled before mods. */
+  partsOverride?: string[];
   hpMul?: number;
   staminaMul?: number;
   poiseMul?: number;

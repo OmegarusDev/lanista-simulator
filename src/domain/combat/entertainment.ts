@@ -35,13 +35,21 @@ export interface EntertainmentReport {
 }
 
 const SHOUT_LINES: Partial<Record<CombatEventKind, string[]>> = {
-  HIT: ['They cheer the cut!', 'A clean blow!', 'The sand drinks!'],
-  POISE_BREAK: ['His guard shatters!', 'The crowd gasps!', 'Posture broken!'],
+  HIT: ['They cheer the cut!', 'A clean blow!', 'The sand drinks!', 'The beast strikes!', 'Claws and steel!'],
+  POISE_BREAK: ['His guard shatters!', 'The crowd gasps!', 'Posture broken!', 'The animal drives him back!'],
   TIP_CATCH: ['Entangled!', 'The net sings!', 'Caught!'],
-  SIDESTEP: ['Nimble!', 'He slips away!', 'Light feet!'],
-  KO: ['Down!', 'He falls!', 'The arena holds its breath!'],
+  SIDESTEP: ['Nimble!', 'He slips away!', 'Light feet!', 'It lunges past!'],
+  KO: ['Down!', 'He falls!', 'The arena holds its breath!', 'The beast has him!'],
   GUARD: ['Steel rings!', 'Held!'],
 };
+
+/** Extra venatio color when a KO involves a beast actor (caller may pass). */
+export const BEAST_SHOUTS = [
+  'The benches roar for blood!',
+  'Venatio!',
+  'The animal thrashes!',
+  'No shield saves him!',
+];
 
 export class EntertainmentTracker {
   private scores = new Map<number, number>();
@@ -111,6 +119,7 @@ export class EntertainmentTracker {
     return Math.max(0, Math.min(1, (s + 20) / 100));
   }
 
+  /** Team average entertainment mapped to 0–1 (same scale as favor01). */
   teamFavor01(teamScores: number[]): number {
     if (!teamScores.length) return 0.5;
     const avg = teamScores.reduce((a, b) => a + b, 0) / teamScores.length;

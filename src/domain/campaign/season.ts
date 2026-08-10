@@ -1,14 +1,16 @@
-import { economy, GLADIATOR_NAMES } from '../../content/economy';
-import type { ArmaturaId } from '../../content/armatura';
+import { economy } from '../../content/economy';
 import type { DoctrinaId } from '../../content/rpg';
 import { SeededRNG } from '../rng';
+import { tickAgingAndReplace } from './aging';
+import { resolvePendingSlate, rollDailySlate } from './calendar';
 import { maybeSpawnContract, tickContracts } from './contracts';
 import { applyMedicus } from './facilities';
-import { createGladiator, rosterCap } from './gladiator';
+import { rosterCap } from './gladiator';
 import { emptyLegacy, patronageDenariiBonus } from './legacy';
 import { resolveAssignments } from './ludusDay';
 import { rollMarket } from './market';
 import { rollDailyOffers } from './offers';
+import { rollFighter } from './rollFighter';
 import type { Gladiator, LegacyState, SeasonState } from './types';
 
 export function createSeason(seed: number, legacy?: LegacyState): SeasonState {
@@ -17,19 +19,13 @@ export function createSeason(seed: number, legacy?: LegacyState): SeasonState {
   const roster: Gladiator[] = [];
   let nextId = 1;
   for (let i = 0; i < economy.startingRosterSize; i++) {
-    const kit = economy.starterKits[i % economy.starterKits.length] as ArmaturaId;
-    roster.push(
-      createGladiator(nextId++, {
-        name: GLADIATOR_NAMES[i % GLADIATOR_NAMES.length]!,
-        armatura: kit,
-        grade: leg.starterGradeBump && i === 0 ? 'ORDINARIUS' : 'TIRO',
-        xp: leg.starterGradeBump && i === 0 ? 40 : 0,
-        rng,
-      }),
-    );
-  }
-  for (const g of roster) {
-    if (rng.chance(0.35)) g.name = rng.pick([...GLADIATOR_NAMES]);
+    const g = rollFighter(rng, {
+      policy: 'starter',
+      id: nextId++,
+      starterIndex: i,
+      grade: leg.starterGradeBump && i === 0 ? 'ORDINARIUS' : 'TIRO',
+    });
+    roster.push(g);
   }
 
   const alumniBonus = Math.min(40, leg.alumni.length * 8);
@@ -43,6 +39,8 @@ export function createSeason(seed: number, legacy?: LegacyState): SeasonState {
     nextGladiatorId: nextId,
     roster,
     offers: [],
+    slate: [],
+    pendingNotes: [],
     dayResolved: false,
     record: { wins: 0, losses: 0, draws: 0, forfeits: 0 },
     status: 'ACTIVE',
@@ -57,6 +55,7 @@ export function createSeason(seed: number, legacy?: LegacyState): SeasonState {
     seasonIndex: leg.seasonsCompleted + 1,
   };
   state.offers = rollDailyOffers(state, new SeededRNG(seed ^ 0x0ff3));
+  state.slate = rollDailySlate(state, new SeededRNG(seed ^ 0x51a7));
   state.market = rollMarket(state, new SeededRNG(seed ^ 0xabcd));
   maybeSpawnContract(state, rng);
   return state;
@@ -102,6 +101,7 @@ export function takeRestDay(state: SeasonState): boolean {
   state.restDaysLeft -= 1;
   state.dayResolved = true;
   const rng = new SeededRNG(state.seed + state.day * 41);
+  const slateNotes = resolvePendingSlate(state, rng);
   const assignNotes = resolveAssignments(state, rng);
   state.lastAftermath = {
     offerName: 'Rest day',
@@ -109,7 +109,7 @@ export function takeRestDay(state: SeasonState): boolean {
     purseDelta: -cost,
     virtusDelta: 0,
     injuries: [],
-    notes: ['School rests. Upkeep paid.', ...assignNotes],
+    notes: ['School rests. Upkeep paid.', ...slateNotes, ...assignNotes],
   };
   return true;
 }
@@ -125,6 +125,7 @@ export function endDay(state: SeasonState): boolean {
     if (g.injury === 'NONE') g.hpRatio = Math.min(1, g.hpRatio + 0.08);
   }
 
+  tickAgingAndReplace(state, rng);
   tickContracts(state);
 
   if (state.day >= economy.seasonDays) {
@@ -136,6 +137,7 @@ export function endDay(state: SeasonState): boolean {
   state.dayResolved = false;
   state.lastAftermath = null;
   state.offers = rollDailyOffers(state, new SeededRNG(state.seed + state.day * 9973));
+  state.slate = rollDailySlate(state, new SeededRNG(state.seed + state.day * 0x51a7));
   state.market = rollMarket(state, new SeededRNG(state.seed + state.day * 1337));
   maybeSpawnContract(state, rng);
 

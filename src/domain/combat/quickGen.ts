@@ -1,23 +1,22 @@
-import { ARMATURA_LIST, type ArmaturaId } from '../../content/armatura';
-import { TEMPERAMENT_LIST, type GladiatorGrade } from '../../content/rpg';
-import { createGladiator } from '../campaign/gladiator';
+import type { ArmaturaId } from '../../content/armatura';
+import { BEAST_LIST, BEASTS, type BeastId } from '../../content/beasts';
+import type { TemperamentId } from '../../content/rpg';
+import type { GladiatorGrade } from '../../content/rpg';
 import { spawnSpecFromGladiator } from '../campaign/combatMods';
+import { rollFighter } from '../campaign/rollFighter';
 import { SeededRNG } from '../rng';
 import type { FighterSpawnSpec, TeamSize } from '../combat/types';
+
+export type MatchKind = 'matchup' | 'venatio';
 
 export interface QuickCard {
   name: string;
   armatura: ArmaturaId;
-  temperament: import('../../content/rpg').TemperamentId;
+  temperament: TemperamentId;
   grade: GladiatorGrade;
+  age: number;
   spec: FighterSpawnSpec;
-}
-
-function rollGrade(rng: SeededRNG): GladiatorGrade {
-  const r = rng.next();
-  if (r > 0.88) return 'PRIMUS';
-  if (r > 0.45) return 'ORDINARIUS';
-  return 'TIRO';
+  beastId?: BeastId;
 }
 
 /** Fresh named fighters for Quick Match (no career side effects). */
@@ -29,14 +28,9 @@ export function generateQuickTeam(
   const rng = new SeededRNG((seed ^ (teamSalt * 0x9e37)) >>> 0);
   const cards: QuickCard[] = [];
   for (let i = 0; i < teamSize; i++) {
-    const armatura = rng.pick([...ARMATURA_LIST]) as ArmaturaId;
-    const grade = rollGrade(rng);
-    const g = createGladiator(1000 + teamSalt * 10 + i, {
-      armatura,
-      grade,
-      xp: grade === 'PRIMUS' ? 100 : grade === 'ORDINARIUS' ? 40 : 0,
-      temperament: rng.pick([...TEMPERAMENT_LIST]),
-      rng,
+    const g = rollFighter(rng, {
+      policy: 'lab',
+      id: 1000 + teamSalt * 10 + i,
     });
     const spec = spawnSpecFromGladiator(g, 'ANGLE');
     cards.push({
@@ -44,8 +38,39 @@ export function generateQuickTeam(
       armatura: g.armatura,
       temperament: g.temperament,
       grade: g.grade,
+      age: g.age,
       spec,
     });
   }
   return cards;
+}
+
+/** Humans on Blue, beasts on Red — Instant Match venatio. */
+export function generateVenatioTeams(
+  seed: number,
+  teamSize: TeamSize,
+): { team0: QuickCard[]; team1: QuickCard[] } {
+  const team0 = generateQuickTeam(seed, teamSize, 1);
+  const rng = new SeededRNG((seed ^ 0xbea57) >>> 0);
+  const team1: QuickCard[] = [];
+  for (let i = 0; i < teamSize; i++) {
+    const beast = rng.pick([...BEAST_LIST]) as BeastId;
+    const def = BEASTS[beast];
+    team1.push({
+      name: def.name,
+      armatura: 'MURMILLO',
+      temperament: 'FEROX',
+      grade: 'ORDINARIUS',
+      age: 0,
+      beastId: beast,
+      spec: {
+        kind: 'beast',
+        beast,
+        armatura: 'MURMILLO',
+        name: def.name,
+        pursueBiasAdd: 0.1,
+      },
+    });
+  }
+  return { team0, team1 };
 }

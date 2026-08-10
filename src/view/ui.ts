@@ -300,6 +300,8 @@ export interface RosterChipOpts {
   tag: string;
   team: 0 | 1;
   hpRatio: number;
+  /** Optional 0–1 crowd favor meter (fight roster) */
+  favor01?: number;
   selected?: boolean;
   disabled?: boolean;
   /** KO / fallen */
@@ -342,12 +344,23 @@ export function rosterChip(
     color: surface.muted,
   });
 
-  // HP fragment on the right
+  // HP (+ optional crowd favor) fragment on the right
   const barW = Math.min(32, Math.max(22, r.w * 0.22));
-  const barH = 5;
+  const barH = opts.favor01 !== undefined ? 4 : 5;
   const bx = r.x + r.w - barW - space.sm;
-  const by = midY - 2;
+  const by = opts.favor01 !== undefined ? midY - 6 : midY - 2;
   bar(ctx, bx, by, barW, barH, opts.hpRatio, opts.muted ? surface.muted : colors.hp);
+  if (opts.favor01 !== undefined) {
+    bar(
+      ctx,
+      bx,
+      by + barH + 2,
+      barW,
+      barH,
+      opts.favor01,
+      opts.muted ? surface.muted : colors.stamina,
+    );
+  }
 
   ctx.globalAlpha = 1;
   const clicked = Boolean(hovered && pointer.clicked && !opts.disabled);

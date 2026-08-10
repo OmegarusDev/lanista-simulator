@@ -1,6 +1,9 @@
 import { colors } from '../content/palette';
 import { applyCareerFight } from '../domain/campaign/aftermath';
-import { spawnSpecsFromLineup } from '../domain/campaign/combatMods';
+import { findSlateBout, slateToOffer } from '../domain/campaign/calendar';
+import { spawnSpecFromGladiator, spawnSpecsFromLineup } from '../domain/campaign/combatMods';
+import { rollFighter } from '../domain/campaign/rollFighter';
+import { SeededRNG } from '../domain/rng';
 import { settleSeasonLegacy } from '../domain/campaign/legacy';
 import { createSeason, endDay } from '../domain/campaign/season';
 import type { AftermathSummary, MuneraOffer, SeasonState } from '../domain/campaign/types';
@@ -240,6 +243,53 @@ export class App {
       this.mode = 'offers';
       return;
     }
+    if (action.type === 'WATCH_SLATE') {
+      const bout = findSlateBout(this.season, action.boutId);
+      if (!bout || bout.status !== 'pending') return;
+      const offer = slateToOffer(this.season, bout);
+      this.pendingOffer = offer;
+      this.pendingLineup = [...bout.schoolIds];
+      const team0 = bout.schoolIds.map((id) => {
+        const g = this.season!.roster.find((x) => x.id === id)!;
+        return g.armatura;
+      });
+      const team0Specs = spawnSpecsFromLineup(
+        this.season.roster,
+        bout.schoolIds,
+        this.season.doctrina,
+      );
+      const boutSeed = (this.season.seed + this.season.day * 1009 + bout.id.length) >>> 0;
+      let team1Specs;
+      if (bout.kind === 'venatio' && bout.beastOpponents) {
+        team1Specs = bout.beastOpponents.map((beast) => ({
+          kind: 'beast' as const,
+          beast,
+          armatura: 'MURMILLO' as const,
+        }));
+      } else {
+        const rivalRng = new SeededRNG(boutSeed ^ 0x51a7);
+        team1Specs = bout.opponentArmaturae.map((armatura, i) => {
+          const rival = rollFighter(rivalRng, {
+            policy: 'rival',
+            id: 9000 + i,
+            armatura,
+          });
+          return spawnSpecFromGladiator(rival, 'PRESS');
+        });
+      }
+      const config: SandboxConfig = {
+        teamSize: bout.teamSize,
+        seed: boutSeed,
+        team0,
+        team1: [...bout.opponentArmaturae],
+        team0Specs,
+        team1Specs,
+        lockedMatchup: true,
+        matchKind: bout.kind === 'venatio' ? 'venatio' : 'matchup',
+      };
+      this.enterFight(config, 'career');
+      return;
+    }
     if (action.type === 'END_DAY') {
       endDay(this.season);
       this.persist();
@@ -254,7 +304,18 @@ export class App {
       this.goTitle();
       return;
     }
-    if (action.type === 'CHANGED' || action.type === 'RESTED') {
+    if (action.type === 'RESTED') {
+      this.pendingAftermath = this.season.lastAftermath;
+      this.persist();
+      if (this.seasonTerminal(this.season)) {
+        clearSeasonSave();
+        this.mode = 'seasonEnd';
+      } else if (this.pendingAftermath) {
+        this.mode = 'aftermath';
+      }
+      return;
+    }
+    if (action.type === 'CHANGED') {
       this.persist();
       if (this.seasonTerminal(this.season)) {
         clearSeasonSave();
@@ -302,19 +363,30 @@ export class App {
         action.lineupIds,
         this.season.doctrina,
       );
+      const boutSeed =
+        (this.season.seed + this.season.day * 1009 + offer.templateId.length) >>> 0;
+      const rivalRng = new SeededRNG(boutSeed ^ 0x51a7);
       const tierMul = 1 + (offer.tier - 1) * 0.04;
-      const team1Specs = offer.opponents.map((armatura, i) => ({
-        armatura,
-        name: `Rival ${i + 1}`,
-        hpMul: tierMul,
-        staminaMul: tierMul,
-        poiseMul: tierMul,
-        damageMul: tierMul,
-        pursueBiasAdd: offer.rivalName ? 0.06 : 0,
-      }));
+      const team1Specs = offer.opponents.map((armatura, i) => {
+        const rival = rollFighter(rivalRng, {
+          policy: 'rival',
+          id: 9000 + i,
+          armatura,
+          name: offer.rivalName && i === 0 ? offer.rivalName : undefined,
+        });
+        const base = spawnSpecFromGladiator(rival, 'PRESS');
+        return {
+          ...base,
+          hpMul: (base.hpMul ?? 1) * tierMul,
+          staminaMul: (base.staminaMul ?? 1) * tierMul,
+          poiseMul: (base.poiseMul ?? 1) * tierMul,
+          damageMul: (base.damageMul ?? 1) * tierMul,
+          pursueBiasAdd: (base.pursueBiasAdd ?? 0) + (offer.rivalName ? 0.06 : 0),
+        };
+      });
       const config: SandboxConfig = {
         teamSize: offer.teamSize,
-        seed: (this.season.seed + this.season.day * 1009 + offer.templateId.length) >>> 0,
+        seed: boutSeed,
         team0,
         team1: [...offer.opponents],
         team0Specs,

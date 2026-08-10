@@ -554,11 +554,16 @@ export function pickThreat(self: Fighter, fighters: Fighter[]): Fighter | null {
     if (f.poiseTier === 'SOFT') score += 8;
 
     const hpRatio = f.hp / f.maxHp;
-    score += (1 - hpRatio) * combatTuning.finishHimBias;
+    score += (1 - hpRatio) * combatTuning.finishHimBias * 1.35;
+    // Melee readability: pile onto the weak link
+    if (hpRatio < 0.4) score += 35;
+    if (hpRatio < 0.25) score += 25;
 
-    // Ally under their blade → assist
+    // Focus fire — if an ally is already close to this foe, join them
     for (const a of allies) {
       if (a.id === self.id || !a.alive) continue;
+      const allyToFoe = dist(a.x, a.y, f.x, f.y);
+      if (allyToFoe < 70) score += 22;
       const toAlly = angleTo(f.x, f.y, a.x, a.y);
       const arc = effectiveAttackArc(f.def(), f.footwork);
       if (

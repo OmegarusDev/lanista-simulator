@@ -1,5 +1,6 @@
 import { ARMATURAE, effectiveAttackArc, type ArmaturaId } from '../content/armatura';
 import { ARMATURA_LOOK, massScale, type ArmaturaLook } from '../content/appearance';
+import { BEASTS, type BeastId } from '../content/beasts';
 import { colors } from '../content/palette';
 import type { FighterSnapshot } from '../domain/combat/types';
 import { fontStack, typeScale } from './theme';
@@ -39,8 +40,61 @@ export function drawArmaturaPreview(
     {
       id: 0,
       team,
+      kind: 'gladiator',
       armatura,
+      beastId: null,
       name: ARMATURAE[armatura].short,
+      x: 0,
+      y: 0,
+      facing,
+      hp: 1,
+      maxHp: 1,
+      stamina: 1,
+      maxStamina: 1,
+      poise: 1,
+      maxPoise: 1,
+      action: 'NONE',
+      phase: 'IDLE',
+      phaseT: 0,
+      phaseMax: 0,
+      footwork: 'HOLD',
+      intention: 'NONE',
+      desiredDist: 45,
+      poiseTier: 'SOLID',
+      stunned: false,
+      tangled: false,
+      poiseBroken: false,
+      guarding: false,
+      alive: true,
+      flash: 0,
+    },
+    false,
+  );
+}
+
+/** Static beast preview for Instant Match venatio. */
+export function drawBeastPreview(
+  ctx: CanvasRenderingContext2D,
+  beast: BeastId,
+  x: number,
+  y: number,
+  opts?: { facing?: number; team?: 0 | 1; scale?: number },
+): void {
+  const facing = opts?.facing ?? -Math.PI / 2;
+  const team = opts?.team ?? 1;
+  const scale = opts?.scale ?? 1;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  drawBeastGlyph(
+    ctx,
+    {
+      id: 0,
+      team,
+      kind: 'beast',
+      armatura: 'MURMILLO',
+      beastId: beast,
+      name: BEASTS[beast].short,
       x: 0,
       y: 0,
       facing,
@@ -86,12 +140,81 @@ export function drawGladiator(
   drawGladiatorGlyph(ctx, f, true, opts);
 }
 
+function drawBeastGlyph(
+  ctx: CanvasRenderingContext2D,
+  f: FighterSnapshot,
+  withBars: boolean,
+  opts?: DrawGladiatorOpts,
+): void {
+  const beast = f.beastId ? BEASTS[f.beastId] : BEASTS.LION;
+  const teamTint = f.team === 0 ? colors.ally : colors.foe;
+  const scale = massScale(beast.mass) * 1.05;
+  const pose = poseOf(f);
+
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  if (opts?.selected) drawSelectionRing(ctx, teamTint, scale);
+
+  if (pose === 'fallen') {
+    ctx.rotate(f.facing + 0.5);
+    ctx.globalAlpha = 0.5;
+  } else {
+    ctx.rotate(f.facing);
+  }
+
+  // Body ellipse
+  ctx.fillStyle = beast.color;
+  ctx.strokeStyle = teamTint;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 14 * scale, 9 * scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Head / snout forward
+  ctx.fillStyle = '#2a2018';
+  ctx.beginPath();
+  ctx.ellipse(11 * scale, 0, 6 * scale, 4.5 * scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mane / bristling for lion & boar
+  if (f.beastId === 'LION' || f.beastId === 'BOAR') {
+    ctx.strokeStyle = '#3a2a18';
+    ctx.lineWidth = 2;
+    for (let i = -3; i <= 3; i++) {
+      const a = (i / 3) * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 8 * scale, Math.sin(a) * 7 * scale);
+      ctx.lineTo(Math.cos(a) * 13 * scale, Math.sin(a) * 11 * scale);
+      ctx.stroke();
+    }
+  }
+
+  // Strike cue
+  if (pose === 'strike' || pose === 'windup') {
+    ctx.strokeStyle = `rgba(220,180,80,${pose === 'strike' ? 0.7 : 0.35})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(12 * scale, 0);
+    ctx.lineTo(22 * scale, 0);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+  if (withBars) drawBars(ctx, f, opts?.showSelectedName === true);
+}
+
 function drawGladiatorGlyph(
   ctx: CanvasRenderingContext2D,
   f: FighterSnapshot,
   withBars: boolean,
   opts?: DrawGladiatorOpts,
 ): void {
+  if (f.kind === 'beast' || f.beastId) {
+    drawBeastGlyph(ctx, f, withBars, opts);
+    return;
+  }
+
   const def = ARMATURAE[f.armatura];
   const look = ARMATURA_LOOK[f.armatura];
   const teamTint = f.team === 0 ? colors.ally : colors.foe;

@@ -25,6 +25,7 @@ function migrateGladiator(raw: Partial<Gladiator> & { id: number; name: string; 
     gearGrade: (raw.gearGrade as GearGrade) ?? 0,
     assignment: (raw.assignment as DayAssignment) ?? 'NONE',
     retired: raw.retired,
+    age: typeof raw.age === 'number' ? raw.age : 22,
   };
 }
 
@@ -47,6 +48,8 @@ function migrateSeason(data: Record<string, unknown>): SeasonState | null {
     nextGladiatorId: typeof data.nextGladiatorId === 'number' ? data.nextGladiatorId : roster.length + 1,
     roster,
     offers: Array.isArray(data.offers) ? (data.offers as SeasonState['offers']) : [],
+    slate: Array.isArray(data.slate) ? (data.slate as SeasonState['slate']) : [],
+    pendingNotes: Array.isArray(data.pendingNotes) ? (data.pendingNotes as string[]) : [],
     dayResolved: Boolean(data.dayResolved),
     record: (data.record as SeasonState['record']) ?? {
       wins: 0,
@@ -82,7 +85,10 @@ export function loadSeason(): SeasonState | null {
     const data = JSON.parse(raw) as Record<string, unknown>;
     const state = migrateSeason(data);
     if (!state) return null;
-    applyOfflineIdle(state);
+    const idleNotes = applyOfflineIdle(state);
+    if (idleNotes.length) {
+      state.pendingNotes = [...(state.pendingNotes ?? []), ...idleNotes];
+    }
     // Persist idle clock so recovery isn't reapplied on every Continue
     saveSeason(state);
     return state;

@@ -25,6 +25,7 @@ export function createGladiator(
     hpRatio?: number;
     injury?: InjuryTier;
     fatigue?: number;
+    age?: number;
     rng?: SeededRNG;
   },
 ): Gladiator {
@@ -52,6 +53,7 @@ export function createGladiator(
     mastery: opts.mastery ?? (grade === 'TIRO' ? 0 : grade === 'ORDINARIUS' ? 20 : 40),
     gearGrade: opts.gearGrade ?? 0,
     assignment: 'NONE',
+    age: opts.age ?? 22,
   };
 }
 

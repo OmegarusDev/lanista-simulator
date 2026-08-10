@@ -27,6 +27,7 @@ export type LudusAction =
   | { type: 'NONE' }
   | { type: 'INSTANT_MATCH' }
   | { type: 'MUNERA' }
+  | { type: 'WATCH_SLATE'; boutId: string }
   | { type: 'END_DAY' }
   | { type: 'TITLE' }
   | { type: 'CHANGED' }
@@ -87,7 +88,8 @@ export class LudusScene {
     });
 
     const bodyTop = tabY + touchTarget + 4;
-    const bodyH = h - bodyTop - (portrait ? 200 : 120);
+    // Portrait: tighter footer so slate/roster claim the middle
+    const bodyH = h - bodyTop - (portrait ? 156 : 120);
 
     if (this.tab === 'roster') {
       action = this.drawRoster(ctx, input, state, pad, bodyTop, w, bodyH, portrait) ?? action;
@@ -97,12 +99,12 @@ export class LudusScene {
       action = this.drawSchool(ctx, input, state, pad, bodyTop, w, bodyH) ?? action;
     }
 
-    const by = h - (portrait ? 188 : 108);
-    const btnH = touchTarget;
+    const by = h - (portrait ? 148 : 108);
+    const btnH = portrait ? touchTarget - 4 : touchTarget;
     if (portrait) {
       const row1 = buttonRow(pad, by, w - pad * 2, btnH, 2, space.sm);
       if (
-        button(ctx, row1[0]!, "Today's Munera", input.pointer, {
+        button(ctx, row1[0]!, 'Board', input.pointer, {
           disabled: state.dayResolved || state.status !== 'ACTIVE',
         })
       ) {
@@ -134,7 +136,7 @@ export class LudusScene {
       }
     } else {
       if (
-        button(ctx, { x: pad, y: by, w: 150, h: btnH }, "Today's Munera", input.pointer, {
+        button(ctx, { x: pad, y: by, w: 150, h: btnH }, 'Board', input.pointer, {
           disabled: state.dayResolved || state.status !== 'ACTIVE',
         })
       ) {
@@ -195,24 +197,78 @@ export class LudusScene {
     portrait: boolean,
   ): LudusAction | null {
     let action: LudusAction | null = null;
-    panel(ctx, { x: pad, y: top, w: w - pad * 2, h: bodyH }, 'Familia');
+    panel(ctx, { x: pad, y: top, w: w - pad * 2, h: bodyH }, 'Today');
 
-    const chipW = portrait ? Math.min(150, (w - pad * 2 - 24) / 2) : 140;
-    const chipH = touchTarget;
-    const gap = 8;
-    const cols = Math.max(1, Math.floor((w - pad * 2 - 24 + gap) / (chipW + gap)));
+    // Living slate — packed rows (no giant empty band)
+    const slate = state.slate ?? [];
+    const pending = slate.filter((b) => b.status === 'pending');
+    let y = top + 26;
+    if (pending.length && !state.dayResolved) {
+      label(ctx, 'Slate — watch one', pad + 12, y, { size: typeScale.meta, color: colors.muted });
+      y += 12;
+      for (const bout of pending) {
+        const rowH = portrait ? 40 : 44;
+        const row = {
+          x: pad + 10,
+          y,
+          w: w - pad * 2 - 20,
+          h: rowH,
+        };
+        if (row.y + row.h > top + bodyH * 0.42) break;
+        const names = bout.schoolIds
+          .map((id) => state.roster.find((g) => g.id === id)?.name ?? '?')
+          .join(', ');
+        label(ctx, bout.name, row.x + 8, row.y + 14, { size: typeScale.label });
+        label(
+          ctx,
+          `${names} · ${bout.kind === 'venatio' ? 'beasts' : 'rivals'} · ${bout.purse}d`,
+          row.x + 8,
+          row.y + 30,
+          { size: typeScale.eyebrow, color: colors.muted },
+        );
+        const watchW = portrait ? 68 : 84;
+        if (
+          button(
+            ctx,
+            { x: row.x + row.w - watchW - 2, y: row.y + 4, w: watchW, h: rowH - 8 },
+            'Watch',
+            input.pointer,
+            { size: typeScale.meta },
+          )
+        ) {
+          this.synth.play('ui');
+          action = { type: 'WATCH_SLATE', boutId: bout.id };
+        }
+        y += rowH + 4;
+      }
+    } else if (state.pendingNotes?.length) {
+      label(ctx, state.pendingNotes[0]!, pad + 12, y + 4, {
+        size: typeScale.meta,
+        color: colors.muted,
+      });
+      y += 22;
+    }
+
+    const rosterTop = y + 6;
+    label(ctx, 'Familia', pad + 12, rosterTop, { size: typeScale.meta, color: colors.muted });
+
+    const chipW = portrait ? Math.min(148, (w - pad * 2 - 20) / 2) : 140;
+    const chipH = portrait ? touchTarget - 4 : touchTarget;
+    const gap = 6;
+    const cols = Math.max(1, Math.floor((w - pad * 2 - 20 + gap) / (chipW + gap)));
     const active = state.roster.filter((g) => !g.retired);
+    const chipsTop = rosterTop + 14;
 
     active.forEach((g, i) => {
       const row = Math.floor(i / cols);
       const col = i % cols;
       const r = {
         x: pad + 12 + col * (chipW + gap),
-        y: top + 40 + row * (chipH + gap + 36),
+        y: chipsTop + row * (chipH + gap + (portrait ? 28 : 34)),
         w: chipW,
         h: chipH,
       };
-      if (r.y + r.h > top + bodyH - 8) return;
+      if (r.y + r.h > top + bodyH - (portrait ? 100 : 88)) return;
       const tag =
         g.injury === 'SEVERE' ? 'OUT' : g.injury === 'LIGHT' ? 'Hurt' : GRADE_LABEL[g.grade].slice(0, 4);
       if (
@@ -230,7 +286,7 @@ export class LudusScene {
       }
       label(
         ctx,
-        `${ARMATURAE[g.armatura].short} · ${TEMPERAMENTS[g.temperament].name} · ${g.assignment === 'NONE' ? '—' : g.assignment}`,
+        `${ARMATURAE[g.armatura].short} · ${g.age}y · ${g.assignment === 'NONE' ? '—' : g.assignment}`,
         r.x + r.w / 2,
         r.y + r.h + 12,
         { size: typeScale.eyebrow, align: 'center', color: colors.muted },
@@ -249,7 +305,7 @@ export class LudusScene {
       const detailY = top + bodyH - (portrait ? 118 : 96);
       label(
         ctx,
-        `${sel.name} · ${GRADE_LABEL[sel.grade]} · kit ${sel.gearGrade} · fat ${sel.fatigue}`,
+        `${sel.name} · ${GRADE_LABEL[sel.grade]} · ${sel.age}y · kit ${sel.gearGrade} · fat ${sel.fatigue}`,
         pad + 12,
         detailY,
         { size: typeScale.meta },

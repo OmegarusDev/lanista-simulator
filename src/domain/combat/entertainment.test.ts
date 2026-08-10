@@ -33,6 +33,14 @@ describe('entertainment / missio', () => {
     expect(t.score(2)).toBeLessThan(5);
   });
 
+  it('maps team average scores into 0–1 favor', () => {
+    const t = new EntertainmentTracker();
+    expect(t.teamFavor01([])).toBe(0.5);
+    expect(t.teamFavor01([30, 50])).toBeCloseTo(0.6, 5); // avg 40 → (40+20)/100
+    expect(t.teamFavor01([-20])).toBe(0);
+    expect(t.teamFavor01([80])).toBe(1);
+  });
+
   it('spares more often when entertainment is high', () => {
     const low = missioSpareChance(5, 0);
     const high = missioSpareChance(80, 4);

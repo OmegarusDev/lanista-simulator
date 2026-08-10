@@ -9,11 +9,15 @@ describe('campaign season', () => {
     const b = createSeason(42);
     expect(a.roster.length).toBe(economy.startingRosterSize);
     expect(a.offers.length).toBeGreaterThan(0);
+    expect(a.slate.length).toBeGreaterThan(0);
+    expect(a.roster.every((g) => g.age >= 18)).toBe(true);
     expect(a.roster.map((g) => g.armatura)).toEqual(b.roster.map((g) => g.armatura));
   });
 
   it('applies win purse and marks day resolved', () => {
     const s = createSeason(7);
+    // Isolate purse math from off-screen slate sims
+    s.slate = [];
     const offer = s.offers[0]!;
     const before = s.denarii;
     const lineup = [s.roster[0]!.id];

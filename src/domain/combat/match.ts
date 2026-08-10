@@ -1,4 +1,5 @@
 import { ARMATURA_LIST, effectiveAttackArc, type ArmaturaId } from '../../content/armatura';
+import { BEASTS } from '../../content/beasts';
 import { combatTuning } from '../../content/combat';
 import { SeededRNG } from '../rng';
 import {
@@ -96,14 +97,10 @@ export class Match {
       const x = baseX + (specs.length >= 3 ? (i - 1) * 8 * (team === 0 ? 1 : -1) : 0);
       const y = baseY + spread;
       const facing = team === 0 ? 0 : Math.PI;
-      const f = new Fighter(
-        team,
-        spec.armatura,
-        spec.name ?? this.rng.pick(names),
-        x,
-        y,
-        facing,
-      );
+      const isBeast = spec.kind === 'beast' && !!spec.beast;
+      const armatura = spec.armatura ?? (isBeast ? 'MURMILLO' : this.rng.pick(ARMATURA_LIST));
+      const defaultName = isBeast ? BEASTS[spec.beast!].name : this.rng.pick(names);
+      const f = new Fighter(team, armatura, spec.name ?? defaultName, x, y, facing);
       f.applySpawnSpec(spec);
       // Opposite preferred orbits so mirrors shear instead of ramming
       f.orbitSide = team === 0 ? 1 : -1;
@@ -136,7 +133,9 @@ export class Match {
   }
 
   teamCrowdFavor(team: 0 | 1): number {
-    const scores = this.fighters.filter((f) => f.team === team).map((f) => this.entertainment.score(f.id));
+    const scores = this.fighters
+      .filter((f) => f.team === team)
+      .map((f) => this.entertainment.score(f.id));
     return this.entertainment.teamFavor01(scores);
   }
 

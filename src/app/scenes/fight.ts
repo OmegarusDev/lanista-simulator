@@ -1,10 +1,16 @@
 import { ARMATURAE } from '../../content/armatura';
+import { BEASTS } from '../../content/beasts';
 import { colors } from '../../content/palette';
 import type { BoutFighterStat } from '../../domain/campaign/aftermath';
 import { createQuickMatch, type Match } from '../../domain/combat/match';
 import type { CrowdShout } from '../../domain/combat/entertainment';
 import { SeededRNG } from '../../domain/rng';
 import type { CombatEvent, FighterSnapshot, MatchResult } from '../../domain/combat/types';
+
+function fighterTag(f: FighterSnapshot): string {
+  if (f.kind === 'beast' && f.beastId) return BEASTS[f.beastId].short;
+  return ARMATURAE[f.armatura].short;
+}
 import { ARENA_WORLD_H, ARENA_WORLD_W, getDesign } from '../../shell/canvas';
 import type { Input, PointerState } from '../../shell/input';
 import {
@@ -15,13 +21,16 @@ import {
   stepDust,
   type DustParticle,
 } from '../../view/arena';
+import { ArenaCamera } from '../../view/arenaCamera';
 import type { Synth } from '../../view/audio';
 import { drawGladiator } from '../../view/gladiatorDraw';
 import {
   designToWorld,
+  fightArenaZoom,
   fightInspectRect,
   fightStageLayout,
   type FightStageLayout,
+  type WorldViewTransform,
 } from '../../view/layout';
 import {
   button,
@@ -77,6 +86,12 @@ export class FightScene {
   private readonly lineupIds: number[];
   private crowdShout: CrowdShout | null = null;
   private crowdShoutLife = 0;
+  private readonly cam = new ArenaCamera();
+  private interestX: number | null = null;
+  private interestY: number | null = null;
+  private interestLife = 0;
+  private ptrWasDown = false;
+  private worldT: WorldViewTransform | null = null;
 
   constructor(
     config: SandboxConfig,
@@ -88,6 +103,8 @@ export class FightScene {
     this.lineupIds = opts?.lineupIds ? [...opts.lineupIds] : [];
     this.match = this.makeMatch(config);
     this.fxRng = new SeededRNG(config.seed ^ 0xd057);
+    const { w, h } = getDesign();
+    this.cam.reset(fightArenaZoom(w, h));
   }
 
   private makeMatch(config: SandboxConfig): Match {
@@ -161,6 +178,11 @@ export class FightScene {
 
     if (this.crowdShoutLife > 0) this.crowdShoutLife--;
     if (this.crowdShoutLife <= 0) this.crowdShout = null;
+    if (this.interestLife > 0) this.interestLife--;
+    if (this.interestLife <= 0) {
+      this.interestX = null;
+      this.interestY = null;
+    }
 
     stepDust(this.dust);
 
@@ -173,6 +195,14 @@ export class FightScene {
       if (!still) this.selectedId = null;
     }
 
+    const snaps = this.match.snapshots();
+    this.cam.updateAutocam(snaps, {
+      selectedId: this.selectedId,
+      interestX: this.interestX ?? undefined,
+      interestY: this.interestY ?? undefined,
+    });
+    this.cam.tickSmooth();
+
     return { type: 'NONE' };
   }
 
@@ -184,13 +214,23 @@ export class FightScene {
     ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, w, h);
 
-    const t = stage.world;
+    const snapsAll = this.match.snapshots();
+    const t = this.cam.toTransform(stage.world.view);
+    this.worldT = t;
+    // Keep stage.world in sync for vignette / inspect helpers that read it
+    stage.world.ox = t.ox;
+    stage.world.oy = t.oy;
+    stage.world.scale = t.scale;
+
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(t.view.x, t.view.y, t.view.w, t.view.h);
+    ctx.clip();
     ctx.translate(t.ox, t.oy);
     ctx.scale(t.scale, t.scale);
     drawArena(ctx, this.shake, { seed: this.config.seed, stage });
 
-    const snaps = this.match.snapshots().slice().sort((a, b) => a.y - b.y);
+    const snaps = snapsAll.slice().sort((a, b) => a.y - b.y);
     for (const f of snaps) {
       const selected = f.id === this.selectedId;
       drawGladiator(ctx, f, { selected, showSelectedName: selected });
@@ -216,8 +256,7 @@ export class FightScene {
     if (this.finished && !this.paused) {
       action = this.drawEndBanner(ctx, input, action, stage);
     } else if (!this.paused) {
-      // Arena click-to-select after chrome consumed clicks
-      this.handleArenaPick(input, snaps, stage);
+      this.handleArenaCamera(input, snapsAll, stage);
     }
 
     if (this.paused) {
@@ -236,7 +275,13 @@ export class FightScene {
 
     const lineup = this.match
       .snapshots()
-      .map((f) => `${f.team === 0 ? 'B' : 'R'}:${ARMATURAE[f.armatura].short}`)
+      .map((f) => {
+        const tag =
+          f.kind === 'beast' && f.beastId
+            ? BEASTS[f.beastId].short
+            : ARMATURAE[f.armatura].short;
+        return `${f.team === 0 ? 'B' : 'R'}:${tag}`;
+      })
       .join('  ·  ');
     label(ctx, lineup, stage.w / 2, yTitle, {
       size: stage.orientation === 'portrait' ? typeScale.body : typeScale.label,
@@ -278,9 +323,26 @@ export class FightScene {
   }
 
   private drawCrowdFeedback(ctx: CanvasRenderingContext2D, stage: FightStageLayout): void {
-    const favor = this.match.teamCrowdFavor(0);
-    const lean =
-      favor >= 0.62 ? 'Crowd favors Blue' : favor <= 0.38 ? 'Crowd favors Red' : 'Crowd is restless';
+    const alive = this.match.fighters.filter((f) => f.alive);
+    let lean = 'Crowd is restless';
+    let leanColor: string = colors.muted;
+    if (alive.length > 0) {
+      let best = alive[0]!;
+      let bestFavor = this.match.crowdFavorFor(best.id);
+      for (let i = 1; i < alive.length; i++) {
+        const f = alive[i]!;
+        const favor = this.match.crowdFavorFor(f.id);
+        if (favor > bestFavor) {
+          best = f;
+          bestFavor = favor;
+        }
+      }
+      if (bestFavor >= 0.62) {
+        lean = `Crowd favors ${best.name}`;
+        leanColor = colors.stamina;
+      }
+    }
+
     const leanY =
       stage.orientation === 'portrait'
         ? stage.world.view.y + 18
@@ -288,10 +350,14 @@ export class FightScene {
     label(ctx, lean, stage.w / 2, leanY, {
       size: typeScale.meta,
       align: 'center',
-      color: favor >= 0.62 ? colors.ally : favor <= 0.38 ? colors.foe : colors.muted,
+      color: leanColor,
     });
 
-    // Favor bar
+    // Team Blue vs Red favor bar (Blue share of combined team favor)
+    const blueFavor = this.match.teamCrowdFavor(0);
+    const redFavor = this.match.teamCrowdFavor(1);
+    const favorSum = blueFavor + redFavor;
+    const favor = favorSum > 0 ? blueFavor / favorSum : 0.5;
     const barW = Math.min(180, stage.w * 0.4);
     const barX = stage.w / 2 - barW / 2;
     const barY = leanY + 8;
@@ -437,12 +503,19 @@ export class FightScene {
     const labelY = stage.rosterBandTop + 12;
     const edge = 12;
 
-    label(ctx, 'Blue', edge, labelY, { variant: 'eyebrow', color: colors.ally });
-    label(ctx, 'Red', stage.w - edge, labelY, {
-      variant: 'eyebrow',
-      align: 'right',
-      color: colors.foe,
-    });
+    // Team labels are camera shortcuts
+    const blueLab = { x: edge, y: labelY - 14, w: 56, h: 28 };
+    const redLab = { x: stage.w - edge - 56, y: labelY - 14, w: 56, h: 28 };
+    if (button(ctx, blueLab, 'Blue', pointer, { size: typeScale.eyebrow })) {
+      this.cam.focusTeamGroup(0, snaps);
+      this.selectedId = null;
+      this.synth.play('ui');
+    }
+    if (button(ctx, redLab, 'Red', pointer, { size: typeScale.eyebrow })) {
+      this.cam.focusTeamGroup(1, snaps);
+      this.selectedId = null;
+      this.synth.play('ui');
+    }
 
     const leftBudget = mid - edge - gap;
     const rightBudget = mid - edge - gap;
@@ -461,9 +534,10 @@ export class FightScene {
       if (
         rosterChip(ctx, r, pointer, {
           name: f.name,
-          tag: ARMATURAE[f.armatura].short,
+          tag: fighterTag(f),
           team: 0,
           hpRatio: f.hp / f.maxHp,
+          favor01: this.match.crowdFavorFor(f.id),
           selected: f.id === this.selectedId,
           muted: !f.alive,
         })
@@ -480,9 +554,10 @@ export class FightScene {
       if (
         rosterChip(ctx, r, pointer, {
           name: f.name,
-          tag: ARMATURAE[f.armatura].short,
+          tag: fighterTag(f),
           team: 1,
           hpRatio: f.hp / f.maxHp,
+          favor01: this.match.crowdFavorFor(f.id),
           selected: f.id === this.selectedId,
           muted: !f.alive,
         })
@@ -505,7 +580,10 @@ export class FightScene {
     const f = snaps.find((s) => s.id === this.selectedId);
     if (!f) return;
 
-    const def = ARMATURAE[f.armatura];
+    const def =
+      f.kind === 'beast' && f.beastId
+        ? { ...BEASTS[f.beastId], id: f.armatura }
+        : ARMATURAE[f.armatura];
     const preferLeft = f.x > ARENA_WORLD_W / 2;
     const debugLines = this.debugFeel
       ? [
@@ -515,16 +593,18 @@ export class FightScene {
         ]
       : undefined;
     const contentH =
-      200 +
+      218 +
       (debugLines ? 20 + debugLines.length * 15 : 0) +
       (def.tipCatchRatio > 0 ? 18 : 0);
 
     const r = fightInspectRect(stage, preferLeft, contentH);
 
+    const favor01 = this.match.crowdFavorFor(f.id);
     const lines: { label: string; value: string }[] = [
       { label: 'HP', value: `${Math.ceil(f.hp)} / ${f.maxHp}` },
       { label: 'Stamina', value: `${Math.ceil(f.stamina)} / ${f.maxStamina}` },
       { label: 'Poise', value: `${Math.ceil(f.poise)} / ${f.maxPoise}` },
+      { label: 'Crowd', value: `${Math.round(favor01 * 100)}%` },
       { label: 'Range', value: `${def.attackRange}` },
       { label: 'Guard', value: `${(def.guardArc * (180 / Math.PI)).toFixed(0)}°` },
       { label: 'Mass', value: def.mass.toFixed(2) },
@@ -626,56 +706,63 @@ export class FightScene {
     return action;
   }
 
-  private handleArenaPick(
+  private handleArenaCamera(
     input: Input,
     snaps: FighterSnapshot[],
     stage: FightStageLayout,
   ): void {
-    if (!input.pointer.clicked) return;
-    const py = input.pointer.y;
-    const px = input.pointer.x;
+    const p = input.pointer;
+    const v = stage.world.view;
+    const t = this.worldT ?? stage.world;
+    const inArena =
+      p.x >= v.x && p.x <= v.x + v.w && p.y >= v.y && p.y <= v.y + v.h && p.y >= stage.topBandH;
 
-    // Ignore clicks in chrome bands
-    if (py < stage.topBandH || py >= stage.rosterBandTop - 2) {
-      input.pointer.clicked = false;
-      return;
-    }
-
-    // Ignore inspect panel area when open
+    // Ignore inspect panel while open
+    let inInspect = false;
     if (this.selectedId !== null) {
       const f = snaps.find((s) => s.id === this.selectedId);
       if (f) {
         const preferLeft = f.x > ARENA_WORLD_W / 2;
         const ir = fightInspectRect(stage, preferLeft, stage.inspectMaxH);
-        if (px >= ir.x && px <= ir.x + ir.w && py >= ir.y && py <= ir.y + ir.h) {
-          input.pointer.clicked = false;
-          return;
-        }
+        inInspect =
+          p.x >= ir.x && p.x <= ir.x + ir.w && p.y >= ir.y && p.y <= ir.y + ir.h;
       }
     }
 
-    // Only pick inside the arena view; map to world space
-    const v = stage.world.view;
-    if (px < v.x || px > v.x + v.w || py < v.y || py > v.y + v.h) {
-      this.selectedId = null;
+    if (p.down && !this.ptrWasDown && inArena && !inInspect) {
+      this.cam.beginDrag(p.x, p.y, t.scale);
+    }
+    if (p.down && this.cam.isDragging()) {
+      this.cam.dragTo(p.x, p.y);
+    }
+    if (!p.down && this.ptrWasDown) {
+      const dragged = this.cam.endDrag();
+      if (!dragged && inArena && !inInspect) {
+        const world = designToWorld(p.x, p.y, t);
+        const hitR = stage.hitRadius / Math.max(0.001, t.scale);
+        const hit = pickFighterAt(snaps, world.x, world.y, hitR);
+        if (hit) {
+          this.toggleSelect(hit.id);
+          this.synth.play('ui');
+        } else {
+          this.selectedId = null;
+          this.cam.clearFocus();
+        }
+      }
       input.pointer.clicked = false;
-      return;
     }
-
-    const world = designToWorld(px, py, stage.world);
-    const hitR = stage.hitRadius / Math.max(0.001, stage.world.scale);
-    const hit = pickFighterAt(snaps, world.x, world.y, hitR);
-    if (hit) {
-      this.toggleSelect(hit.id);
-      this.synth.play('ui');
-    } else {
-      this.selectedId = null;
-    }
-    input.pointer.clicked = false;
+    this.ptrWasDown = p.down;
   }
 
   private toggleSelect(id: number): void {
-    this.selectedId = this.selectedId === id ? null : id;
+    if (this.selectedId === id) {
+      this.selectedId = null;
+      this.cam.clearFocus();
+      return;
+    }
+    this.selectedId = id;
+    const f = this.match.snapshots().find((s) => s.id === id);
+    if (f) this.cam.focusFighter(f);
   }
 
   private consumeEvents(events: CombatEvent[]): void {
@@ -686,6 +773,9 @@ export class FightScene {
           this.shake = Math.min(10, this.shake + 4);
           this.hitStop = Math.max(this.hitStop, 3);
           spawnDust(this.dust, ev.x, ev.y, 5, this.fxRng);
+          this.interestX = ev.x;
+          this.interestY = ev.y;
+          this.interestLife = 45;
           break;
         case 'GUARD':
           this.synth.play('block');
@@ -713,6 +803,9 @@ export class FightScene {
           this.shake = Math.min(16, this.shake + 8);
           this.hitStop = Math.max(this.hitStop, 8);
           spawnDust(this.dust, ev.x, ev.y, 6, this.fxRng);
+          this.interestX = ev.x;
+          this.interestY = ev.y;
+          this.interestLife = 70;
           break;
         default:
           break;

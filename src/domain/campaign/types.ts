@@ -1,4 +1,5 @@
 import type { ArmaturaId } from '../../content/armatura';
+import type { BeastId } from '../../content/beasts';
 import type { MuneraKind, MuneraSlotReq, MuneraTier, TeamSize } from '../../content/munera';
 import type {
   DayAssignment,
@@ -32,6 +33,8 @@ export interface Gladiator {
   assignment: DayAssignment;
   /** Soft flag — retired from active roster (kept in records). */
   retired?: boolean;
+  /** Approximate age in years — ticks on calendar advance. */
+  age: number;
 }
 
 export interface MuneraOffer {
@@ -67,6 +70,7 @@ export interface RecruitOffer {
   temperament: TemperamentId;
   price: number;
   fame: number;
+  age?: number;
 }
 
 export interface SeasonContract {
@@ -87,6 +91,24 @@ export interface SeasonRecord {
   forfeits: number;
 }
 
+export interface SlateBout {
+  id: string;
+  kind: 'gladiator' | 'venatio';
+  name: string;
+  blurb: string;
+  teamSize: TeamSize;
+  schoolIds: number[];
+  opponentArmaturae: ArmaturaId[];
+  beastOpponents?: BeastId[];
+  purse: number;
+  entryFee: number;
+  virtusWin: number;
+  virtusLose: number;
+  rivalName: string | null;
+  status: 'pending' | 'watched' | 'simulated';
+  simResult?: 'WIN' | 'LOSS' | 'DRAW';
+}
+
 export interface SeasonState {
   seed: number;
   day: number;
@@ -97,6 +119,10 @@ export interface SeasonState {
   roster: Gladiator[];
   /** Offers for current day (rerolled on advance). */
   offers: MuneraOffer[];
+  /** Living calendar — school fighters' bouts today. */
+  slate: SlateBout[];
+  /** Idle / sim notes waiting to surface. */
+  pendingNotes: string[];
   /** True after a munera or rest resolved today. */
   dayResolved: boolean;
   record: SeasonRecord;

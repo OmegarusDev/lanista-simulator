@@ -1,14 +1,21 @@
 import { ARMATURA_LIST, ARMATURAE, type ArmaturaId } from '../../content/armatura';
 import { PAIRING_PRESETS } from '../../content/pairings';
 import { colors } from '../../content/palette';
-import { GRADE_LABEL, TEMPERAMENTS, type TemperamentId } from '../../content/rpg';
-import { generateQuickTeam, type QuickCard } from '../../domain/combat/quickGen';
-import type { FighterSpawnSpec, TeamSize } from '../../domain/combat/types';
+import {
+  generateQuickTeam,
+  generateVenatioTeams,
+  type MatchKind,
+  type QuickCard,
+} from '../../domain/combat/quickGen';
+import type { FighterSnapshot, FighterSpawnSpec, TeamSize } from '../../domain/combat/types';
 import type { Input } from '../../shell/input';
 import { getDesign } from '../../shell/canvas';
+import { drawArena } from '../../view/arena';
+import { ArenaCamera } from '../../view/arenaCamera';
 import type { Synth } from '../../view/audio';
-import { drawArmaturaPreview } from '../../view/gladiatorDraw';
-import { buttonRow, isPortrait, shellPad } from '../../view/layout';
+import { drawGladiator } from '../../view/gladiatorDraw';
+import { designToWorld, buttonRow, isPortrait, shellPad } from '../../view/layout';
+import { posedCardsToSnapshots } from '../../view/posedPreview';
 import { space, touchTarget, typeScale } from '../../view/theme';
 import { button, buttonChrome, label, labelFitted, panel, type Rect } from '../../view/ui';
 
@@ -20,6 +27,7 @@ export interface SandboxConfig {
   lockedMatchup: boolean;
   team0Specs?: FighterSpawnSpec[];
   team1Specs?: FighterSpawnSpec[];
+  matchKind?: MatchKind;
 }
 
 export type SandboxAction =
@@ -38,11 +46,11 @@ function resolvePick(pick: SlotPick, salt: number): ArmaturaId {
 }
 
 /**
- * Instant Match = Quick Match by default (fresh generated fighters).
- * Custom Team = opt-in kit editor + historical presets.
+ * Instant Match — mobile-first Quick Match (matchup / venatio) + Custom sheet.
  */
 export class SandboxScene {
   mode: Mode = 'quick';
+  matchKind: MatchKind = 'matchup';
   teamSize: TeamSize = 1;
   seed = (Math.random() * 0xffffffff) >>> 0;
   slots0: SlotPick[] = ['RANDOM', 'RANDOM', 'RANDOM'];
@@ -51,14 +59,26 @@ export class SandboxScene {
   editSlot1 = 0;
   private cards0: QuickCard[] = [];
   private cards1: QuickCard[] = [];
+  private readonly cam = new ArenaCamera();
+  private selectedPreviewId: number | null = null;
+  private ptrWasDown = false;
+  private arenaView: Rect = { x: 0, y: 0, w: 1, h: 1 };
 
   constructor(private readonly synth: Synth) {
     this.rerollQuick();
   }
 
   private rerollQuick(): void {
-    this.cards0 = generateQuickTeam(this.seed, this.teamSize, 1);
-    this.cards1 = generateQuickTeam(this.seed, this.teamSize, 2);
+    if (this.matchKind === 'venatio') {
+      const v = generateVenatioTeams(this.seed, this.teamSize);
+      this.cards0 = v.team0;
+      this.cards1 = v.team1;
+    } else {
+      this.cards0 = generateQuickTeam(this.seed, this.teamSize, 1);
+      this.cards1 = generateQuickTeam(this.seed, this.teamSize, 2);
+    }
+    this.selectedPreviewId = null;
+    this.cam.reset(isPortrait() ? 1.18 : 1.1);
   }
 
   makeQuickConfig(): SandboxConfig {
@@ -73,6 +93,7 @@ export class SandboxScene {
       team0Specs: c0.map((c) => c.spec),
       team1Specs: c1.map((c) => c.spec),
       lockedMatchup: true,
+      matchKind: this.matchKind,
     };
   }
 
@@ -83,7 +104,14 @@ export class SandboxScene {
     const locked =
       this.slots0.slice(0, n).every((p) => p !== 'RANDOM') &&
       this.slots1.slice(0, n).every((p) => p !== 'RANDOM');
-    return { teamSize: n, seed: this.seed, team0, team1, lockedMatchup: locked };
+    return {
+      teamSize: n,
+      seed: this.seed,
+      team0,
+      team1,
+      lockedMatchup: locked,
+      matchKind: 'matchup',
+    };
   }
 
   makeConfig(): SandboxConfig {
@@ -115,6 +143,14 @@ export class SandboxScene {
       if (this.mode === 'quick') this.rerollQuick();
       this.synth.play('ui');
     }
+    if (input.wasKeyPressed('ArrowLeft')) {
+      const snaps = posedCardsToSnapshots(this.cards0, this.cards1, this.teamSize);
+      this.cam.focusTeamGroup(0, snaps);
+    }
+    if (input.wasKeyPressed('ArrowRight')) {
+      const snaps = posedCardsToSnapshots(this.cards0, this.cards1, this.teamSize);
+      this.cam.focusTeamGroup(1, snaps);
+    }
     return { type: 'NONE' };
   }
 
@@ -131,72 +167,127 @@ export class SandboxScene {
 
     ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, w, h);
-    const g = ctx.createRadialGradient(w / 2, h * 0.3, 20, w / 2, h * 0.5, Math.max(w, h) * 0.5);
-    g.addColorStop(0, '#3a281c');
-    g.addColorStop(1, colors.bg);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
 
+    // Compact chrome
     if (button(ctx, { x: pad, y: pad, w: touchTarget, h: touchTarget }, '←', input.pointer)) {
       this.synth.play('ui');
       return { type: 'BACK' };
     }
-
-    label(ctx, 'Quick Match', w / 2, portrait ? 36 : 42, {
-      size: typeScale.display,
-      align: 'center',
+    label(ctx, 'Instant Match', pad + touchTarget + 8, pad + 28, {
+      size: typeScale.title,
       color: colors.parchment,
     });
-    label(ctx, 'Fresh fighters each bout · no career stakes', w / 2, portrait ? 58 : 68, {
-      size: typeScale.meta,
-      align: 'center',
-      color: colors.muted,
-    });
 
-    const sizeY = portrait ? 78 : 92;
-    const sizes = buttonRow(pad, sizeY, w - pad * 2, 40, 3, space.sm);
-    (['1v1', '2v2', '3v3'] as const).forEach((lab, i) => {
-      const n = (i + 1) as TeamSize;
-      if (button(ctx, sizes[i]!, lab, input.pointer, { active: this.teamSize === n })) {
-        this.setTeamSize(n);
+    const stripY = pad + touchTarget + 6;
+    const strip = buttonRow(pad, stripY, w - pad * 2, 34, 5, 4);
+    const stripLabs = ['Match', 'Venatio', '1v1', '2v2', '3v3'] as const;
+    stripLabs.forEach((lab, i) => {
+      let active = false;
+      if (i === 0) active = this.matchKind === 'matchup';
+      else if (i === 1) active = this.matchKind === 'venatio';
+      else active = this.teamSize === ((i - 1) as TeamSize);
+      if (button(ctx, strip[i]!, lab, input.pointer, { active, size: typeScale.eyebrow })) {
+        if (i === 0) {
+          this.matchKind = 'matchup';
+          this.rerollQuick();
+        } else if (i === 1) {
+          this.matchKind = 'venatio';
+          this.rerollQuick();
+        } else {
+          this.setTeamSize((i - 1) as TeamSize);
+        }
         this.synth.play('ui');
       }
     });
 
-    const cardsTop = sizeY + 52;
-    const cardsH = Math.max(160, h - cardsTop - (portrait ? 200 : 160));
-    const colW = portrait ? w - pad * 2 : (w - pad * 2 - 16) / 2;
-    this.drawQuickTeam(ctx, this.cards0, pad, cardsTop, colW, cardsH, 0, portrait);
-    if (portrait) {
-      this.drawQuickTeam(
-        ctx,
-        this.cards1,
-        pad,
-        cardsTop + cardsH / 2 + 4,
-        colW,
-        cardsH / 2 - 4,
-        1,
-        portrait,
-      );
-    } else {
-      this.drawQuickTeam(ctx, this.cards1, pad + colW + 16, cardsTop, colW, cardsH, 1, portrait);
+    const footerH = portrait ? 118 : 108;
+    const chipH = 40;
+    const arenaTop = stripY + 42;
+    const arenaH = Math.max(200, h - arenaTop - footerH - chipH - 8);
+    this.arenaView = { x: 0, y: arenaTop, w, h: arenaH };
+
+    const snaps = posedCardsToSnapshots(this.cards0, this.cards1, this.teamSize);
+    this.handleArenaCamera(input, snaps);
+    this.cam.updateAutocam(snaps, { selectedId: this.selectedPreviewId });
+    this.cam.tickSmooth();
+    const worldT = this.cam.toTransform(this.arenaView);
+
+    // Clip arena band
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(this.arenaView.x, this.arenaView.y, this.arenaView.w, this.arenaView.h);
+    ctx.clip();
+    ctx.fillStyle = '#1a1410';
+    ctx.fillRect(this.arenaView.x, this.arenaView.y, this.arenaView.w, this.arenaView.h);
+    ctx.save();
+    ctx.translate(worldT.ox, worldT.oy);
+    ctx.scale(worldT.scale, worldT.scale);
+    drawArena(ctx, 0, { seed: this.seed });
+    for (const f of snaps.slice().sort((a, b) => a.y - b.y)) {
+      drawGladiator(ctx, f, {
+        selected: f.id === this.selectedPreviewId,
+        showSelectedName: f.id === this.selectedPreviewId,
+      });
+    }
+    ctx.restore();
+    ctx.restore();
+
+    // Team cam chips + fighter focus strip
+    const chipY = arenaTop + arenaH + 4;
+    const teamLabs = buttonRow(pad, chipY, Math.min(200, w * 0.42), chipH - 4, 2, 4);
+    if (button(ctx, teamLabs[0]!, 'Blue', input.pointer, { size: typeScale.meta })) {
+      this.cam.focusTeamGroup(0, snaps);
+      this.selectedPreviewId = null;
+      this.synth.play('ui');
+    }
+    if (
+      button(ctx, teamLabs[1]!, this.matchKind === 'venatio' ? 'Beasts' : 'Red', input.pointer, {
+        size: typeScale.meta,
+      })
+    ) {
+      this.cam.focusTeamGroup(1, snaps);
+      this.selectedPreviewId = null;
+      this.synth.play('ui');
     }
 
-    const by = h - (portrait ? 148 : 120);
-    const row = buttonRow(pad, by, w - pad * 2, touchTarget, 2, space.sm);
+    const nameStart = pad + Math.min(208, w * 0.42) + 8;
+    const nameBudget = w - pad - nameStart;
+    const n = snaps.length;
+    const nameW = Math.min(88, (nameBudget - 4 * Math.max(0, n - 1)) / Math.max(1, n));
+    snaps.forEach((f, i) => {
+      const r = {
+        x: nameStart + i * (nameW + 4),
+        y: chipY,
+        w: nameW,
+        h: chipH - 4,
+      };
+      if (
+        button(ctx, r, f.name.slice(0, 8), input.pointer, {
+          active: this.selectedPreviewId === f.id,
+          size: typeScale.eyebrow,
+        })
+      ) {
+        this.selectedPreviewId = f.id;
+        this.cam.focusFighter(f);
+        this.synth.play('ui');
+      }
+    });
+
+    const by = h - footerH + 6;
+    const row = buttonRow(pad, by, w - pad * 2, touchTarget - 2, 2, space.sm);
     if (button(ctx, row[0]!, 'Reroll', input.pointer)) {
       this.seed = (Math.random() * 0xffffffff) >>> 0;
       this.rerollQuick();
       this.synth.play('ui');
     }
-    if (button(ctx, row[1]!, 'Custom Team', input.pointer)) {
+    if (button(ctx, row[1]!, 'Custom', input.pointer)) {
       this.mode = 'custom';
       this.synth.play('ui');
     }
     if (
       button(
         ctx,
-        { x: pad, y: by + touchTarget + space.sm, w: w - pad * 2, h: 52 },
+        { x: pad, y: by + touchTarget + 2, w: w - pad * 2, h: 48 },
         'Fight',
         input.pointer,
         { size: typeScale.title },
@@ -211,37 +302,44 @@ export class SandboxScene {
     return action;
   }
 
-  private drawQuickTeam(
-    ctx: CanvasRenderingContext2D,
-    cards: QuickCard[],
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    team: 0 | 1,
-    compact: boolean,
-  ): void {
-    const accent = team === 0 ? colors.ally : colors.foe;
-    panel(ctx, { x, y, w, h }, team === 0 ? 'Blue' : 'Red');
-    const inner = cards.slice(0, this.teamSize);
-    const rowH = Math.min(64, (h - 48) / Math.max(1, inner.length));
-    inner.forEach((c, i) => {
-      const cy = y + 36 + i * rowH;
-      if (cy + 40 > y + h) return;
-      drawArmaturaPreview(ctx, c.armatura, x + 28, cy + 22, {
-        team,
-        facing: team === 0 ? 0 : Math.PI,
-        scale: compact ? 0.65 : 0.75,
-      });
-      label(ctx, c.name, x + 56, cy + 14, { size: typeScale.label, color: colors.parchment });
-      label(
-        ctx,
-        `${ARMATURAE[c.armatura].name} · ${GRADE_LABEL[c.grade]} · ${TEMPERAMENTS[c.temperament as TemperamentId].name}`,
-        x + 56,
-        cy + 32,
-        { size: typeScale.eyebrow, color: accent },
-      );
-    });
+  private handleArenaCamera(input: Input, snaps: FighterSnapshot[]): void {
+    const p = input.pointer;
+    const v = this.arenaView;
+    const inArena = p.x >= v.x && p.x <= v.x + v.w && p.y >= v.y && p.y <= v.y + v.h;
+    const worldT = this.cam.toTransform(v);
+
+    if (p.down && !this.ptrWasDown && inArena) {
+      this.cam.beginDrag(p.x, p.y, worldT.scale);
+    }
+    if (p.down && this.cam.isDragging()) {
+      this.cam.dragTo(p.x, p.y);
+    }
+    if (!p.down && this.ptrWasDown) {
+      const dragged = this.cam.endDrag();
+      if (!dragged && inArena) {
+        const world = designToWorld(p.x, p.y, worldT);
+        const hitR = 28 / Math.max(0.001, worldT.scale);
+        let best: FighterSnapshot | null = null;
+        let bestD = hitR * hitR;
+        for (const f of snaps) {
+          const d = (f.x - world.x) ** 2 + (f.y - world.y) ** 2;
+          if (d <= bestD) {
+            bestD = d;
+            best = f;
+          }
+        }
+        if (best) {
+          this.selectedPreviewId = best.id;
+          this.cam.focusFighter(best);
+          this.synth.play('ui');
+        } else {
+          this.selectedPreviewId = null;
+          this.cam.clearFocus();
+        }
+      }
+      input.pointer.clicked = false;
+    }
+    this.ptrWasDown = p.down;
   }
 
   private drawCustom(ctx: CanvasRenderingContext2D, input: Input): SandboxAction {
@@ -281,7 +379,6 @@ export class SandboxScene {
       }
     });
 
-    // Historical presets — start fight directly as classic 1v1
     const presetY = sizeY + 48;
     label(ctx, 'Historical', pad, presetY, { size: typeScale.meta, color: colors.muted });
     const presetH = 40;
@@ -313,6 +410,7 @@ export class SandboxScene {
             team0: [p.team0[0]!],
             team1: [p.team1[0]!],
             lockedMatchup: true,
+            matchKind: 'matchup',
           },
         };
       }
@@ -337,7 +435,7 @@ export class SandboxScene {
     }
 
     if (
-      button(ctx, { x: w - pad - 140, y: h - 56, w: 140, h: 44 }, 'Fight', input.pointer, {
+      button(ctx, { x: pad, y: h - 56, w: w - pad * 2, h: 48 }, 'Fight', input.pointer, {
         size: typeScale.label,
       })
     ) {
@@ -362,7 +460,6 @@ export class SandboxScene {
     const slots = team === 0 ? this.slots0 : this.slots1;
     let edit = team === 0 ? this.editSlot0 : this.editSlot1;
     const accent = team === 0 ? colors.ally : colors.foe;
-    const facing = team === 0 ? 0 : Math.PI;
     panel(ctx, { x, y, w, h: panelH }, team === 0 ? 'Blue' : 'Red');
 
     const n = this.teamSize;
@@ -416,8 +513,5 @@ export class SandboxScene {
         this.synth.play('ui');
       }
     });
-
-    // silence unused facing in compact custom (preview optional)
-    void facing;
   }
 }

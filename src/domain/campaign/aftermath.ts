@@ -2,6 +2,7 @@ import { economy } from '../../content/economy';
 import { rollMissio } from '../combat/entertainment';
 import type { MatchResult } from '../combat/types';
 import { SeededRNG } from '../rng';
+import { markSlateWatched, resolvePendingSlate } from './calendar';
 import { onBoutForContracts } from './contracts';
 import { addXp } from './gladiator';
 import { resolveAssignments } from './ludusDay';
@@ -203,6 +204,10 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
       });
     }
   }
+
+  markSlateWatched(state, offer.instanceId);
+  const slateNotes = resolvePendingSlate(state, rng);
+  notes.push(...slateNotes);
 
   const assignNotes = resolveAssignments(state, rng);
   notes.push(...assignNotes);

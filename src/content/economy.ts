@@ -43,6 +43,14 @@ export const economy = {
   idleMaxHours: 12,
   idleFatiguePerHour: 0.15,
   idleHpPerHour: 0.02,
+  /** Age ticks once per resolved day (compressed career years). */
+  ageDaysPerYear: 3,
+  agePeakMin: 24,
+  agePeakMax: 30,
+  /** Forced retirement at or above this age. */
+  ageRetireAt: 38,
+  /** Soft target roster size for auto-replace after deaths. */
+  rosterTargetFill: 4,
 } as const;
 
 export const GLADIATOR_NAMES = [

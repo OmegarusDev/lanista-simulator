@@ -1,7 +1,9 @@
 import { ARMATURAE, type ArmaturaDef, type ArmaturaId } from '../../content/armatura';
+import { BEASTS, type BeastId } from '../../content/beasts';
 import { combatTuning } from '../../content/combat';
 import type {
   ActionKind,
+  CombatantKind,
   FighterSnapshot,
   FighterSpawnSpec,
   Footwork,
@@ -29,6 +31,8 @@ export class Fighter {
   readonly id: number;
   readonly team: TeamId;
   readonly armatura: ArmaturaId;
+  kind: CombatantKind = 'gladiator';
+  beastId: BeastId | null = null;
   name: string;
   /** Career / doctrina overlay of class kit — null means stock armatura. */
   private defOverride: ArmaturaDef | null = null;
@@ -116,8 +120,16 @@ export class Fighter {
     this.desiredDist = (d.measureMin + d.measureMax) * 0.5;
   }
 
+  stockKit(): ArmaturaDef {
+    if (this.beastId) {
+      const b = BEASTS[this.beastId];
+      return { ...b, id: this.armatura };
+    }
+    return ARMATURAE[this.armatura];
+  }
+
   def(): ArmaturaDef {
-    return this.defOverride ?? ARMATURAE[this.armatura];
+    return this.defOverride ?? this.stockKit();
   }
 
   /**
@@ -125,7 +137,11 @@ export class Fighter {
    */
   applySpawnSpec(spec: FighterSpawnSpec): void {
     if (spec.name) this.name = spec.name;
-    const base = ARMATURAE[this.armatura];
+    if (spec.kind === 'beast' && spec.beast) {
+      this.kind = 'beast';
+      this.beastId = spec.beast;
+    }
+    const base = this.stockKit();
     const d: ArmaturaDef = { ...base };
     const clampBias = (n: number) => Math.max(0, Math.min(1, n));
     if (spec.damageMul != null) d.damageMul = base.damageMul * spec.damageMul;
@@ -427,7 +443,9 @@ export class Fighter {
     return {
       id: this.id,
       team: this.team,
+      kind: this.kind,
       armatura: this.armatura,
+      beastId: this.beastId,
       name: this.name,
       x: this.x,
       y: this.y,
