@@ -132,7 +132,10 @@ export class App {
     this.synth.ensure();
     this.lastConfig = config;
     this.sandbox.seed = config.seed;
-    this.fight = new FightScene(config, this.synth, { career: context === 'career' });
+    this.fight = new FightScene(config, this.synth, {
+      career: context === 'career',
+      lineupIds: context === 'career' ? [...this.pendingLineup] : undefined,
+    });
     this.mode = 'fight';
     this.input.pointer.clicked = false;
     this.input.pointer.down = false;
@@ -371,6 +374,7 @@ export class App {
         lineupIds: this.pendingLineup,
         result: action.result,
         forfeited: action.forfeited,
+        boutStats: action.boutStats,
       });
       this.pendingAftermath = summary;
       this.fight = null;

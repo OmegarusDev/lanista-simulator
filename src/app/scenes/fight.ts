@@ -1,6 +1,8 @@
 import { ARMATURAE } from '../../content/armatura';
 import { colors } from '../../content/palette';
+import type { BoutFighterStat } from '../../domain/campaign/aftermath';
 import { createQuickMatch, type Match } from '../../domain/combat/match';
+import type { CrowdShout } from '../../domain/combat/entertainment';
 import { SeededRNG } from '../../domain/rng';
 import type { CombatEvent, FighterSnapshot, MatchResult } from '../../domain/combat/types';
 import { ARENA_WORLD_H, ARENA_WORLD_W, getDesign } from '../../shell/canvas';
@@ -40,11 +42,18 @@ export type FightAction =
   | { type: 'RESTART' }
   | { type: 'REROLL' }
   /** Career bout finished or forfeited — App applies aftermath. */
-  | { type: 'CAREER_DONE'; result: MatchResult; forfeited: boolean };
+  | {
+      type: 'CAREER_DONE';
+      result: MatchResult;
+      forfeited: boolean;
+      boutStats: BoutFighterStat[];
+    };
 
 export interface FightOptions {
   /** Career munera: no reroll; leave mid-bout = forfeit; end → CAREER_DONE. */
   career?: boolean;
+  /** Gladiator ids in team-0 spawn order (for missio / entertainment). */
+  lineupIds?: number[];
 }
 
 const SPEEDS = [1, 2, 4] as const;
@@ -65,6 +74,9 @@ export class FightScene {
   private readonly fxRng: SeededRNG;
   private readonly config: SandboxConfig;
   private readonly career: boolean;
+  private readonly lineupIds: number[];
+  private crowdShout: CrowdShout | null = null;
+  private crowdShoutLife = 0;
 
   constructor(
     config: SandboxConfig,
@@ -73,6 +85,7 @@ export class FightScene {
   ) {
     this.config = config;
     this.career = Boolean(opts?.career);
+    this.lineupIds = opts?.lineupIds ? [...opts.lineupIds] : [];
     this.match = this.makeMatch(config);
     this.fxRng = new SeededRNG(config.seed ^ 0xd057);
   }
@@ -133,6 +146,11 @@ export class FightScene {
     for (let i = 0; i < steps; i++) {
       const result = this.match.step();
       this.consumeEvents(this.match.getRecentEvents());
+      const shout = this.match.consumeCrowdShout();
+      if (shout) {
+        this.crowdShout = shout;
+        this.crowdShoutLife = shout.life;
+      }
       this.match.clearRecentEvents();
       if (result !== 'ONGOING') {
         this.finished = true;
@@ -140,6 +158,9 @@ export class FightScene {
         break;
       }
     }
+
+    if (this.crowdShoutLife > 0) this.crowdShoutLife--;
+    if (this.crowdShoutLife <= 0) this.crowdShout = null;
 
     stepDust(this.dust);
 
@@ -186,6 +207,7 @@ export class FightScene {
     let action = this.drawBottomChrome(ctx, chromePtr, stage);
     this.drawRoster(ctx, chromePtr, snaps, stage);
     this.drawInspect(ctx, snaps, stage);
+    this.drawCrowdFeedback(ctx, stage);
 
     if (this.debugFeel) {
       debugBadge(ctx, stage.w - 56, 8);
@@ -231,9 +253,63 @@ export class FightScene {
   private careerLeave(): FightAction {
     if (!this.career) return { type: 'EXIT' };
     if (this.finished) {
-      return { type: 'CAREER_DONE', result: this.match.result, forfeited: false };
+      return {
+        type: 'CAREER_DONE',
+        result: this.match.result,
+        forfeited: false,
+        boutStats: this.buildBoutStats(),
+      };
     }
-    return { type: 'CAREER_DONE', result: 'TEAM1', forfeited: true };
+    return {
+      type: 'CAREER_DONE',
+      result: 'TEAM1',
+      forfeited: true,
+      boutStats: this.buildBoutStats(),
+    };
+  }
+
+  private buildBoutStats(): BoutFighterStat[] {
+    const team0 = this.match.fighters.filter((f) => f.team === 0);
+    return team0.map((f, i) => ({
+      gladiatorId: this.lineupIds[i] ?? -1,
+      entertainment: this.match.entertainment.score(f.id),
+      downed: !f.alive,
+    })).filter((s) => s.gladiatorId >= 0);
+  }
+
+  private drawCrowdFeedback(ctx: CanvasRenderingContext2D, stage: FightStageLayout): void {
+    const favor = this.match.teamCrowdFavor(0);
+    const lean =
+      favor >= 0.62 ? 'Crowd favors Blue' : favor <= 0.38 ? 'Crowd favors Red' : 'Crowd is restless';
+    const leanY =
+      stage.orientation === 'portrait'
+        ? stage.world.view.y + 18
+        : stage.topBandH + 14;
+    label(ctx, lean, stage.w / 2, leanY, {
+      size: typeScale.meta,
+      align: 'center',
+      color: favor >= 0.62 ? colors.ally : favor <= 0.38 ? colors.foe : colors.muted,
+    });
+
+    // Favor bar
+    const barW = Math.min(180, stage.w * 0.4);
+    const barX = stage.w / 2 - barW / 2;
+    const barY = leanY + 8;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(barX, barY, barW, 5);
+    ctx.fillStyle = colors.ally;
+    ctx.fillRect(barX, barY, barW * favor, 5);
+    ctx.fillStyle = colors.foe;
+    ctx.fillRect(barX + barW * favor, barY, barW * (1 - favor), 5);
+
+    if (this.crowdShout && this.crowdShoutLife > 0) {
+      const alpha = Math.min(1, this.crowdShoutLife / 30);
+      label(ctx, this.crowdShout.text, stage.w / 2, leanY + 28, {
+        size: typeScale.label,
+        align: 'center',
+        color: `rgba(232, 220, 196, ${alpha.toFixed(2)})`,
+      });
+    }
   }
 
   private drawBottomChrome(
@@ -507,7 +583,12 @@ export class FightScene {
         })
       ) {
         this.synth.play('ui');
-        return { type: 'CAREER_DONE', result: this.match.result, forfeited: false };
+        return {
+          type: 'CAREER_DONE',
+          result: this.match.result,
+          forfeited: false,
+          boutStats: this.buildBoutStats(),
+        };
       }
       return action;
     }

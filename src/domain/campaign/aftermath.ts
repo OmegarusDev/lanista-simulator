@@ -1,11 +1,25 @@
 import { economy } from '../../content/economy';
+import { rollMissio } from '../combat/entertainment';
 import type { MatchResult } from '../combat/types';
 import { SeededRNG } from '../rng';
 import { onBoutForContracts } from './contracts';
 import { addXp } from './gladiator';
 import { resolveAssignments } from './ludusDay';
 import { markBrokeIfNeeded, upkeepCost } from './season';
-import type { AftermathSummary, Gladiator, InjuryTier, MuneraOffer, SeasonState } from './types';
+import type {
+  AftermathSummary,
+  Gladiator,
+  InjuryTier,
+  MissioVerdict,
+  MuneraOffer,
+  SeasonState,
+} from './types';
+
+export interface BoutFighterStat {
+  gladiatorId: number;
+  entertainment: number;
+  downed: boolean;
+}
 
 export interface CareerFightInput {
   offer: MuneraOffer;
@@ -13,6 +27,7 @@ export interface CareerFightInput {
   lineupIds: number[];
   result: MatchResult;
   forfeited: boolean;
+  boutStats?: BoutFighterStat[];
 }
 
 function bumpInjury(cur: InjuryTier): InjuryTier {
@@ -57,11 +72,6 @@ function applyFighterAftermath(
 
   if (lost || forfeited) g.losses += 1;
   else if (!draw) g.wins += 1;
-
-  // Missio / retirement on catastrophic wound + loss
-  if (g.injury === 'SEVERE' && lost && rng.chance(0.22)) {
-    g.retired = true;
-  }
 
   return { injury: became, xp, leveled };
 }
@@ -136,9 +146,41 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
     const { injury, xp, leveled } = applyFighterAftermath(g, lost, draw, forfeited, rng);
     if (injury) injuries.push({ name: g.name, injury });
     xpGains.push({ name: g.name, xp, grade: leveled ? g.grade : undefined });
-    if (g.retired) {
-      notes.push(`${g.name} is retired from the familia — missio of the flesh.`);
-      state.retiredNames.push(g.name);
+  }
+
+  // Crowd missio for downed (incapacitated) fighters — entertainment + RNG
+  const missio: MissioVerdict[] = [];
+  if (!forfeited && input.boutStats) {
+    for (const st of input.boutStats) {
+      if (!st.downed) continue;
+      const g = state.roster.find((x) => x.id === st.gladiatorId && !x.retired);
+      if (!g) continue;
+      const histrio = g.temperament === 'HISTRIO' ? 8 : 0;
+      const { outcome, chance } = rollMissio(st.entertainment + histrio, g.fame, rng);
+      const lean =
+        chance >= 0.55
+          ? 'The crowd roared for him…'
+          : chance >= 0.35
+            ? 'The benches murmur…'
+            : 'They want blood…';
+      if (outcome === 'SPARE') {
+        g.injury = 'SEVERE';
+        g.hpRatio = Math.min(g.hpRatio, 0.28);
+        g.fame += 1;
+        notes.push(`${g.name} is spared — missio.`);
+      } else {
+        g.retired = true;
+        state.retiredNames.push(g.name);
+        state.virtus = Math.max(0, state.virtus - 1);
+        notes.push(`${g.name} dies in the sand.`);
+      }
+      missio.push({
+        gladiatorId: g.id,
+        name: g.name,
+        entertainment: st.entertainment,
+        outcome,
+        lean,
+      });
     }
   }
 
@@ -166,6 +208,7 @@ export function applyCareerFight(state: SeasonState, input: CareerFightInput): A
     injuries,
     notes,
     xpGains,
+    missio: missio.length ? missio : undefined,
   };
   onBoutForContracts(state, summary, offer.rivalName);
   state.lastAftermath = summary;

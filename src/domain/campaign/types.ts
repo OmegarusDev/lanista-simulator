@@ -115,6 +115,14 @@ export interface SeasonState {
   seasonIndex: number;
 }
 
+export interface MissioVerdict {
+  gladiatorId: number;
+  name: string;
+  entertainment: number;
+  outcome: 'SPARE' | 'DEATH';
+  lean: string;
+}
+
 export interface AftermathSummary {
   offerName: string;
   result: 'WIN' | 'LOSS' | 'DRAW' | 'FORFEIT';
@@ -123,6 +131,7 @@ export interface AftermathSummary {
   injuries: { name: string; injury: InjuryTier }[];
   notes: string[];
   xpGains?: { name: string; xp: number; grade?: GladiatorGrade }[];
+  missio?: MissioVerdict[];
 }
 
 /** Persistent between seasons (patronage). */

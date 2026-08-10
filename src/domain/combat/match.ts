@@ -21,6 +21,7 @@ import {
   turnToward,
 } from './geometry';
 import { Fighter, resetFighterIds } from './fighter';
+import { EntertainmentTracker, type CrowdShout } from './entertainment';
 import type {
   CombatEvent,
   FighterSpawnSpec,
@@ -51,6 +52,8 @@ export class Match {
   private faceMode = new Map<number, 'ENEMY' | 'TANGENT' | 'HOLD'>();
   private lateralBias = new Map<number, -1 | 0 | 1>();
   private stareTicks = 0;
+  readonly entertainment = new EntertainmentTracker();
+  private latestShout: CrowdShout | null = null;
 
   constructor(config: MatchConfig) {
     resetFighterIds();
@@ -103,6 +106,7 @@ export class Match {
       this.faceMode.set(f.id, 'ENEMY');
       this.lateralBias.set(f.id, 0);
     }
+    this.entertainment.watch(this.fighters.map((f) => f.id));
   }
 
   getRecentEvents(): CombatEvent[] {
@@ -111,6 +115,21 @@ export class Match {
 
   clearRecentEvents(): void {
     this.recentEvents = [];
+  }
+
+  consumeCrowdShout(): CrowdShout | null {
+    const s = this.latestShout;
+    this.latestShout = null;
+    return s;
+  }
+
+  crowdFavorFor(fighterId: number): number {
+    return this.entertainment.favor01(fighterId);
+  }
+
+  teamCrowdFavor(team: 0 | 1): number {
+    const scores = this.fighters.filter((f) => f.team === team).map((f) => this.entertainment.score(f.id));
+    return this.entertainment.teamFavor01(scores);
   }
 
   snapshots() {
@@ -146,6 +165,10 @@ export class Match {
     this.updateStareRhythm();
     this.separateBodies();
     this.checkEnd();
+
+    const shout = this.entertainment.onEvents(this.recentEvents, this.tick, this.rng);
+    if (shout) this.latestShout = shout;
+    this.entertainment.tickPassive(this.fighters.filter((f) => f.alive).map((f) => f.id));
 
     if (this.tick >= combatTuning.maxFightTicks && this.result === 'ONGOING') {
       this.result = this.decideByHp();
