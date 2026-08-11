@@ -1,4 +1,5 @@
-/* —— Fight / Practice HUD —— */
+/* —— Fight HUD — translucent rails over full-bleed stage —— */
+
 .hud {
   position: absolute;
   inset: 0;
@@ -9,22 +10,31 @@
   z-index: 3;
 }
 
-.hud > * {
+/* Only interactive chrome captures events — stage keeps wheel/pinch. */
+.hud .hud-rail,
+.hud .inspect-dock,
+.hud .overlay,
+.hud .debug-badge {
   pointer-events: auto;
 }
 
 .hud-rail {
-  background: linear-gradient(180deg, rgba(40, 28, 18, 0.94), rgba(28, 20, 14, 0.9));
-  border-color: var(--bronze);
-  padding: 0.45rem 0.75rem;
+  background:
+    linear-gradient(180deg, rgba(16, 20, 26, 0.72), rgba(12, 16, 20, 0.55));
+  border-color: var(--rail-border);
+  padding: 0.5rem 0.85rem;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .hud-top {
-  border-bottom: 1.5px solid var(--bronze);
+  border-bottom: 1.5px solid var(--rail-border);
+  box-shadow: 0 8px 24px rgba(8, 10, 14, 0.25);
 }
 
 .hud-bottom {
-  border-top: 1.5px solid var(--bronze);
+  border-top: 1.5px solid var(--rail-border);
+  box-shadow: 0 -8px 24px rgba(8, 10, 14, 0.25);
 }
 
 .hud-top-row {
@@ -35,6 +45,14 @@
   min-height: 1.6rem;
 }
 
+.hud-format {
+  font-size: var(--type-meta);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--parchment);
+  flex: 0 0 auto;
+}
+
 .hud-lineup {
   flex: 1;
   text-align: center;
@@ -43,16 +61,25 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+.hud-seed {
+  flex: 0 0 auto;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--debug-text);
+  opacity: 0.75;
 }
 
 .favor-meter {
   display: block;
-  width: min(12.5rem, 40vw);
-  height: 7px;
-  margin: 0.25rem auto 0.15rem;
-  border-radius: 3px;
+  width: min(13rem, 42vw);
+  height: 6px;
+  margin: 0.3rem auto 0.15rem;
+  border-radius: 1px;
   border: 1px solid var(--bronze);
-  background: #1a1410;
+  background: #0c1014;
   overflow: hidden;
   position: relative;
 }
@@ -66,12 +93,12 @@
 
 .favor-meter .blue {
   left: 0;
-  background: linear-gradient(180deg, #4a88a8, var(--ally));
+  background: var(--ally);
 }
 
 .favor-meter .red {
   right: 0;
-  background: linear-gradient(180deg, #a85040, var(--foe));
+  background: var(--foe);
 }
 
 .crowd-caption {
@@ -79,22 +106,35 @@
   font-size: var(--type-meta);
   color: var(--muted);
   min-height: 1.1rem;
+  letter-spacing: 0.03em;
 }
 
 .roster-band {
-  padding: 0.25rem 0.75rem 0.35rem;
+  padding: 0.3rem 0.85rem 0.35rem;
 }
 
 .roster-labels {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.25rem;
 }
 
 .roster-labels button {
-  min-height: 28px;
-  padding: 0.2rem 0.55rem;
+  min-height: 36px;
+  padding: 0.25rem 0.55rem;
   font-size: var(--type-eyebrow);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+.roster-labels button:hover:not(:disabled) {
+  background: rgba(184, 149, 74, 0.1);
+  border-color: transparent;
+  color: var(--parchment);
 }
 
 .roster-row {
@@ -127,15 +167,17 @@
   min-height: var(--touch);
   border: 1.5px solid var(--bronze);
   border-radius: var(--radius-md);
-  background: rgba(40, 28, 18, 0.85);
-  padding: 0.3rem 0.4rem;
+  background: rgba(18, 22, 28, 0.78);
+  padding: 0.35rem 0.45rem;
   text-align: left;
   color: var(--parchment);
   font: 600 var(--type-eyebrow) / 1.15 var(--font-ui);
+  box-shadow: inset 0 1px 0 rgba(200, 180, 140, 0.08);
 }
 
 .roster-chip.is-selected {
   box-shadow: inset 3px 0 0 var(--ally);
+  border-color: var(--bronze-hot);
 }
 
 .roster-chip.is-foe.is-selected {
@@ -146,11 +188,25 @@
   opacity: 0.5;
 }
 
+.roster-chip .name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roster-chip .tag {
+  display: block;
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .controls-row {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: 0.35rem 0.75rem 0.55rem;
+  padding: 0.4rem 0.85rem 0.6rem;
+  border-top: 1px solid rgba(184, 149, 74, 0.16);
 }
 
 .controls-row .seg {
@@ -159,20 +215,23 @@
 
 .controls-row .pause-btn {
   flex: 0 0 auto;
-  min-width: 4.5rem;
+  min-width: 5.5rem;
 }
 
 .inspect-dock {
   position: absolute;
-  top: calc(var(--stage-pad-top, 56px) + 8px);
+  top: calc(var(--stage-pad-top, 64px) + 10px);
   width: min(15rem, calc(100% - 1.5rem));
   max-height: min(20rem, 46%);
   overflow: auto;
   padding: var(--space-md);
   border: 1.5px solid var(--bronze);
   border-radius: var(--radius-lg);
-  background: rgba(40, 28, 18, 0.94);
+  background: rgba(16, 20, 26, 0.9);
   pointer-events: auto;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgba(184, 149, 74, 0.15);
 }
 
 .inspect-dock.is-left { left: 0.75rem; }
@@ -181,6 +240,7 @@
 .inspect-dock h3 {
   margin: 0 0 0.15rem;
   font-size: var(--type-title);
+  letter-spacing: 0.02em;
 }
 
 .inspect-dock .sub {
@@ -200,6 +260,13 @@
 .inspect-dock dt { color: var(--muted); }
 .inspect-dock dd { margin: 0; text-align: right; }
 
+.inspect-dock .debug-line {
+  margin-top: 0.35rem;
+  color: var(--debug-text);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
 .overlay {
   position: absolute;
   inset: 0;
@@ -207,7 +274,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-xl);
-  background: rgba(10, 8, 6, 0.72);
+  background: rgba(8, 10, 14, 0.68);
   z-index: 5;
   pointer-events: auto;
 }
@@ -221,13 +288,18 @@
   padding: var(--space-lg);
   border: 1.5px solid var(--bronze);
   border-radius: var(--radius-lg);
-  background: rgba(40, 28, 18, 0.96);
+  background:
+    var(--tex-parchment, none),
+    rgba(16, 20, 26, 0.94);
+  background-blend-mode: soft-light, normal;
+  box-shadow: inset 0 0 0 1px rgba(184, 149, 74, 0.18);
 }
 
 .overlay-panel h2 {
   margin: 0 0 var(--space-md);
   font-size: var(--type-title);
   text-align: center;
+  letter-spacing: 0.06em;
 }
 
 .overlay-panel .stack {
@@ -239,5 +311,28 @@
   text-align: center;
   font-size: var(--type-banner);
   font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
+.overlay-panel .cta {
+  width: 100%;
+}
+
+.overlay-panel .quiet {
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  .hud-rail {
+    padding: 0.45rem 0.65rem;
+  }
+
+  .roster-chip .name {
+    font-size: 11px;
+  }
+
+  .inspect-dock {
+    width: min(13.5rem, calc(100% - 1rem));
+    max-height: min(16rem, 40%);
+  }
+}

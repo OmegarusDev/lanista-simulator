@@ -4,9 +4,11 @@ import { spawnSpecFromGladiator, spawnSpecsFromLineup } from '../domain/campaign
 import {
   applyMedicus,
   buyFacility,
+  equipPart,
   medicusCost,
   upgradeGear,
 } from '../domain/campaign/facilities';
+import type { KitSlot } from '../content/kitPieces';
 import { injuryLabel } from '../domain/campaign/injury';
 import { settleSeasonLegacy } from '../domain/campaign/legacy';
 import { setGladiatorAssignment } from '../domain/campaign/ludusDay';
@@ -140,6 +142,13 @@ export class SeasonController {
   upgradeGear(id: number): boolean {
     if (!this.season) return false;
     const ok = upgradeGear(this.season, id);
+    if (ok) this.persist();
+    return ok;
+  }
+
+  equipPart(id: number, slot: KitSlot, partId: string): boolean {
+    if (!this.season) return false;
+    const ok = equipPart(this.season, id, slot, partId);
     if (ok) this.persist();
     return ok;
   }

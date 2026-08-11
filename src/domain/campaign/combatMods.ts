@@ -87,6 +87,8 @@ export function spawnSpecFromGladiator(
   return {
     armatura: g.armatura,
     name: g.name,
+    appearanceSeed: g.appearanceSeed,
+    partsOverride: g.partsOverride?.length ? [...g.partsOverride] : undefined,
     hpMul,
     staminaMul,
     poiseMul,

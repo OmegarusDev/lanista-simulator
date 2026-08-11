@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { defineConfig, type Plugin } from 'vitest/config';
 
-/** Force a full page reload on any change under src/ (Canvas2D game; HMR is unreliable). */
+/** Force a full page reload on any change under src/ (WebGL game; HMR is unreliable). */
 function fullReloadOnSrcChange(): Plugin {
   return {
     name: 'full-reload-on-src-change',

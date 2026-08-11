@@ -14,8 +14,7 @@ import type {
 } from '../domain/combat/types';
 import type { Input } from '../shell/input';
 import type { Synth } from '../view/audio';
-import { posedCardsToSnapshots } from '../view/posedPreview';
-import { placePreviewInWorld } from '../view/stagePaint';
+import { placePreviewInWorld, posedCardsToSnapshots } from '../view/posedPreview';
 import { btn, clear, el, segment } from './dom';
 
 export type SandboxAction =
@@ -295,14 +294,6 @@ export class PracticeView {
     this.pending = action;
   }
 
-  private beastPoolNote(): HTMLElement {
-    const text = BEAST_LIST.map((id) => `${BEASTS[id].name} (${BEASTS[id].short})`).join(' · ');
-    return el('p', {
-      className: 'beast-pool meta',
-      text: `Beasts: ${text}`,
-    });
-  }
-
   private focusLabel(f: {
     name: string;
     kind: string;
@@ -335,7 +326,7 @@ export class PracticeView {
     titleRow.append(el('h1', { text: 'Practice Yard' }));
     top.append(titleRow);
 
-    const strip = el('div', { className: 'row-btns' });
+    const strip = el('div', { className: 'setup-row' });
     strip.append(
       segment(['Match', 'Venatio'], this.matchKind === 'matchup' ? 0 : 1, (i) => {
         this.setMatchKind(i === 0 ? 'matchup' : 'venatio');
@@ -351,7 +342,6 @@ export class PracticeView {
       }),
     );
     top.append(strip);
-    if (this.matchKind === 'venatio') top.append(this.beastPoolNote());
     this.root.append(top);
 
     const bottom = el('div', { className: 'practice-bottom' });
@@ -359,6 +349,7 @@ export class PracticeView {
     const focus = el('div', { className: 'practice-focus' });
     focus.append(
       btn('Blue', {
+        className: 'quiet',
         active: snaps.some((f) => f.team === 0 && f.id === this.selectedPreviewId),
         onClick: () => {
           this.selectedPreviewId = snaps.find((f) => f.team === 0)?.id ?? null;
@@ -369,6 +360,7 @@ export class PracticeView {
     );
     focus.append(
       btn(this.matchKind === 'venatio' ? 'Beasts' : 'Red', {
+        className: 'quiet',
         active: snaps.some((f) => f.team === 1 && f.id === this.selectedPreviewId),
         onClick: () => {
           this.selectedPreviewId = snaps.find((f) => f.team === 1)?.id ?? null;
@@ -391,8 +383,15 @@ export class PracticeView {
     }
     bottom.append(focus);
 
-    const actions = el('div', { className: 'footer-actions' });
+    const actions = el('div', { className: 'practice-actions' });
     actions.append(
+      btn('Fight', {
+        className: 'cta',
+        onClick: () => this.emit({ type: 'START', config: this.makeQuickConfig() }),
+      }),
+    );
+    const secondary = el('div', { className: 'secondary-actions' });
+    secondary.append(
       btn('Reroll', {
         onClick: () => {
           this.seed = (Math.random() * 0xffffffff) >>> 0;
@@ -402,6 +401,7 @@ export class PracticeView {
         },
       }),
       btn('Custom', {
+        className: 'ghost',
         onClick: () => {
           this.mode = 'custom';
           this.synth.play('ui');
@@ -409,64 +409,67 @@ export class PracticeView {
         },
       }),
     );
+    actions.append(secondary);
     bottom.append(actions);
-    bottom.append(
-      btn('Fight', {
-        className: 'cta',
-        onClick: () => this.emit({ type: 'START', config: this.makeQuickConfig() }),
-      }),
-    );
     this.root.append(bottom);
   }
 
   private renderSheet(): void {
     this.sheet.classList.remove('is-hidden');
     clear(this.sheet);
-    const back = btn('←', {
-      className: 'ghost',
-      onClick: () => {
-        this.mode = 'quick';
-        this.rerollQuick();
-        this.synth.play('ui');
-        this.root.classList.remove('is-hidden');
-        this.renderChrome();
-      },
-    });
-    this.sheet.append(back);
-    this.sheet.append(el('h1', { text: 'Custom Team' }));
+
+    const header = el('div', { className: 'sheet-header' });
+    header.append(
+      btn('←', {
+        className: 'ghost',
+        onClick: () => {
+          this.mode = 'quick';
+          this.rerollQuick();
+          this.synth.play('ui');
+          this.root.classList.remove('is-hidden');
+          this.renderChrome();
+        },
+      }),
+    );
+    header.append(el('h1', { text: 'Custom' }));
+    // balance spacer for centered title
+    header.append(el('span', { attrs: { style: 'width:3rem' } }));
+    this.sheet.append(header);
     this.sheet.append(
       el('p', {
         className: 'subhead',
         text:
           this.matchKind === 'venatio'
-            ? 'Blue kits · Red beasts (full menagerie)'
-            : 'Pick kits · historical matchups',
+            ? 'Blue kits · Red beasts'
+            : 'Pick kits for each side',
       }),
     );
 
-    this.sheet.append(
+    const setup = el('div', { className: 'setup-row' });
+    setup.append(
       segment(['Match', 'Venatio'], this.matchKind === 'matchup' ? 0 : 1, (i) => {
         this.setMatchKind(i === 0 ? 'matchup' : 'venatio');
         this.synth.play('ui');
         this.renderSheet();
       }),
     );
-    this.sheet.append(
+    setup.append(
       segment(['1v1', '2v2', '3v3'], this.teamSize - 1, (i) => {
         this.setTeamSize((i + 1) as TeamSize);
         this.synth.play('ui');
         this.renderSheet();
       }),
     );
+    this.sheet.append(setup);
 
-    if (this.matchKind === 'venatio') {
-      this.sheet.append(this.beastPoolNote());
-    } else {
-      this.sheet.append(el('p', { className: 'meta', text: 'Historical' }));
-      const presets = el('div', { className: 'preset-grid' });
+    if (this.matchKind !== 'venatio') {
+      const presets = el('div', { className: 'preset-block' });
+      presets.append(el('p', { className: 'section-label', text: 'Historical' }));
+      const grid = el('div', { className: 'preset-grid' });
       for (const p of PAIRING_PRESETS) {
-        presets.append(
+        grid.append(
           btn(p.label, {
+            className: 'quiet',
             onClick: () => {
               this.teamSize = 1;
               this.slots0 = [p.team0[0]!, 'RANDOM', 'RANDOM'];
@@ -486,6 +489,7 @@ export class PracticeView {
           }),
         );
       }
+      presets.append(grid);
       this.sheet.append(presets);
     }
 
@@ -494,12 +498,14 @@ export class PracticeView {
     sides.append(this.buildSide(1));
     this.sheet.append(sides);
 
-    this.sheet.append(
+    const foot = el('div', { className: 'sheet-footer' });
+    foot.append(
       btn('Fight', {
         className: 'cta',
         onClick: () => this.emit({ type: 'START', config: this.makeCustomConfig() }),
       }),
     );
+    this.sheet.append(foot);
   }
 
   private buildSide(team: 0 | 1): HTMLElement {
@@ -507,17 +513,8 @@ export class PracticeView {
     const slots = team === 0 ? this.slots0 : this.slots1;
     let edit = team === 0 ? this.editSlot0 : this.editSlot1;
     const panel = el('div', { className: 'side-panel' });
-    const title =
-      team === 0 ? 'Blue' : beastSide ? 'Beasts (Red)' : 'Red';
+    const title = team === 0 ? 'Blue' : beastSide ? 'Beasts' : 'Red';
     panel.append(el('h3', { text: title }));
-    if (beastSide) {
-      panel.append(
-        el('p', {
-          className: 'eyebrow',
-          text: 'Tap a slot, then pick Lion / Leopard / Bear / Boar',
-        }),
-      );
-    }
 
     const slotRow = el('div', { className: 'row-btns' });
     for (let s = 0; s < this.teamSize; s++) {
@@ -551,7 +548,6 @@ export class PracticeView {
         },
       });
       b.title = pickTitle(opt);
-      // Visible full name under short for beasts
       if (opt !== 'RANDOM' && isBeastId(opt)) {
         b.textContent = '';
         b.append(el('span', { className: 'pick-short', text: BEASTS[opt].short }));

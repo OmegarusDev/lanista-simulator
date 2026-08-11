@@ -52,7 +52,7 @@ export class SeasonEndView {
     );
     card.append(
       el('p', {
-        className: 'meta',
+        className: 'delta',
         text: `${state.denarii} denarii · ${state.virtus} virtus`,
       }),
     );
@@ -63,6 +63,7 @@ export class SeasonEndView {
     if (best) {
       card.append(
         el('p', {
+          className: 'beat',
           text: `Best: ${best.name} · ${ARMATURAE[best.armatura].name} · ${GRADE_LABEL[best.grade]} (${best.wins}W)`,
         }),
       );
@@ -70,7 +71,7 @@ export class SeasonEndView {
     if (state.retiredNames.length) {
       card.append(
         el('p', {
-          className: 'eyebrow',
+          className: 'consequence',
           text: `Fallen / released: ${state.retiredNames.slice(0, 3).join(', ')}`,
         }),
       );
@@ -78,13 +79,13 @@ export class SeasonEndView {
     const leg = loadLegacy();
     card.append(
       el('p', {
-        className: 'eyebrow',
-        text: `Legacy: ${leg.seasonsCompleted} seasons · patronage ${leg.patronage}`,
+        className: 'ledger',
+        text: `Legacy · ${leg.seasonsCompleted} seasons · patronage ${leg.patronage}`,
       }),
     );
 
     card.append(
-      btn('Title', {
+      btn('Return to Title', {
         className: 'cta',
         onClick: () => {
           this.onUi();

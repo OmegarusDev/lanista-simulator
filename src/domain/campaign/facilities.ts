@@ -1,5 +1,11 @@
 import { economy } from '../../content/economy';
 import {
+  ARMATURA_LOADOUTS,
+  KIT_PARTS,
+  loadoutPartIds,
+  type KitSlot,
+} from '../../content/kitPieces';
+import {
   FACILITIES,
   GEAR_UPGRADE_COST,
   MEDICUS,
@@ -81,5 +87,33 @@ export function upgradeGear(state: SeasonState, gladiatorId: number): boolean {
   if (state.denarii < cost) return false;
   state.denarii -= cost;
   g.gearGrade = next as GearGrade;
+  return true;
+}
+
+const EQUIP_COST = 12;
+
+/** Write a kit piece into partsOverride (creates loadout from stock if needed). */
+export function equipPart(
+  state: SeasonState,
+  gladiatorId: number,
+  slot: KitSlot,
+  partId: string,
+): boolean {
+  if (state.status !== 'ACTIVE') return false;
+  if (!hasFacility(state, 'ARMAMENTARIUM')) return false;
+  const g = state.roster.find((x) => x.id === gladiatorId && !x.retired);
+  if (!g) return false;
+  if (partId && state.denarii < EQUIP_COST) return false;
+
+  const stock = loadoutPartIds(ARMATURA_LOADOUTS[g.armatura]);
+  const parts = g.partsOverride?.length ? [...g.partsOverride] : [...stock];
+  const filtered = parts.filter((id) => KIT_PARTS[id]?.slot !== slot);
+  if (partId) {
+    const part = KIT_PARTS[partId];
+    if (!part || part.slot !== slot) return false;
+    filtered.push(partId);
+    state.denarii -= EQUIP_COST;
+  }
+  g.partsOverride = filtered;
   return true;
 }

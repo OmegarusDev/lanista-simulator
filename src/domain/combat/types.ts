@@ -66,6 +66,8 @@ export interface FighterSnapshot {
   flash: number;
   /** Kit piece ids when spawn used partsOverride — drives lookFromParts. */
   partsOverride?: string[];
+  /** Career / lab appearance seed for hue/scar/bulk variation. */
+  appearanceSeed?: number;
 }
 
 /** Campaign supports up to 3v3; Instant Match supports 1–3 as well. */
@@ -83,6 +85,8 @@ export interface FighterSpawnSpec {
   name?: string;
   /** Optional future armory hook — part ids assembled before mods. */
   partsOverride?: string[];
+  /** Visual identity seed — threaded from career gladiator. */
+  appearanceSeed?: number;
   hpMul?: number;
   staminaMul?: number;
   poiseMul?: number;

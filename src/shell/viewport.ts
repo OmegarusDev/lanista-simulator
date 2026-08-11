@@ -1,12 +1,17 @@
 /**
  * Pin #app to visualViewport (size + offset) so iOS URL-bar drift cannot desync hits.
  */
+import { setLiveDesign } from './canvas';
+import { createGl, type GlContext } from '../gl/context';
+import { GlFrame } from '../gl/index';
+
 export interface AppShell {
   app: HTMLElement;
   chrome: HTMLElement;
   stageWrap: HTMLElement;
   stage: HTMLCanvasElement;
-  stageCtx: CanvasRenderingContext2D;
+  gl: GlContext | null;
+  frame: GlFrame | null;
 }
 
 export function mountShell(): AppShell {
@@ -18,8 +23,9 @@ export function mountShell(): AppShell {
   if (!(chrome instanceof HTMLElement)) throw new Error('#chrome not found');
   if (!(stageWrap instanceof HTMLElement)) throw new Error('#stage-wrap not found');
   if (!(stage instanceof HTMLCanvasElement)) throw new Error('#stage canvas not found');
-  const stageCtx = stage.getContext('2d');
-  if (!stageCtx) throw new Error('2D context unavailable');
+
+  const gl = createGl(stage);
+  const frame = gl ? new GlFrame(gl) : null;
 
   const pin = () => pinAppToVisualViewport(app);
   pin();
@@ -31,7 +37,7 @@ export function mountShell(): AppShell {
     vv.addEventListener('scroll', pin);
   }
 
-  return { app, chrome, stageWrap, stage, stageCtx };
+  return { app, chrome, stageWrap, stage, gl, frame };
 }
 
 export function pinAppToVisualViewport(app: HTMLElement): void {
@@ -46,22 +52,29 @@ export function pinAppToVisualViewport(app: HTMLElement): void {
   app.style.top = `${top}px`;
 }
 
-/** Resize stage canvas to its CSS box (device pixels). */
-export function resizeStageCanvas(stage: HTMLCanvasElement, ctx: CanvasRenderingContext2D): {
-  cssW: number;
-  cssH: number;
-} {
+/** Resize stage drawingBuffer to CSS box × DPR. */
+export function resizeStageCanvas(shell: AppShell): { cssW: number; cssH: number } {
+  const stage = shell.stage;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const rect = stage.getBoundingClientRect();
-  const cssW = Math.max(1, Math.round(rect.width));
-  const cssH = Math.max(1, Math.round(rect.height));
-  const bw = Math.max(1, Math.floor(cssW * dpr));
-  const bh = Math.max(1, Math.floor(cssH * dpr));
-  if (stage.width !== bw || stage.height !== bh) {
-    stage.width = bw;
-    stage.height = bh;
+  const wrap = shell.stageWrap;
+  // Prefer wrap box — absolute canvas can report 0 before first style write.
+  const wrapRect = wrap.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
+  const cssW = Math.max(1, Math.round(wrapRect.width || stageRect.width || window.innerWidth));
+  const cssH = Math.max(1, Math.round(wrapRect.height || stageRect.height || window.innerHeight));
+  if (shell.frame) {
+    shell.frame.resize(cssW, cssH);
+  } else {
+    const bw = Math.max(1, Math.floor(cssW * dpr));
+    const bh = Math.max(1, Math.floor(cssH * dpr));
+    if (stage.width !== bw || stage.height !== bh) {
+      stage.width = bw;
+      stage.height = bh;
+    }
+    stage.style.width = `${cssW}px`;
+    stage.style.height = `${cssH}px`;
   }
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  setLiveDesign(cssW, cssH);
   return { cssW, cssH };
 }
 
@@ -83,4 +96,14 @@ export function setStageVisible(shell: AppShell, visible: boolean): void {
   shell.stageWrap.classList.toggle('is-hidden', !visible);
   shell.stageWrap.setAttribute('aria-hidden', visible ? 'false' : 'true');
   shell.app.classList.toggle('has-stage', visible);
+}
+
+export function showGlFailBanner(host: HTMLElement): void {
+  const pre = document.createElement('pre');
+  pre.setAttribute('role', 'alert');
+  pre.style.cssText =
+    'margin:1.5rem;padding:1rem;white-space:pre-wrap;color:#e8dcc4;background:#1a2028;border:1px solid #b8954a;font:14px/1.4 ui-monospace,monospace;z-index:20;position:relative';
+  pre.textContent =
+    'Lanista needs WebGL2.\n\nThis browser could not create a WebGL2 context. Try a recent Chrome, Firefox, or Safari build.';
+  host.prepend(pre);
 }

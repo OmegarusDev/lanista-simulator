@@ -18,7 +18,6 @@ export interface DesignSize {
 
 export interface CanvasLayout {
   canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
   /** Live logical design size (CSS-pixel stage). */
   designW: number;
   designH: number;
@@ -48,6 +47,13 @@ const liveDesign: DesignSize = {
 
 export function getDesign(): DesignSize {
   return liveDesign;
+}
+
+/** Keep quality tiers / design queries in sync with the live stage CSS box. */
+export function setLiveDesign(w: number, h: number): void {
+  liveDesign.w = Math.max(1, Math.round(w));
+  liveDesign.h = Math.max(1, Math.round(h));
+  liveDesign.orientation = orientationOf(liveDesign.w, liveDesign.h);
 }
 
 export function orientationOf(w: number, h: number): Orientation {
@@ -124,15 +130,12 @@ export function viewportSize(): { w: number; h: number } {
 }
 
 export function createCanvasLayout(canvas: HTMLCanvasElement): CanvasLayout {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D context unavailable');
   canvas.style.position = 'absolute';
   canvas.style.display = 'block';
   canvas.style.margin = '0';
   canvas.style.touchAction = 'none';
   return {
     canvas,
-    ctx,
     designW: liveDesign.w,
     designH: liveDesign.h,
     orientation: liveDesign.orientation,
@@ -158,14 +161,13 @@ export function resizeCanvas(layout: CanvasLayout): void {
   layout.offsetX = fit.offsetX;
   layout.offsetY = fit.offsetY;
 
-  const { canvas, ctx } = layout;
+  const { canvas } = layout;
   canvas.style.left = `${fit.offsetX}px`;
   canvas.style.top = `${fit.offsetY}px`;
   canvas.style.width = `${fit.cssW}px`;
   canvas.style.height = `${fit.cssH}px`;
   canvas.width = Math.max(1, Math.floor(fit.designW * dpr));
   canvas.height = Math.max(1, Math.floor(fit.designH * dpr));
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 export function clientToDesign(

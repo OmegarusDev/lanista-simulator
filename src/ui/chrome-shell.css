@@ -10,15 +10,14 @@ body {
   width: 100%;
   height: 100%;
   height: 100dvh;
-  background: var(--shell-bg, #1a1410);
+  background: var(--shell-bg, #14181e);
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  /* Kill browser page pinch-zoom; gameplay zoom is canvas-only via ArenaCamera. */
   touch-action: none;
-  color: var(--parchment, #ead9b4);
+  color: var(--parchment, #e8dcc4);
   font-family: var(--font-ui, "Palatino Linotype", Palatino, Georgia, serif);
 }
 
@@ -29,10 +28,11 @@ body {
   display: grid;
   grid-template: 1fr / 1fr;
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  /* Continuous dusk atmosphere — same language as canvas backdrop. */
   background:
-    var(--tex-wood, none),
-    radial-gradient(ellipse 70% 55% at 50% 35%, rgba(90, 58, 32, 0.35), transparent 70%),
-    linear-gradient(180deg, #241810 0%, var(--shell-bg, #1a1410) 55%, #120e0a 100%);
+    var(--tex-stone, none),
+    radial-gradient(ellipse 80% 55% at 50% 62%, rgba(180, 130, 70, 0.16), transparent 68%),
+    linear-gradient(180deg, #1a2430 0%, #243038 38%, #2a2824 72%, #14181e 100%);
   background-blend-mode: soft-light, normal, normal;
   color-scheme: dark;
   overflow: hidden;
@@ -56,13 +56,16 @@ body {
   pointer-events: none;
 }
 
+/* Screens / sheets / overlays are full interactive surfaces.
+   Fight HUD + Practice chrome set pointer-events:none on the root and
+   re-enable only rails/controls so wheel/pinch/drag reach the stage. */
 #chrome .screen,
-#chrome .hud,
 #chrome .sheet,
 #chrome .overlay {
   pointer-events: auto;
 }
 
+/* Full-bleed canvas — NEVER pad the stage; chrome floats over atmosphere. */
 #stage-wrap {
   position: relative;
   z-index: 1;
@@ -70,11 +73,7 @@ body {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  /* Fight/Practice: leave room for DOM rails via CSS vars set by views */
-  padding-top: var(--stage-pad-top, 0px);
-  padding-bottom: var(--stage-pad-bottom, 0px);
-  padding-left: var(--stage-pad-left, 0px);
-  padding-right: var(--stage-pad-right, 0px);
+  padding: 0;
   pointer-events: none;
 }
 
@@ -83,17 +82,24 @@ body {
 }
 
 #stage-wrap.is-hidden {
+  display: none !important;
   visibility: hidden;
   pointer-events: none !important;
 }
 
+/* Global hide — do not rely on practice.css alone for fight HUD / screens. */
+.is-hidden {
+  display: none !important;
+}
+
 #stage {
   display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   margin: 0;
   padding: 0;
   touch-action: none;
-  background: var(--shell-bg, #1a1410);
+  background: #14181e;
 }
-

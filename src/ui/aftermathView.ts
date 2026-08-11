@@ -37,64 +37,57 @@ export class AftermathView {
 
     const card = el('div', { className: 'center-card' });
     const resultClass =
-      summary.result === 'WIN' ? 'win' : summary.result === 'FORFEIT' || summary.result === 'LOSS' ? 'loss' : '';
+      summary.result === 'WIN'
+        ? 'win'
+        : summary.result === 'FORFEIT' || summary.result === 'LOSS'
+          ? 'loss'
+          : '';
     card.append(el('div', { className: `result ${resultClass}`, text: summary.result }));
     card.append(
       el('p', {
-        text: `Denarii ${summary.purseDelta >= 0 ? '+' : ''}${summary.purseDelta}   Virtus ${summary.virtusDelta >= 0 ? '+' : ''}${summary.virtusDelta}`,
+        className: 'delta',
+        text: `${summary.purseDelta >= 0 ? '+' : ''}${summary.purseDelta}d   ${summary.virtusDelta >= 0 ? '+' : ''}${summary.virtusDelta}v`,
       }),
     );
 
     if (summary.storyBeats?.length) {
-      for (const beat of summary.storyBeats.slice(0, 3)) {
-        card.append(el('p', { text: beat }));
+      for (const beat of summary.storyBeats.slice(0, 2)) {
+        card.append(el('p', { className: 'beat', text: beat }));
       }
     }
 
     if (summary.missio?.length) {
-      card.append(el('p', { className: 'meta', text: 'The crowd judges the fallen' }));
+      card.append(el('p', { className: 'section-label', text: 'Missio' }));
       for (const m of summary.missio) {
-        const thumb = m.outcome === 'SPARE' ? 'THUMB UP — MISSIO' : 'THUMB DOWN — DEATH';
+        const thumb = m.outcome === 'SPARE' ? 'Missio — spared' : 'Pollice verso — death';
         card.append(
           el('p', {
-            text: `${m.name} — ${thumb}`,
-            className: m.outcome === 'SPARE' ? 'result win' : 'result loss',
+            text: `${m.name}: ${thumb}`,
+            className: m.outcome === 'SPARE' ? 'beat win-tone' : 'beat loss-tone',
           }),
         );
-        card.append(el('p', { className: 'eyebrow', text: m.lean }));
       }
     }
 
+    const consequences: string[] = [];
     for (const inj of summary.injuries) {
-      card.append(
-        el('p', {
-          className: 'meta',
-          text: `${inj.name} → ${inj.detail ?? inj.injury}`,
-        }),
-      );
+      consequences.push(`${inj.name} — ${inj.detail ?? inj.injury}`);
     }
-    if (summary.relationNotes?.length) {
-      for (const n of summary.relationNotes.slice(0, 2)) {
-        card.append(el('p', { className: 'meta', text: n }));
-      }
-    }
-    if (summary.notes?.length) {
-      for (const n of summary.notes.slice(0, 3)) {
-        card.append(el('p', { className: 'meta', text: n }));
-      }
-    }
+    for (const n of summary.relationNotes?.slice(0, 2) ?? []) consequences.push(n);
+    for (const n of summary.notes?.slice(0, 2) ?? []) consequences.push(n);
     for (const xp of summary.xpGains ?? []) {
-      card.append(
-        el('p', {
-          className: 'meta',
-          text: `${xp.name} +${xp.xp} xp${xp.grade ? ` → ${xp.grade}` : ''}`,
-        }),
-      );
+      consequences.push(`${xp.name} +${xp.xp} xp${xp.grade ? ` → ${xp.grade}` : ''}`);
+    }
+    if (consequences.length) {
+      card.append(el('p', { className: 'section-label', text: 'Consequences' }));
+      for (const line of consequences.slice(0, 6)) {
+        card.append(el('p', { className: 'consequence', text: line }));
+      }
     }
 
     card.append(
       el('p', {
-        className: 'meta',
+        className: 'ledger',
         text: `${state.denarii}d · ${state.virtus}v · ${state.record.wins}W-${state.record.losses}L`,
       }),
     );

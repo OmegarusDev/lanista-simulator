@@ -1,6 +1,7 @@
 import type { Synth } from '../view/audio';
 import type { FightHud } from '../ui/fightHud';
 import type { SandboxConfig } from '../domain/combat/types';
+import type { GlFrame } from '../gl/index';
 import { FightScene, type FightAction } from './scenes/fight';
 
 /** Owns the active FightScene lifecycle. */
@@ -14,13 +15,14 @@ export class FightSession {
     context: 'lab' | 'career',
     synth: Synth,
     hud: FightHud,
+    glFrame: GlFrame,
     lineupIds?: number[],
   ): FightScene {
     synth.ensure();
     this.lastConfig = config;
     this.context = context;
     this.scene?.dispose();
-    this.scene = new FightScene(config, synth, hud, {
+    this.scene = new FightScene(config, synth, hud, glFrame, {
       career: context === 'career',
       lineupIds: context === 'career' ? lineupIds : undefined,
     });
@@ -38,12 +40,11 @@ export class FightSession {
   }
 
   paint(
-    ctx: CanvasRenderingContext2D,
     cssW: number,
     cssH: number,
-    input: Parameters<FightScene['paint']>[3],
+    input: Parameters<FightScene['paint']>[2],
   ): FightAction {
     if (!this.scene) return { type: 'NONE' };
-    return this.scene.paint(ctx, cssW, cssH, input);
+    return this.scene.paint(cssW, cssH, input);
   }
 }

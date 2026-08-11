@@ -10,8 +10,11 @@ import {
 } from '../shell/viewport';
 import { Input } from '../shell/input';
 import { Synth } from '../view/audio';
-import { ArenaCamera } from '../view/arenaCamera';
-import { defaultStageZoom, paintStageWorld, pickFighterWorld, stagePointerToWorld } from '../view/stagePaint';
+import { defaultStageDolly } from '../gl/camera';
+import { emptyStageDrawModel, toFighterDraw, toStageDrawModel, type StageDrawModel } from '../gl/drawModel';
+import { pickFromScreen } from '../gl/pick';
+import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
+import { spawnSpecFromGladiator } from '../domain/campaign/combatMods';
 import { AftermathView } from '../ui/aftermathView';
 import { FightHud } from '../ui/fightHud';
 import { LineupView } from '../ui/lineupView';
@@ -24,7 +27,8 @@ import { FightSession } from './fightSession';
 import { SeasonController } from './seasonController';
 import type { FightAction } from './scenes/fight';
 import type { SeasonState } from '../domain/campaign/types';
-import type { SandboxConfig } from '../domain/combat/types';
+import type { FighterSnapshot, SandboxConfig } from '../domain/combat/types';
+import { ARMATURAE } from '../content/armatura';
 
 type Mode =
   | 'title'
@@ -55,16 +59,20 @@ export class App {
   private mode: Mode = 'title';
   private labReturn: 'title' | 'ludus' = 'title';
 
-  private readonly previewCam = new ArenaCamera();
   private previewPtrWasDown = false;
+  private ambientSeed = 0x51a11;
+  private frozenAftermath: StageDrawModel | null = null;
 
   private last = 0;
   private acc = 0;
   private readonly step = 1 / 60;
 
+  readonly hasGl: boolean;
+
   constructor() {
     applyCssTokens();
     this.shell = mountShell();
+    this.hasGl = Boolean(this.shell.frame);
     const beep = () => this.synth.ensure();
 
     this.title = new TitleView(beep);
@@ -89,7 +97,7 @@ export class App {
   }
 
   start(): void {
-    this.input.attach(this.shell.stage, (cx, cy) => {
+    this.input.attach(this.shell.stageWrap, (cx, cy) => {
       const rect = this.shell.stage.getBoundingClientRect();
       const w = rect.width || 1;
       const h = rect.height || 1;
@@ -100,7 +108,7 @@ export class App {
     });
     const onResize = () => {
       if (this.shell.app.classList.contains('has-stage')) {
-        resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
+        resizeStageCanvas(this.shell);
       }
     };
     window.addEventListener('resize', onResize);
@@ -139,8 +147,8 @@ export class App {
 
   private setMode(mode: Mode): void {
     this.mode = mode;
-    const stageOn = mode === 'fight' || mode === 'sandbox';
-    setStageVisible(this.shell, stageOn);
+    // Every player-facing mode shows the GL stage.
+    setStageVisible(this.shell, true);
 
     this.title.show(mode === 'title');
     this.ludus.show(mode === 'ludus', this.season, this.ludusQueries());
@@ -151,15 +159,24 @@ export class App {
     this.practice.show(mode === 'sandbox');
     if (mode !== 'fight') this.fightHud.show(false);
 
-    if (mode === 'sandbox') {
-      this.previewCam.reset(defaultStageZoom(400, 400), 'contain');
-      this.applyStagePads(72, 150);
+    const frame = this.shell.frame;
+    if (frame && mode !== 'fight') {
+      frame.fx.clear();
+      if (mode === 'sandbox') {
+        frame.camera.frameArena(defaultStageDolly(400, 400));
+        this.applyStagePads(72, 150);
+      } else if (mode === 'aftermath') {
+        this.applyStagePads(40, 120);
+      } else {
+        frame.camera.frameArena(780);
+        this.applyStagePads(mode === 'title' || mode === 'seasonEnd' ? 0 : 48, 100);
+      }
     } else if (mode === 'fight') {
       const pads = this.fightHud.getStagePads();
       this.applyStagePads(pads.top, pads.bottom);
-    } else {
-      this.applyStagePads(0, 0);
     }
+
+    if (mode !== 'aftermath') this.frozenAftermath = null;
   }
 
   private applyStagePads(top: number, bottom: number): void {
@@ -179,12 +196,14 @@ export class App {
   }
 
   private enterFight(config: SandboxConfig, context: 'lab' | 'career'): void {
+    if (!this.shell.frame) return;
     this.practice.seed = config.seed;
     this.fights.enter(
       config,
       context,
       this.synth,
       this.fightHud,
+      this.shell.frame,
       context === 'career' ? [...this.career.pendingLineup] : undefined,
     );
     this.setMode('fight');
@@ -196,6 +215,7 @@ export class App {
     switch (this.mode) {
       case 'title':
         this.pollTitle();
+        this.paintAmbient('rest');
         break;
       case 'sandbox':
         this.pollPractice();
@@ -203,74 +223,202 @@ export class App {
         break;
       case 'ludus':
         this.pollLudus();
+        this.paintLudusStage();
         break;
       case 'offers':
         this.pollOffers();
+        this.paintAmbient('quiet');
         break;
       case 'lineup':
         this.pollLineup();
+        this.paintLineupStage();
         break;
       case 'fight':
         this.paintFight();
         break;
       case 'aftermath':
         this.pollAftermath();
+        this.paintAftermathStage();
         break;
       case 'seasonEnd':
         this.pollSeasonEnd();
+        this.paintAmbient('quiet');
         break;
     }
   }
 
   private paintFight(): void {
-    if (!this.fights.scene) return;
+    if (!this.fights.scene || !this.shell.frame) return;
     const pads = this.fightHud.getStagePads();
     this.applyStagePads(pads.top, pads.bottom);
-    const { cssW, cssH } = resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
-    this.applyFightAction(this.fights.paint(this.shell.stageCtx, cssW, cssH, this.input));
+    const { cssW, cssH } = resizeStageCanvas(this.shell);
+    this.applyFightAction(this.fights.paint(cssW, cssH, this.input));
+  }
+
+  private paintAmbient(mood: StageDrawModel['mood']): void {
+    if (!this.shell.frame) return;
+    const { cssW, cssH } = resizeStageCanvas(this.shell);
+    this.shell.frame.camera.updateDirector([]);
+    this.shell.frame.camera.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta);
+    this.handleAmbientDrag(cssW, cssH);
+    const seed = this.season?.seed ?? this.ambientSeed;
+    this.shell.frame.render(emptyStageDrawModel(seed, mood));
   }
 
   private paintPracticeStage(): void {
-    const { cssW, cssH } = resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
-    if (this.input.wheelDelta !== 0) {
-      this.previewCam.nudgeZoom(-Math.sign(this.input.wheelDelta) * 0.06);
+    if (!this.shell.frame) return;
+    const { cssW, cssH } = resizeStageCanvas(this.shell);
+    const cam = this.shell.frame.camera;
+    cam.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta);
+    if (this.input.wasKeyPressed('Equal') || this.input.wasKeyPressed('NumpadAdd')) {
+      cam.nudgeDolly(0.08);
     }
-    if (this.input.pinchDelta !== 0) {
-      this.previewCam.nudgeZoom(this.input.pinchDelta * 0.55);
+    if (this.input.wasKeyPressed('Minus') || this.input.wasKeyPressed('NumpadSubtract')) {
+      cam.nudgeDolly(-0.08);
     }
-    this.previewCam.tickSmooth();
     const snaps = this.practice.previewSnapshots();
-    const t = paintStageWorld(this.shell.stageCtx, {
-      cssW,
-      cssH,
-      cam: this.previewCam,
+    const model = toStageDrawModel(snaps, {
       seed: this.practice.seed,
-      fighters: snaps,
       selectedId: this.practice.selectedPreviewId,
-      hideBars: true,
+      mood: 'preview',
     });
+    cam.updateDirector(model.fighters, { selectedId: this.practice.selectedPreviewId });
+    this.shell.frame.render(model);
 
     if (this.practice.mode === 'custom') {
       this.previewPtrWasDown = this.input.pointer.down;
       return;
     }
-    // Pinch: don't treat as fighter pick
     if (this.input.isPinching) {
+      if (cam.isDragging()) cam.endDrag();
       this.previewPtrWasDown = this.input.pointer.down;
       return;
     }
     const p = this.input.pointer;
-    if (p.down && !this.previewPtrWasDown) {
-      const world = stagePointerToWorld(p.x, p.y, t);
-      const hit = pickFighterWorld(snaps, world.x, world.y, 36 / Math.max(0.001, t.scale));
-      if (hit) {
-        this.practice.selectedPreviewId = hit.id;
-        this.synth.play('ui');
-      } else {
-        this.practice.selectedPreviewId = null;
+    const inStage = p.x >= 0 && p.x <= cssW && p.y >= 0 && p.y <= cssH;
+    const orbit = this.input.isKeyDown('ShiftLeft') || this.input.isKeyDown('ShiftRight');
+    if (p.down && !this.previewPtrWasDown && inStage) {
+      cam.beginDrag(p.x, p.y, orbit);
+    }
+    if (p.down && cam.isDragging()) cam.dragTo(p.x, p.y);
+    if (!p.down && this.previewPtrWasDown) {
+      const dragged = cam.endDrag();
+      if (!dragged && inStage) {
+        const hit = pickFromScreen(cam, model.fighters, p.x, p.y, cssW, cssH, 42);
+        if (hit) {
+          this.practice.selectedPreviewId = hit.id;
+          this.synth.play('ui');
+        } else {
+          this.practice.selectedPreviewId = null;
+        }
       }
       this.input.pointer.clicked = false;
     }
+    this.previewPtrWasDown = p.down;
+  }
+
+  private paintLudusStage(): void {
+    if (!this.shell.frame || !this.season) {
+      this.paintAmbient('quiet');
+      return;
+    }
+    const { cssW, cssH } = resizeStageCanvas(this.shell);
+    this.handleAmbientDrag(cssW, cssH);
+    const selId = this.ludus.getSelectedId();
+    const g =
+      (selId != null ? this.season.roster.find((x) => x.id === selId) : null) ??
+      this.season.roster.find((x) => !x.retired) ??
+      null;
+    if (!g) {
+      this.shell.frame.render(emptyStageDrawModel(this.season.seed, 'quiet'));
+      return;
+    }
+    const spec = spawnSpecFromGladiator(g, this.season.doctrina);
+    const snap = mannequinSnapshot(g.id, g.armatura, g.name, g.appearanceSeed, spec.partsOverride);
+    const model: StageDrawModel = {
+      seed: this.season.seed,
+      shake: 0,
+      mood: 'preview',
+      fighters: [toFighterDraw(snap, { selected: true, appearanceSeed: g.appearanceSeed })],
+    };
+    this.shell.frame.camera.updateDirector(model.fighters, { selectedId: snap.id });
+    this.shell.frame.render(model);
+  }
+
+  private paintLineupStage(): void {
+    if (!this.shell.frame || !this.season || !this.career.pendingOffer) {
+      this.paintAmbient('quiet');
+      return;
+    }
+    const { cssW, cssH } = resizeStageCanvas(this.shell);
+    this.handleAmbientDrag(cssW, cssH);
+    const ids = this.lineup.getLineupIds();
+    const offer = this.career.pendingOffer;
+    const fighters: FighterSnapshot[] = [];
+    let id = 1;
+    const n = offer.teamSize;
+    for (let i = 0; i < n; i++) {
+      const gid = ids[i];
+      const g = gid != null ? this.season.roster.find((x) => x.id === gid) : null;
+      const legal = Boolean(g);
+      const armatura = g?.armatura ?? 'MURMILLO';
+      const snap = mannequinSnapshot(
+        id++,
+        armatura,
+        g?.name ?? `Slot ${i + 1}`,
+        g?.appearanceSeed ?? id * 9973,
+        g?.partsOverride,
+      );
+      snap.team = 0;
+      snap.x = ARENA_WORLD_W * 0.35;
+      snap.y = ARENA_WORLD_H * 0.5 + (i - (n - 1) / 2) * 48;
+      snap.alive = legal;
+      fighters.push(snap);
+    }
+    for (let i = 0; i < n; i++) {
+      const armatura = offer.opponents[i] ?? 'MURMILLO';
+      const snap = mannequinSnapshot(id++, armatura, ARMATURAE[armatura].name, id * 9973);
+      snap.team = 1;
+      snap.x = ARENA_WORLD_W * 0.65;
+      snap.y = ARENA_WORLD_H * 0.5 + (i - (n - 1) / 2) * 48;
+      fighters.push(snap);
+    }
+    const model = toStageDrawModel(fighters, { seed: this.season.seed, mood: 'preview' });
+    this.shell.frame.camera.updateDirector(model.fighters);
+    this.shell.frame.render(model);
+  }
+
+  private paintAftermathStage(): void {
+    if (!this.shell.frame) return;
+    const { cssW, cssH } = resizeStageCanvas(this.shell);
+    this.handleAmbientDrag(cssW, cssH);
+    if (!this.frozenAftermath && this.fights.scene) {
+      this.frozenAftermath = this.fights.scene.lastDrawModel();
+    }
+    const model =
+      this.frozenAftermath ??
+      emptyStageDrawModel(
+        this.season?.seed ?? 1,
+        this.career.pendingAftermath?.result === 'WIN' ? 'win' : 'loss',
+      );
+    this.shell.frame.render(model);
+  }
+
+  private handleAmbientDrag(cssW: number, cssH: number): void {
+    const cam = this.shell.frame?.camera;
+    if (!cam) return;
+    cam.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta);
+    if (this.input.isPinching) {
+      if (cam.isDragging()) cam.endDrag();
+      this.previewPtrWasDown = this.input.pointer.down;
+      return;
+    }
+    const p = this.input.pointer;
+    const inStage = p.x >= 0 && p.x <= cssW && p.y >= 0 && p.y <= cssH;
+    const orbit = this.input.isKeyDown('ShiftLeft') || this.input.isKeyDown('ShiftRight');
+    if (p.down && !this.previewPtrWasDown && inStage) cam.beginDrag(p.x, p.y, orbit);
+    if (p.down && cam.isDragging()) cam.dragTo(p.x, p.y);
+    if (!p.down && this.previewPtrWasDown) cam.endDrag();
     this.previewPtrWasDown = p.down;
   }
 
@@ -404,6 +552,10 @@ export class App {
     }
     if (action.type === 'UPGRADE_GEAR') {
       if (this.career.upgradeGear(action.id)) this.afterLudusMutation();
+      return;
+    }
+    if (action.type === 'EQUIP_PART') {
+      if (this.career.equipPart(action.id, action.slot, action.partId)) this.afterLudusMutation();
     }
   }
 
@@ -476,6 +628,7 @@ export class App {
     if (action.type === 'NONE') return;
 
     if (action.type === 'CAREER_DONE') {
+      if (this.fights.scene) this.frozenAftermath = this.fights.scene.lastDrawModel();
       if (!this.season || !this.career.pendingOffer) {
         this.fights.dispose();
         this.setMode('ludus');
@@ -505,4 +658,47 @@ export class App {
       this.enterFight(this.practice.rerollLab(), 'lab');
     }
   }
+}
+
+function mannequinSnapshot(
+  id: number,
+  armatura: FighterSnapshot['armatura'],
+  name: string,
+  appearanceSeed: number,
+  partsOverride?: string[],
+): FighterSnapshot {
+  const kit = ARMATURAE[armatura];
+  return {
+    id,
+    team: 0,
+    kind: 'gladiator',
+    armatura,
+    beastId: null,
+    name,
+    x: ARENA_WORLD_W * 0.5,
+    y: ARENA_WORLD_H * 0.5,
+    facing: 0.4,
+    hp: kit.maxHealth,
+    maxHp: kit.maxHealth,
+    stamina: kit.maxStamina,
+    maxStamina: kit.maxStamina,
+    poise: kit.maxPoise,
+    maxPoise: kit.maxPoise,
+    action: 'NONE',
+    phase: 'IDLE',
+    phaseT: 0,
+    phaseMax: 0,
+    footwork: 'HOLD',
+    intention: 'NONE',
+    desiredDist: (kit.measureMin + kit.measureMax) * 0.5,
+    poiseTier: 'SOLID',
+    stunned: false,
+    tangled: false,
+    poiseBroken: false,
+    guarding: false,
+    alive: true,
+    flash: 0,
+    partsOverride,
+    appearanceSeed,
+  };
 }

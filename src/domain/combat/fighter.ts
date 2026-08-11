@@ -38,6 +38,8 @@ export class Fighter {
   private defOverride: ArmaturaDef | null = null;
   /** Optional kit piece ids for draw (armory / lab overrides). */
   partsOverride: string[] | null = null;
+  /** Visual identity seed (career appearanceSeed or lab default). */
+  appearanceSeed = 0;
 
   x: number;
   y: number;
@@ -145,6 +147,9 @@ export class Fighter {
     }
     if (spec.partsOverride?.length) {
       this.partsOverride = [...spec.partsOverride];
+    }
+    if (spec.appearanceSeed != null) {
+      this.appearanceSeed = spec.appearanceSeed >>> 0;
     }
     const base = this.stockKit();
     const d: ArmaturaDef = { ...base };
@@ -471,6 +476,7 @@ export class Fighter {
       alive: this.alive,
       flash: this.flash,
       partsOverride: this.partsOverride ?? undefined,
+      appearanceSeed: this.appearanceSeed || this.id * 9973,
     };
   }
 }

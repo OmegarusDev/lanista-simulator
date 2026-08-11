@@ -1,6 +1,7 @@
 import type { CombatEvent } from '../domain/combat/types';
-import type { SeededRNG } from '../domain/rng';
-import { spawnDust, type DustParticle } from './arena';
+import type { FxRecipe, FxSystem } from '../gl/fx';
+import { recipeForEvent } from '../gl/fx';
+import type { StageCamera } from '../gl/camera';
 
 export type CombatFxSound = 'hit' | 'block' | 'dodge' | 'stun' | 'net' | 'ko' | 'ui';
 
@@ -8,55 +9,58 @@ export type CombatFxHooks = {
   play: (kind: CombatFxSound) => void;
   addShake: (amount: number, cap: number) => void;
   hitStop: (ticks: number) => void;
-  spawnDust: (
-    x: number,
-    y: number,
-    count: number,
-    kind?: 'dust' | 'blood',
-  ) => void;
+  spawnFx: (x: number, y: number, recipes: FxRecipe[]) => void;
   setInterest: (x: number, y: number, life: number) => void;
+  cameraImpulse?: (amount: number) => void;
 };
 
-/** Map CombatEvent kinds → presentation juice (audio / shake / dust / camera interest). */
+/** Map CombatEvent kinds → presentation juice (audio / shake / GL FX / camera interest). */
 export function applyCombatEvents(events: CombatEvent[], hooks: CombatFxHooks): void {
   for (const ev of events) {
+    const recipes = recipeForEvent(ev.kind);
     switch (ev.kind) {
       case 'HIT':
         hooks.play('hit');
         hooks.addShake(4, 10);
         hooks.hitStop(3);
-        hooks.spawnDust(ev.x, ev.y, 4, 'dust');
-        hooks.spawnDust(ev.x, ev.y, 3, 'blood');
+        hooks.spawnFx(ev.x, ev.y, recipes);
         hooks.setInterest(ev.x, ev.y, 45);
+        hooks.cameraImpulse?.(3);
         break;
       case 'GUARD':
         hooks.play('block');
         hooks.addShake(2, 8);
         hooks.hitStop(2);
+        hooks.spawnFx(ev.x, ev.y, recipes);
         break;
       case 'SIDESTEP':
         hooks.play('dodge');
+        hooks.spawnFx(ev.x, ev.y, recipes);
         break;
       case 'STUMBLE':
       case 'POISE_BREAK':
         hooks.play('stun');
         hooks.addShake(6, 14);
         hooks.hitStop(6);
-        hooks.spawnDust(ev.x, ev.y, 8);
+        hooks.spawnFx(ev.x, ev.y, recipes);
+        hooks.setInterest(ev.x, ev.y, 55);
+        hooks.cameraImpulse?.(5);
         break;
       case 'ABORT':
         hooks.play('dodge');
+        hooks.spawnFx(ev.x, ev.y, recipes);
         break;
       case 'TIP_CATCH':
         hooks.play('net');
         hooks.hitStop(4);
+        hooks.spawnFx(ev.x, ev.y, recipes);
         break;
       case 'KO':
         hooks.addShake(8, 16);
         hooks.hitStop(8);
-        hooks.spawnDust(ev.x, ev.y, 5, 'dust');
-        hooks.spawnDust(ev.x, ev.y, 6, 'blood');
+        hooks.spawnFx(ev.x, ev.y, recipes);
         hooks.setInterest(ev.x, ev.y, 70);
+        hooks.cameraImpulse?.(7);
         break;
       default:
         break;
@@ -64,15 +68,16 @@ export function applyCombatEvents(events: CombatEvent[], hooks: CombatFxHooks): 
   }
 }
 
-/** Bind FightScene-owned FX state into CombatFxHooks. */
+/** Bind FightScene-owned FX state into CombatFxHooks (GL particles). */
 export function fightCombatFxHooks(opts: {
   play: (kind: CombatFxSound) => void;
   getShake: () => number;
   setShake: (n: number) => void;
   getHitStop: () => number;
   setHitStop: (n: number) => void;
-  dust: DustParticle[];
-  fxRng: SeededRNG;
+  fx: FxSystem;
+  rng: () => number;
+  camera: StageCamera;
   setInterest: (x: number, y: number, life: number) => void;
 }): CombatFxHooks {
   return {
@@ -83,9 +88,10 @@ export function fightCombatFxHooks(opts: {
     hitStop: (ticks) => {
       opts.setHitStop(Math.max(opts.getHitStop(), ticks));
     },
-    spawnDust: (x, y, count, kind) => {
-      spawnDust(opts.dust, x, y, count, opts.fxRng, kind);
+    spawnFx: (x, y, recipes) => {
+      opts.fx.spawn(x, y, recipes, opts.rng);
     },
     setInterest: opts.setInterest,
+    cameraImpulse: (amount) => opts.camera.shake(amount),
   };
 }

@@ -1,5 +1,5 @@
 import { ARMATURAE } from '../content/armatura';
-import { ORIGINS, TRAITS } from '../content/identity';
+import { ORIGINS } from '../content/identity';
 import { DOCTRINA, GRADE_LABEL, GRADE_ORDER } from '../content/rpg';
 import { fightersForSlot, shortSlotReq } from '../domain/campaign/eligibility';
 import { injuryLabel } from '../domain/campaign/injury';
@@ -19,6 +19,12 @@ export type LineupAction =
   | { type: 'BACK' }
   | { type: 'FIGHT'; lineupIds: number[]; orders?: FightOrders };
 
+const STANCE_LABEL: Record<FightStance, string> = {
+  AGGRESSIVE: 'Agg',
+  BALANCED: 'Bal',
+  CAUTIOUS: 'Caut',
+};
+
 export class LineupView {
   readonly root: HTMLElement;
   private pending: LineupAction = { type: 'NONE' };
@@ -34,6 +40,10 @@ export class LineupView {
 
   mount(host: HTMLElement): void {
     host.append(this.root);
+  }
+
+  getLineupIds(): (number | null)[] {
+    return [...this.slots];
   }
 
   reset(offer?: MuneraOffer): void {
@@ -76,18 +86,19 @@ export class LineupView {
     left.append(
       el('div', {
         className: 'eyebrow',
-        text: `${offer.name} · ${offer.teamSize}v${offer.teamSize}${offer.eventRole ? ` · ${offer.eventRole}` : ''}`,
+        text: offer.name,
       }),
     );
-    left.append(el('div', { className: 'meta', text: offer.blurb }));
-    const opp = offer.opponents.map((id) => ARMATURAE[id].name).join(', ');
+    const opp = offer.opponents.map((id) => ARMATURAE[id].short).join('+');
+    const fee = offer.entryFee > 0 ? ` · fee ${offer.entryFee}d` : '';
     left.append(
       el('div', {
         className: 'meta',
-        text: `Opponents: ${opp} · Doctrina: ${DOCTRINA[state.doctrina].name}`,
+        text: `${offer.teamSize}v${offer.teamSize} · vs ${opp} · ${offer.purse}d${fee}`,
       }),
     );
     hdr.append(left);
+    hdr.append(btn('Back', { className: 'ghost', onClick: () => this.emit({ type: 'BACK' }) }));
     this.root.append(hdr);
 
     const slotsRow = el('div', { className: 'row-btns' });
@@ -96,7 +107,7 @@ export class LineupView {
       const g = filled != null ? state.roster.find((x) => x.id === filled) : null;
       const title = g ? g.name : shortSlotReq(slot);
       slotsRow.append(
-        btn(`F${i + 1}: ${title}`, {
+        btn(g ? title : `Slot ${i + 1}: ${title}`, {
           active: this.activeSlot === i,
           onClick: () => {
             this.activeSlot = i;
@@ -108,12 +119,12 @@ export class LineupView {
     });
     this.root.append(slotsRow);
 
-    const ordersRow = el('div', { className: 'row-btns' });
-    ordersRow.append(el('span', { className: 'meta', text: 'Orders:' }));
+    const ordersRow = el('div', { className: 'orders-row' });
+    ordersRow.append(el('span', { className: 'section-label', text: 'Orders' }));
     const stances: FightStance[] = ['AGGRESSIVE', 'BALANCED', 'CAUTIOUS'];
     for (const s of stances) {
       ordersRow.append(
-        btn(s.slice(0, 3), {
+        btn(STANCE_LABEL[s], {
           active: this.orders.stance === s,
           onClick: () => {
             this.orders.stance = s;
@@ -124,7 +135,7 @@ export class LineupView {
       );
     }
     ordersRow.append(
-      btn(this.orders.targetPriority === 'weakest' ? 'Weak foe' : 'Near foe', {
+      btn(this.orders.targetPriority === 'weakest' ? 'Weak' : 'Near', {
         onClick: () => {
           this.orders.targetPriority =
             this.orders.targetPriority === 'nearest' ? 'weakest' : 'nearest';
@@ -134,7 +145,7 @@ export class LineupView {
       }),
     );
     ordersRow.append(
-      btn(this.orders.withdrawRequested ? 'Withdraw ON' : 'Withdraw', {
+      btn('Withdraw', {
         active: this.orders.withdrawRequested,
         onClick: () => {
           this.orders.withdrawRequested = !this.orders.withdrawRequested;
@@ -144,6 +155,12 @@ export class LineupView {
       }),
     );
     this.root.append(ordersRow);
+    this.root.append(
+      el('p', {
+        className: 'eyebrow',
+        text: `Doctrina: ${DOCTRINA[state.doctrina].name}`,
+      }),
+    );
 
     const filledIds = this.slots.filter((id): id is number => id != null);
     const friction = lineupFriction(state, filledIds);
@@ -152,7 +169,7 @@ export class LineupView {
     }
 
     const body = el('div', { className: 'body-scroll' });
-    body.append(el('p', { className: 'meta', text: 'Eligible for this slot' }));
+    body.append(el('p', { className: 'section-label', text: 'Choose fighter' }));
 
     const pool = fightableRoster(state);
     const pickedElsewhere = this.slots.filter(
@@ -177,23 +194,17 @@ export class LineupView {
       const selected = this.slots[this.activeSlot] === g.id;
       const chip = el('button', { className: `chip${selected ? ' is-selected' : ''}` });
       chip.append(el('span', { className: 'name', text: g.name }));
-      const origin = ORIGINS[g.origin]?.name ?? String(g.origin ?? '');
-      const traits = (g.traits ?? []).map((t) => TRAITS[t].name).join('/');
+      const origin = ORIGINS[g.origin]?.name ?? '';
+      const injury =
+        g.injuries?.length
+          ? ` · ${g.injuries.map(injuryLabel).slice(0, 1).join('')}`
+          : '';
       chip.append(
         el('span', {
           className: 'tag',
-          text: `${ARMATURAE[g.armatura].short}·${GRADE_LABEL[g.grade].slice(0, 3)} · ${origin}`,
+          text: `${ARMATURAE[g.armatura].short} · ${GRADE_LABEL[g.grade]}${origin ? ` · ${origin}` : ''}${injury}`,
         }),
       );
-      if (traits) chip.append(el('span', { className: 'tag', text: traits }));
-      if (g.injuries?.length) {
-        chip.append(
-          el('span', {
-            className: 'tag',
-            text: g.injuries.map(injuryLabel).slice(0, 2).join(', '),
-          }),
-        );
-      }
       const bar = el('div', { className: 'hp-bar' });
       bar.append(el('span', { attrs: { style: `width:${Math.round(g.hpRatio * 100)}%` } }));
       chip.append(bar);
@@ -216,10 +227,9 @@ export class LineupView {
     foot.append(
       el('span', {
         className: 'meta',
-        text: `Filled ${filledCount} / ${offer.teamSize}`,
+        text: `${filledCount}/${offer.teamSize} ready`,
       }),
     );
-    foot.append(btn('Back', { onClick: () => this.emit({ type: 'BACK' }) }));
     const ready =
       this.slots.every((id) => id != null) && state.denarii >= offer.entryFee && offer.eligible;
     foot.append(

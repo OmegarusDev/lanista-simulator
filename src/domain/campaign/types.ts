@@ -90,6 +90,8 @@ export interface Gladiator {
   fame: number;
   mastery: number;
   gearGrade: GearGrade;
+  /** Optional armory kit piece ids — written by Armory, consumed by spawn. */
+  partsOverride?: string[];
   assignment: DayAssignment;
   retired?: boolean;
   age: number;

@@ -7,23 +7,14 @@ import { SeededRNG } from '../../domain/rng';
 import type { CombatEvent, FighterSnapshot, MatchResult } from '../../domain/combat/types';
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../../shell/canvas';
 import type { Input } from '../../shell/input';
-import {
-  stepDust,
-  type DustParticle,
-} from '../../view/arena';
 import { applyCombatEvents, fightCombatFxHooks } from '../../view/combatFx';
-import { ArenaCamera } from '../../view/arenaCamera';
 import type { Synth } from '../../view/audio';
-import {
-  defaultStageZoom,
-  paintStageWorld,
-  pickFighterWorld,
-  stagePointerToWorld,
-  stageViewRect,
-} from '../../view/stagePaint';
-import type { WorldViewTransform } from '../../view/layout';
 import { FightHud, type FightHudAction } from '../../ui/fightHud';
 import type { SandboxConfig } from '../../domain/combat/types';
+import type { GlFrame } from '../../gl/index';
+import { defaultStageDolly } from '../../gl/camera';
+import { toStageDrawModel } from '../../gl/drawModel';
+import { pickFromScreen } from '../../gl/pick';
 
 export type FightAction =
   | { type: 'NONE' }
@@ -51,28 +42,25 @@ export class FightScene {
   private paused = false;
   private debugFeel = false;
   private selectedId: number | null = null;
-  private readonly dust: DustParticle[] = [];
   private readonly fxRng: SeededRNG;
   private readonly config: SandboxConfig;
   private readonly career: boolean;
   private readonly lineupIds: number[];
   private crowdShout: CrowdShout | null = null;
   private crowdShoutLife = 0;
-  private readonly cam = new ArenaCamera();
   private interestX: number | null = null;
   private interestY: number | null = null;
   private interestLife = 0;
   private ptrWasDown = false;
-  private worldT: WorldViewTransform | null = null;
   private hudDirty = true;
   private hudTick = 0;
-  private lastCssW = 0;
-  private lastCssH = 0;
+  private framedOnce = false;
 
   constructor(
     config: SandboxConfig,
     private readonly synth: Synth,
     private readonly hud: FightHud,
+    private readonly glFrame: GlFrame,
     opts?: FightOptions,
   ) {
     this.config = config;
@@ -80,13 +68,16 @@ export class FightScene {
     this.lineupIds = opts?.lineupIds ? [...opts.lineupIds] : [];
     this.match = this.makeMatch(config);
     this.fxRng = new SeededRNG(config.seed ^ 0xd057);
-    this.cam.reset(1.12, 'contain');
+    // Always frame the sand disk first — director will track fighters once they exist.
+    this.glFrame.camera.frameArena(720);
+    this.glFrame.fx.clear();
     this.hud.show(true);
     this.hudDirty = true;
   }
 
   dispose(): void {
     this.hud.show(false);
+    this.glFrame.fx.clear();
   }
 
   private makeMatch(config: SandboxConfig): Match {
@@ -114,12 +105,12 @@ export class FightScene {
 
     if (this.hitStop > 0) {
       this.hitStop--;
-      stepDust(this.dust);
+      this.glFrame.fx.step(1);
       return { type: 'NONE' };
     }
 
     if (this.finished) {
-      stepDust(this.dust);
+      this.glFrame.fx.step(1);
       return { type: 'NONE' };
     }
 
@@ -149,7 +140,7 @@ export class FightScene {
       this.interestY = null;
     }
 
-    stepDust(this.dust);
+    this.glFrame.fx.step(steps);
 
     if (this.shake > 0) this.shake *= 0.85;
     if (this.shake < 0.2) this.shake = 0;
@@ -163,44 +154,47 @@ export class FightScene {
     }
 
     const snaps = this.match.snapshots();
-    this.cam.updateAutocam(snaps, {
+    this.glFrame.camera.updateDirector(snaps, {
       selectedId: this.selectedId,
       interestX: this.interestX ?? undefined,
       interestY: this.interestY ?? undefined,
     });
-    this.cam.tickSmooth();
 
     return { type: 'NONE' };
   }
 
-  paint(
-    ctx: CanvasRenderingContext2D,
-    cssW: number,
-    cssH: number,
-    input: Input,
-  ): FightAction {
-    if (cssW !== this.lastCssW || cssH !== this.lastCssH) {
-      this.lastCssW = cssW;
-      this.lastCssH = cssH;
-      this.cam.zoom = defaultStageZoom(cssW, cssH);
-      this.cam.smoothZoom = this.cam.zoom;
+  paint(cssW: number, cssH: number, input: Input): FightAction {
+    if (!this.framedOnce && cssW > 1 && cssH > 1) {
+      this.framedOnce = true;
+      this.glFrame.camera.resize(cssW, cssH);
+      this.glFrame.camera.frameArena(defaultStageDolly(cssW, cssH));
       this.hudDirty = true;
     }
 
     const snapsAll = this.match.snapshots();
-    this.worldT = paintStageWorld(ctx, {
-      cssW,
-      cssH,
-      cam: this.cam,
-      seed: this.config.seed,
-      fighters: snapsAll,
+    // Keep director warm on the paint path too (hit-stop / pause skip updateDirector).
+    this.glFrame.camera.updateDirector(snapsAll, {
       selectedId: this.selectedId,
-      dust: this.dust,
-      shake: this.shake,
+      interestX: this.interestX ?? undefined,
+      interestY: this.interestY ?? undefined,
     });
+    const model = toStageDrawModel(snapsAll, {
+      seed: this.config.seed,
+      shake: this.shake,
+      selectedId: this.selectedId,
+      mood: this.finished
+        ? this.match.result === 'TEAM0'
+          ? 'win'
+          : this.match.result === 'TEAM1'
+            ? 'loss'
+            : 'quiet'
+        : 'fight',
+      favor: this.match.teamCrowdFavor(0),
+    });
+    this.glFrame.render(model);
 
     if (!this.paused && !this.finished) {
-      this.handleArenaCamera(input, snapsAll, cssW, cssH);
+      this.handleCamera(input, model.fighters, cssW, cssH);
     }
 
     this.hudTick++;
@@ -210,6 +204,16 @@ export class FightScene {
     }
 
     return { type: 'NONE' };
+  }
+
+  /** Frozen pose for aftermath / leave. */
+  lastDrawModel() {
+    return toStageDrawModel(this.match.snapshots(), {
+      seed: this.config.seed,
+      shake: 0,
+      selectedId: this.selectedId,
+      mood: this.match.result === 'TEAM0' ? 'win' : this.match.result === 'TEAM1' ? 'loss' : 'quiet',
+    });
   }
 
   private refreshHud(snaps: FighterSnapshot[]): void {
@@ -264,6 +268,7 @@ export class FightScene {
           { label: 'Range', value: `${def.attackRange}` },
           { label: 'Guard', value: `${(def.guardArc * (180 / Math.PI)).toFixed(0)}°` },
           { label: 'Mass', value: def.mass.toFixed(2) },
+          { label: 'Intent', value: f.intention },
         ];
         if (def.tipCatchRatio > 0) {
           lines.push({
@@ -364,7 +369,7 @@ export class FightScene {
         this.hudDirty = true;
         return { type: 'NONE' };
       case 'FOCUS_TEAM':
-        this.cam.focusTeamGroup(action.team, this.match.snapshots());
+        this.glFrame.camera.focusTeamGroup(action.team, this.match.snapshots());
         this.selectedId = null;
         this.synth.play('ui');
         this.hudDirty = true;
@@ -430,47 +435,46 @@ export class FightScene {
       .filter((s) => s.gladiatorId >= 0);
   }
 
-  private handleArenaCamera(
+  private handleCamera(
     input: Input,
-    snaps: FighterSnapshot[],
+    fighters: ReturnType<typeof toStageDrawModel>['fighters'],
     cssW: number,
     cssH: number,
   ): void {
-    if (input.wheelDelta !== 0) {
-      this.cam.nudgeZoom(-Math.sign(input.wheelDelta) * 0.06);
+    const cam = this.glFrame.camera;
+    cam.applyZoomInput(input.wheelDelta, input.pinchDelta);
+    if (input.wasKeyPressed('Equal') || input.wasKeyPressed('NumpadAdd')) {
+      cam.nudgeDolly(0.08);
     }
-    if (input.pinchDelta !== 0) {
-      this.cam.nudgeZoom(input.pinchDelta * 0.55);
+    if (input.wasKeyPressed('Minus') || input.wasKeyPressed('NumpadSubtract')) {
+      cam.nudgeDolly(-0.08);
     }
     if (input.isPinching) {
-      if (this.cam.isDragging()) this.cam.endDrag();
+      if (cam.isDragging()) cam.endDrag();
       this.ptrWasDown = false;
       return;
     }
     const p = input.pointer;
-    const v = stageViewRect(cssW, cssH);
-    const t = this.worldT ?? this.cam.toTransform(v);
     const inArena = p.x >= 0 && p.x <= cssW && p.y >= 0 && p.y <= cssH;
+    const orbit = input.isKeyDown('ShiftLeft') || input.isKeyDown('ShiftRight');
 
     if (p.down && !this.ptrWasDown && inArena) {
-      this.cam.beginDrag(p.x, p.y, t.scale);
+      cam.beginDrag(p.x, p.y, orbit);
     }
-    if (p.down && this.cam.isDragging()) {
-      this.cam.dragTo(p.x, p.y);
+    if (p.down && cam.isDragging()) {
+      cam.dragTo(p.x, p.y);
     }
     if (!p.down && this.ptrWasDown) {
-      const dragged = this.cam.endDrag();
+      const dragged = cam.endDrag();
       if (!dragged && inArena) {
-        const world = stagePointerToWorld(p.x, p.y, t);
-        const hitR = 26 / Math.max(0.001, t.scale);
-        const hit = pickFighterWorld(snaps, world.x, world.y, hitR);
+        const hit = pickFromScreen(cam, fighters, p.x, p.y, cssW, cssH, 42);
         if (hit) {
           this.toggleSelect(hit.id);
           this.synth.play('ui');
           this.hudDirty = true;
         } else {
           this.selectedId = null;
-          this.cam.clearFocus();
+          cam.clearFocus();
           this.hudDirty = true;
         }
       }
@@ -482,12 +486,12 @@ export class FightScene {
   private toggleSelect(id: number | null): void {
     if (id === null || this.selectedId === id) {
       this.selectedId = null;
-      this.cam.clearFocus();
+      this.glFrame.camera.clearFocus();
       return;
     }
     this.selectedId = id;
     const f = this.match.snapshots().find((s) => s.id === id);
-    if (f) this.cam.focusFighter(f);
+    if (f) this.glFrame.camera.focusFighter(f);
   }
 
   private consumeEvents(events: CombatEvent[]): void {
@@ -503,12 +507,14 @@ export class FightScene {
         setHitStop: (n) => {
           this.hitStop = n;
         },
-        dust: this.dust,
-        fxRng: this.fxRng,
+        fx: this.glFrame.fx,
+        rng: () => this.fxRng.next(),
+        camera: this.glFrame.camera,
         setInterest: (x, y, life) => {
           this.interestX = x;
           this.interestY = y;
           this.interestLife = life;
+          this.glFrame.camera.setInterest(x, y, life);
         },
       }),
     );
@@ -529,5 +535,6 @@ function fighterStateLine(f: FighterSnapshot): string {
   }
   if (f.poiseTier === 'CRITICAL') return 'Poise critical';
   if (f.poiseTier === 'SOFT') return 'Poise soft';
+  if (f.intention !== 'NONE') return f.intention.charAt(0) + f.intention.slice(1).toLowerCase();
   return 'Ready';
 }

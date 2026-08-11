@@ -37,6 +37,7 @@ function migrateGladiator(raw: Partial<Gladiator> & { id: number; name: string; 
       : [TRAIT_LIST[raw.id % TRAIT_LIST.length]!, TRAIT_LIST[(raw.id + 3) % TRAIT_LIST.length]!],
     origin: raw.origin ?? ORIGIN_LIST[raw.id % ORIGIN_LIST.length]!,
     appearanceSeed: raw.appearanceSeed ?? raw.id * 9973,
+    partsOverride: Array.isArray(raw.partsOverride) ? raw.partsOverride.map(String) : undefined,
     history: Array.isArray(raw.history) ? raw.history : [{ day: 0, text: 'Continued from an older season.' }],
     morale: typeof raw.morale === 'number' ? raw.morale : 55,
     confidence: typeof raw.confidence === 'number' ? raw.confidence : 50,

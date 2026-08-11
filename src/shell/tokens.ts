@@ -21,9 +21,9 @@ export function applyCssTokens(root: HTMLElement = document.documentElement): vo
   set('--hp', colors.hp);
   set('--stamina', colors.stamina);
   set('--poise', colors.poise);
-  set('--panel', colors.panel);
+  set('--panel', 'rgba(18, 22, 28, 0.72)');
   set('--panel-border', colors.panelBorder);
-  set('--rail', colors.rail);
+  set('--rail', 'rgba(16, 20, 26, 0.48)');
   set('--rail-border', colors.railBorder);
   set('--button', colors.button);
   set('--button-hot', colors.buttonHot);
@@ -35,6 +35,9 @@ export function applyCssTokens(root: HTMLElement = document.documentElement): vo
   set('--debug', colors.debug);
   set('--debug-border', colors.debugBorder);
   set('--debug-text', colors.debugText);
+  set('--sky-high', colors.skyHigh);
+  set('--sky-mid', colors.skyMid);
+  set('--sky-low', colors.skyLow);
 
   set('--font-display', fontStack);
   set('--font-ui', fontStack);
@@ -63,25 +66,35 @@ export function applyCssTokens(root: HTMLElement = document.documentElement): vo
   try {
     const parchment = noiseDataUrl({
       seed: 0xda7c,
-      low: '#3a2a18',
-      high: '#c4a878',
-      contrast: 0.9,
+      low: '#2a2820',
+      high: '#c4b090',
+      contrast: 0.85,
       frequency: 3,
       size: 64,
       tag: 'css-parchment',
     });
     const wood = noiseDataUrl({
       seed: 0x60cd,
-      low: '#1a1008',
-      high: '#6a4a30',
-      contrast: 1.2,
+      low: '#14181e',
+      high: '#4a3a28',
+      contrast: 1.15,
       frequency: 3,
-      stretchY: 0.3,
+      stretchY: 0.28,
       size: 64,
       tag: 'css-wood',
     });
+    const stone = noiseDataUrl({
+      seed: 0x57ce,
+      low: '#1a1e24',
+      high: '#5a564c',
+      contrast: 1.05,
+      frequency: 2.4,
+      size: 64,
+      tag: 'css-stone',
+    });
     if (parchment) set('--tex-parchment', `url(${parchment})`);
     if (wood) set('--tex-wood', `url(${wood})`);
+    if (stone) set('--tex-stone', `url(${stone})`);
   } catch {
     // Headless / missing canvas — skip texture tokens
   }

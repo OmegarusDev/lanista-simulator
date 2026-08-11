@@ -41,24 +41,34 @@ export class TitleView {
     const brand = el('div', { className: 'brand' });
     brand.append(el('div', { className: 'brand-mark', attrs: { 'aria-hidden': 'true' } }));
     brand.append(el('h1', { text: 'LANISTA' }));
-    brand.append(el('p', { className: 'tagline', text: 'Sand · Steel · Season' }));
+    brand.append(el('p', { className: 'tagline', text: 'Amphitheatre · Ludus · Fame' }));
 
+    const canContinue = hasSeasonSave();
     const stack = el('div', { className: 'stack' });
+    if (canContinue) {
+      stack.append(
+        btn('Continue Season', {
+          className: 'cta',
+          onClick: () => this.emit({ type: 'CONTINUE' }),
+        }),
+      );
+    }
     stack.append(
-      btn('Practice Yard', {
-        className: 'cta',
-        onClick: () => this.emit({ type: 'INSTANT_MATCH' }),
+      btn('New Season', {
+        className: canContinue ? undefined : 'cta',
+        onClick: () => this.emit({ type: 'NEW_SEASON' }),
       }),
-      btn('New Season', { onClick: () => this.emit({ type: 'NEW_SEASON' }) }),
-      btn('Continue', {
-        disabled: !hasSeasonSave(),
-        onClick: () => this.emit({ type: 'CONTINUE' }),
+      btn('Practice Yard', {
+        className: 'ghost',
+        onClick: () => this.emit({ type: 'INSTANT_MATCH' }),
       }),
     );
 
     const foot = el('p', {
       className: 'footer-note',
-      text: 'Practice needs no career. New Season opens the ludus.',
+      text: canContinue
+        ? 'Practice Yard is instant matches — no career save.'
+        : 'Open a season to run the ludus, or spar in the Practice Yard.',
     });
 
     this.root.append(brand, stack, foot);

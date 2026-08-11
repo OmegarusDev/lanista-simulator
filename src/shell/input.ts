@@ -159,6 +159,10 @@ export class Input {
     return this.keyPressed.has(code);
   }
 
+  isKeyDown(code: string): boolean {
+    return this.keys.has(code);
+  }
+
   /** True while two+ fingers are down on the stage (pinch in progress). */
   get isPinching(): boolean {
     return this.activeTouches.size >= 2;

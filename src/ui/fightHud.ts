@@ -26,8 +26,9 @@ function fighterTag(f: FighterSnapshot): string {
 export class FightHud {
   readonly root: HTMLElement;
   private pending: FightHudAction = { type: 'NONE' };
-  private padTop = 56;
-  private padBottom = 120;
+  /** Chrome layout hints for inspect/debug — stage itself is full-bleed. */
+  private padTop = 64;
+  private padBottom = 128;
 
   constructor(private readonly onUi: () => void) {
     this.root = el('div', { className: 'hud fight-hud is-hidden' });
@@ -84,13 +85,13 @@ export class FightHud {
 
     const top = el('div', { className: 'hud-rail hud-top' });
     const row = el('div', { className: 'hud-top-row' });
-    row.append(el('span', { text: `${opts.teamSize}v${opts.teamSize}` }));
+    row.append(el('span', { className: 'hud-format', text: `${opts.teamSize}v${opts.teamSize}` }));
     const lineup = opts.snaps
       .map((f) => `${f.team === 0 ? 'B' : 'R'}:${fighterTag(f)}`)
       .join('  ·  ');
     row.append(el('span', { className: 'hud-lineup', text: lineup }));
     if (!opts.career) {
-      row.append(el('span', { className: 'eyebrow', text: `seed ${opts.seed}` }));
+      row.append(el('span', { className: 'hud-seed', text: `#${opts.seed.toString(16)}` }));
     }
     top.append(row);
 
@@ -120,7 +121,7 @@ export class FightHud {
       dock.append(dl);
       if (opts.inspect.debugLines?.length) {
         for (const d of opts.inspect.debugLines) {
-          dock.append(el('div', { className: 'eyebrow', text: d }));
+          dock.append(el('div', { className: 'debug-line', text: d }));
         }
       }
       this.root.append(dock);
@@ -135,11 +136,13 @@ export class FightHud {
     const labels = el('div', { className: 'roster-labels' });
     labels.append(
       btn('Blue', {
+        className: 'quiet',
         onClick: () => this.emit({ type: 'FOCUS_TEAM', team: 0 }),
       }),
     );
     labels.append(
       btn('Red', {
+        className: 'quiet',
         onClick: () => this.emit({ type: 'FOCUS_TEAM', team: 1 }),
       }),
     );
@@ -173,7 +176,6 @@ export class FightHud {
     bottom.append(controls);
     this.root.append(bottom);
 
-    // Measure pads after layout — use fixed estimates for stage CSS vars
     this.padTop = 64;
     this.padBottom = 128;
 
@@ -207,7 +209,12 @@ export class FightHud {
     const panel = el('div', { className: 'overlay-panel' });
     panel.append(el('h2', { text: 'Paused' }));
     const stack = el('div', { className: 'stack' });
-    stack.append(btn('Resume', { onClick: () => this.emit({ type: 'RESUME' }) }));
+    stack.append(
+      btn('Resume', {
+        className: 'cta',
+        onClick: () => this.emit({ type: 'RESUME' }),
+      }),
+    );
     stack.append(
       btn(muted ? 'Unmute' : 'Mute', { onClick: () => this.emit({ type: 'MUTE' }) }),
     );
@@ -215,7 +222,12 @@ export class FightHud {
       stack.append(btn('Restart', { onClick: () => this.emit({ type: 'RESTART' }) }));
       stack.append(btn('Reroll', { onClick: () => this.emit({ type: 'REROLL' }) }));
     }
-    stack.append(btn('Leave', { onClick: () => this.emit({ type: 'LEAVE' }) }));
+    stack.append(
+      btn('Leave', {
+        className: 'quiet',
+        onClick: () => this.emit({ type: 'LEAVE' }),
+      }),
+    );
     panel.append(stack);
     ov.append(panel);
     return ov;
@@ -235,9 +247,19 @@ export class FightHud {
         }),
       );
     } else {
-      stack.append(btn('Restart', { onClick: () => this.emit({ type: 'RESTART' }) }));
+      stack.append(
+        btn('Restart', {
+          className: 'cta',
+          onClick: () => this.emit({ type: 'RESTART' }),
+        }),
+      );
       stack.append(btn('Reroll', { onClick: () => this.emit({ type: 'REROLL' }) }));
-      stack.append(btn('Leave', { onClick: () => this.emit({ type: 'LEAVE' }) }));
+      stack.append(
+        btn('Leave', {
+          className: 'quiet',
+          onClick: () => this.emit({ type: 'LEAVE' }),
+        }),
+      );
     }
     panel.append(stack);
     ov.append(panel);

@@ -1,8 +1,9 @@
 import { getDesign } from '../shell/canvas';
+import type { Quality } from './types';
 
-export type Quality = 'low' | 'med' | 'high';
+export type { Quality };
 
-/** Mobile-first: short phones → coarser noise / fewer octaves. */
+/** Mobile-first: short phones → coarser noise / fewer cavea steps. */
 export function gfxQuality(): Quality {
   const { w, h } = getDesign();
   const short = Math.min(w, h);
@@ -19,11 +20,19 @@ export function fbmOctaves(q: Quality = gfxQuality()): number {
   return q === 'low' ? 2 : q === 'med' ? 3 : 4;
 }
 
-export function tesseraSize(q: Quality = gfxQuality()): number {
-  return q === 'low' ? 10 : q === 'med' ? 7 : 5;
+export function caveaSteps(q: Quality = gfxQuality()): number {
+  return q === 'low' ? 3 : q === 'med' ? 5 : 7;
 }
 
-/** Max new atlas plates baked per RAF warm-up slice. */
+export function shadowsEnabled(q: Quality = gfxQuality()): boolean {
+  return q !== 'low';
+}
+
+export function particleCap(q: Quality = gfxQuality()): number {
+  return q === 'low' ? 48 : q === 'med' ? 96 : 160;
+}
+
+/** Max new texture uploads per RAF warm-up slice. */
 export function bakeBudgetPerFrame(q: Quality = gfxQuality()): number {
   return q === 'low' ? 1 : 2;
 }
