@@ -1,7 +1,6 @@
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
 import type { FighterSnapshot } from '../domain/combat/types';
-import type { Rect } from './ui';
-import type { WorldViewTransform } from './layout';
+import type { Rect, WorldViewTransform } from './layout';
 
 export type CamMode = 'autocam' | 'manual' | 'focus';
 

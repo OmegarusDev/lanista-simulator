@@ -27,30 +27,32 @@ export function blitArenaPlate(
   ctx.restore();
 }
 
-/** Screen-space vignette + warm grade (CSS pixel box of stage). */
+/** Screen-space vignette + warm grade — fade only near the frame edge. */
 export function paintVignette(
   ctx: CanvasRenderingContext2D,
   cssW: number,
   cssH: number,
 ): void {
+  const short = Math.min(cssW, cssH);
+  const long = Math.max(cssW, cssH);
   const g = ctx.createRadialGradient(
     cssW * 0.5,
-    cssH * 0.48,
-    Math.min(cssW, cssH) * 0.25,
+    cssH * 0.5,
+    short * 0.58,
     cssW * 0.5,
     cssH * 0.5,
-    Math.max(cssW, cssH) * 0.72,
+    long * 0.92,
   );
   g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(0.65, 'rgba(20,12,6,0.08)');
-  g.addColorStop(1, 'rgba(10,6,4,0.45)');
+  g.addColorStop(0.55, 'rgba(20,12,6,0.04)');
+  g.addColorStop(1, 'rgba(10,6,4,0.38)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  // Warm afternoon grade
+  // Warm afternoon grade — very soft
   ctx.save();
   ctx.globalCompositeOperation = 'soft-light';
-  ctx.globalAlpha = 0.18;
+  ctx.globalAlpha = 0.12;
   ctx.fillStyle = '#d4a060';
   ctx.fillRect(0, 0, cssW, cssH);
   ctx.restore();

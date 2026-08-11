@@ -1,19 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
 import { ArenaCamera } from './arenaCamera';
-import { designToWorld, fightArenaZoom, fightStageLayout } from './layout';
+import { designToWorld, fightArenaZoom } from './layout';
 
 describe('ArenaCamera', () => {
   it('applies zoom once against the viewport box (no squared layout zoom)', () => {
-    const stage = fightStageLayout(390, 844);
+    const worldBox = { x: 0, y: 56, w: 390, h: 600 };
     const z = fightArenaZoom(390, 844);
     const cam = new ArenaCamera();
     cam.reset(z);
-    const t = cam.toTransform(stage.worldBox);
-    const contain = Math.min(
-      stage.worldBox.w / ARENA_WORLD_W,
-      stage.worldBox.h / ARENA_WORLD_H,
-    );
+    const t = cam.toTransform(worldBox);
+    const contain = Math.min(worldBox.w / ARENA_WORLD_W, worldBox.h / ARENA_WORLD_H);
     expect(t.scale).toBeCloseTo(contain * z, 5);
     // Must not be contain × z² (the old double-application bug).
     expect(t.scale).toBeLessThan(contain * z * z - 0.01);

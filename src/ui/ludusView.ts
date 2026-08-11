@@ -11,19 +11,17 @@ import {
   type FacilityId,
   type MedicusTier,
 } from '../content/rpg';
-import { buyFacility, applyMedicus, medicusCost, upgradeGear } from '../domain/campaign/facilities';
-import { injuryLabel } from '../domain/campaign/injury';
-import {
-  currentRosterCap,
-  fightableRoster,
-  setDoctrina,
-  takeRestDay,
-  upkeepCost,
-} from '../domain/campaign/season';
-import { setGladiatorAssignment } from '../domain/campaign/ludusDay';
-import { buyRecruit, releaseGladiator } from '../domain/campaign/market';
-import type { SeasonState } from '../domain/campaign/types';
+import type { BodyInjury, SeasonState } from '../domain/campaign/types';
 import { btn, clear, el } from './dom';
+
+/** Read helpers supplied by SeasonController — keeps campaign imports out of the view. */
+export type LudusQueries = {
+  upkeepCost(): number;
+  fightableCount(): number;
+  rosterCap(): number;
+  medicusCost(tier: MedicusTier): number;
+  injuryLabel(inj: BodyInjury): string;
+};
 
 export type LudusAction =
   | { type: 'NONE' }
@@ -32,8 +30,14 @@ export type LudusAction =
   | { type: 'WATCH_SLATE'; boutId: string }
   | { type: 'END_DAY' }
   | { type: 'TITLE' }
-  | { type: 'CHANGED' }
-  | { type: 'RESTED' };
+  | { type: 'REST' }
+  | { type: 'ASSIGN'; id: number; assignment: DayAssignment }
+  | { type: 'MEDICUS'; id: number; tier: MedicusTier }
+  | { type: 'RELEASE'; id: number }
+  | { type: 'BUY_RECRUIT'; offerId: string }
+  | { type: 'SET_DOCTRINA'; doctrina: DoctrinaId }
+  | { type: 'BUY_FACILITY'; kind: FacilityId }
+  | { type: 'UPGRADE_GEAR'; id: number };
 
 const ASSIGNMENTS: { id: DayAssignment; label: string }[] = [
   { id: 'NONE', label: 'Idle' },
@@ -49,6 +53,7 @@ export class LudusView {
   private selectedId: number | null = null;
   private tab: 'roster' | 'market' | 'school' = 'roster';
   private state: SeasonState | null = null;
+  private queries: LudusQueries | null = null;
 
   constructor(private readonly onUi: () => void) {
     this.root = el('div', { className: 'screen ludus-screen is-hidden' });
@@ -58,17 +63,19 @@ export class LudusView {
     host.append(this.root);
   }
 
-  show(visible: boolean, state?: SeasonState | null): void {
+  show(visible: boolean, state?: SeasonState | null, queries?: LudusQueries | null): void {
     this.root.classList.toggle('is-hidden', !visible);
     if (visible && state) {
       this.state = state;
+      if (queries) this.queries = queries;
       this.render();
     }
   }
 
-  /** Re-render if visible (after CHANGED mutations). */
-  refresh(state: SeasonState): void {
+  /** Re-render if visible (after mutations). */
+  refresh(state: SeasonState, queries?: LudusQueries | null): void {
     this.state = state;
+    if (queries) this.queries = queries;
     if (!this.root.classList.contains('is-hidden')) this.render();
   }
 
@@ -83,8 +90,13 @@ export class LudusView {
     this.pending = action;
   }
 
+  private q(): LudusQueries {
+    return this.queries!;
+  }
+
   private render(): void {
     const state = this.state!;
+    const q = this.q();
     clear(this.root);
 
     const hdr = el('div', { className: 'screen-header' });
@@ -99,7 +111,7 @@ export class LudusView {
     left.append(
       el('div', {
         className: 'meta',
-        text: `${state.denarii}d · ${state.virtus}v · upkeep ${upkeepCost(state)}`,
+        text: `${state.denarii}d · ${state.virtus}v · upkeep ${q.upkeepCost()}`,
       }),
     );
     hdr.append(left);
@@ -133,13 +145,13 @@ export class LudusView {
     else this.renderSchool(body, state);
     this.root.append(body);
 
-    const fit = fightableRoster(state).length;
+    const fit = q.fightableCount();
     const contract = state.contracts.find((c) => !c.completed && !c.failed);
     this.root.append(
       el('p', {
         className: 'meta',
         text:
-          `${fit} fit · cap ${currentRosterCap(state)} · rest ${state.restDaysLeft}` +
+          `${fit} fit · cap ${q.rosterCap()} · rest ${state.restDaysLeft}` +
           (contract ? ` · ${contract.name} (${contract.daysLeft}d)` : ''),
       }),
     );
@@ -152,9 +164,7 @@ export class LudusView {
       }),
       btn('Rest Day', {
         disabled: state.dayResolved || state.restDaysLeft <= 0 || state.status !== 'ACTIVE',
-        onClick: () => {
-          if (takeRestDay(state)) this.emit({ type: 'RESTED' });
-        },
+        onClick: () => this.emit({ type: 'REST' }),
       }),
       btn('End Day', {
         disabled: !state.dayResolved || state.status !== 'ACTIVE',
@@ -168,6 +178,7 @@ export class LudusView {
   }
 
   private renderRoster(body: HTMLElement, state: SeasonState): void {
+    const q = this.q();
     const slate = state.slate ?? [];
     const pending = slate.filter((b) => b.status === 'pending');
     if (pending.length && !state.dayResolved) {
@@ -225,7 +236,7 @@ export class LudusView {
         chip.append(
           el('span', {
             className: 'tag',
-            text: g.injuries.map(injuryLabel).slice(0, 2).join(', '),
+            text: g.injuries.map((inj) => q.injuryLabel(inj)).slice(0, 2).join(', '),
           }),
         );
       }
@@ -264,9 +275,7 @@ export class LudusView {
         btn(a.label, {
           active: sel.assignment === a.id,
           disabled: state.dayResolved,
-          onClick: () => {
-            if (setGladiatorAssignment(state, sel.id, a.id)) this.emit({ type: 'CHANGED' });
-          },
+          onClick: () => this.emit({ type: 'ASSIGN', id: sel.id, assignment: a.id }),
         }),
       );
     }
@@ -274,27 +283,20 @@ export class LudusView {
 
     const care = el('div', { className: 'row-btns' });
     const cares: { tier: MedicusTier; label: string }[] = [
-      { tier: 'BANDAGE', label: `Bandage ${medicusCost(state, 'BANDAGE')}d` },
-      { tier: 'PHYSICIAN', label: `Physician ${medicusCost(state, 'PHYSICIAN')}d` },
+      { tier: 'BANDAGE', label: `Bandage ${q.medicusCost('BANDAGE')}d` },
+      { tier: 'PHYSICIAN', label: `Physician ${q.medicusCost('PHYSICIAN')}d` },
     ];
     for (const c of cares) {
       care.append(
         btn(c.label, {
-          disabled: state.denarii < medicusCost(state, c.tier) || state.status !== 'ACTIVE',
-          onClick: () => {
-            if (applyMedicus(state, sel.id, c.tier)) this.emit({ type: 'CHANGED' });
-          },
+          disabled: state.denarii < q.medicusCost(c.tier) || state.status !== 'ACTIVE',
+          onClick: () => this.emit({ type: 'MEDICUS', id: sel.id, tier: c.tier }),
         }),
       );
     }
     care.append(
       btn('Release', {
-        onClick: () => {
-          if (releaseGladiator(state, sel.id)) {
-            this.selectedId = null;
-            this.emit({ type: 'CHANGED' });
-          }
-        },
+        onClick: () => this.emit({ type: 'RELEASE', id: sel.id }),
       }),
     );
     detail.append(care);
@@ -302,10 +304,11 @@ export class LudusView {
   }
 
   private renderMarket(body: HTMLElement, state: SeasonState): void {
+    const q = this.q();
     body.append(
       el('p', {
         className: 'meta',
-        text: `Roster ${state.roster.filter((g) => !g.retired).length}/${currentRosterCap(state)}`,
+        text: `Roster ${state.roster.filter((g) => !g.retired).length}/${q.rosterCap()}`,
       }),
     );
     if (state.market.length === 0) {
@@ -331,10 +334,8 @@ export class LudusView {
         btn(`${m.price}d`, {
           disabled:
             state.denarii < m.price ||
-            state.roster.filter((g) => !g.retired).length >= currentRosterCap(state),
-          onClick: () => {
-            if (buyRecruit(state, m.id)) this.emit({ type: 'CHANGED' });
-          },
+            state.roster.filter((g) => !g.retired).length >= q.rosterCap(),
+          onClick: () => this.emit({ type: 'BUY_RECRUIT', offerId: m.id }),
         }),
       );
       body.append(row);
@@ -348,10 +349,7 @@ export class LudusView {
       dRow.append(
         btn(id, {
           active: state.doctrina === id,
-          onClick: () => {
-            setDoctrina(state, id as DoctrinaId);
-            this.emit({ type: 'CHANGED' });
-          },
+          onClick: () => this.emit({ type: 'SET_DOCTRINA', doctrina: id as DoctrinaId }),
         }),
       );
     }
@@ -376,9 +374,7 @@ export class LudusView {
         row.append(
           btn('Build', {
             disabled: state.denarii < def.cost || state.virtus < def.virtusReq,
-            onClick: () => {
-              if (buyFacility(state, id)) this.emit({ type: 'CHANGED' });
-            },
+            onClick: () => this.emit({ type: 'BUY_FACILITY', kind: id }),
           }),
         );
       }
@@ -390,9 +386,7 @@ export class LudusView {
       body.append(
         btn(`Upgrade ${sel.name}'s kit`, {
           disabled: sel.gearGrade >= 2,
-          onClick: () => {
-            if (upgradeGear(state, sel.id)) this.emit({ type: 'CHANGED' });
-          },
+          onClick: () => this.emit({ type: 'UPGRADE_GEAR', id: sel.id }),
         }),
       );
     } else {

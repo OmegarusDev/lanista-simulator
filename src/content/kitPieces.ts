@@ -58,7 +58,7 @@ export interface KitPart {
   name: string;
   /** Fields this piece contributes when assembled. */
   combat: Partial<CombatSlice>;
-  /** Draw / presentation tags for a future look assembler. */
+  /** Draw / presentation tags — look contract for `lookFromParts` (content/kitLook). */
   tags: readonly string[];
 }
 

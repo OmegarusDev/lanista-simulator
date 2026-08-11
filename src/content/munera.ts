@@ -1,7 +1,8 @@
 import type { ArmaturaId } from './armatura';
 
 export type MuneraTier = 1 | 2 | 3;
-export type TeamSize = 1 | 2 | 3;
+/** File-local only — canonical gameplay TeamSize lives in domain/combat/types. */
+type TeamSize = 1 | 2 | 3;
 export type MuneraKind = 'classic' | 'spectacle' | 'melee' | 'trial' | 'pair';
 
 /** One lineup slot — fighter armatura must be in `anyOf`. */

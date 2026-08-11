@@ -9,7 +9,8 @@ import type {
   RelationKind,
   TraitId,
 } from '../../content/identity';
-import type { MuneraKind, MuneraSlotReq, MuneraTier, TeamSize } from '../../content/munera';
+import type { MuneraKind, MuneraSlotReq, MuneraTier } from '../../content/munera';
+import type { TeamSize } from '../combat/types';
 import type {
   DayAssignment,
   DoctrinaId,

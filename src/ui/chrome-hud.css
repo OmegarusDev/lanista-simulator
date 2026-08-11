@@ -1,0 +1,243 @@
+/* —— Fight / Practice HUD —— */
+.hud {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.hud > * {
+  pointer-events: auto;
+}
+
+.hud-rail {
+  background: linear-gradient(180deg, rgba(40, 28, 18, 0.94), rgba(28, 20, 14, 0.9));
+  border-color: var(--bronze);
+  padding: 0.45rem 0.75rem;
+}
+
+.hud-top {
+  border-bottom: 1.5px solid var(--bronze);
+}
+
+.hud-bottom {
+  border-top: 1.5px solid var(--bronze);
+}
+
+.hud-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: 1.6rem;
+}
+
+.hud-lineup {
+  flex: 1;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--type-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.favor-meter {
+  display: block;
+  width: min(12.5rem, 40vw);
+  height: 7px;
+  margin: 0.25rem auto 0.15rem;
+  border-radius: 3px;
+  border: 1px solid var(--bronze);
+  background: #1a1410;
+  overflow: hidden;
+  position: relative;
+}
+
+.favor-meter .blue,
+.favor-meter .red {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.favor-meter .blue {
+  left: 0;
+  background: linear-gradient(180deg, #4a88a8, var(--ally));
+}
+
+.favor-meter .red {
+  right: 0;
+  background: linear-gradient(180deg, #a85040, var(--foe));
+}
+
+.crowd-caption {
+  text-align: center;
+  font-size: var(--type-meta);
+  color: var(--muted);
+  min-height: 1.1rem;
+}
+
+.roster-band {
+  padding: 0.25rem 0.75rem 0.35rem;
+}
+
+.roster-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.2rem;
+}
+
+.roster-labels button {
+  min-height: 28px;
+  padding: 0.2rem 0.55rem;
+  font-size: var(--type-eyebrow);
+}
+
+.roster-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.roster-row .side {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.roster-row .side.red {
+  justify-content: flex-end;
+}
+
+.roster-row .divider {
+  width: 1px;
+  background: var(--hairline);
+  align-self: stretch;
+}
+
+.roster-chip {
+  flex: 1 1 0;
+  max-width: 9.5rem;
+  min-width: 0;
+  min-height: var(--touch);
+  border: 1.5px solid var(--bronze);
+  border-radius: var(--radius-md);
+  background: rgba(40, 28, 18, 0.85);
+  padding: 0.3rem 0.4rem;
+  text-align: left;
+  color: var(--parchment);
+  font: 600 var(--type-eyebrow) / 1.15 var(--font-ui);
+}
+
+.roster-chip.is-selected {
+  box-shadow: inset 3px 0 0 var(--ally);
+}
+
+.roster-chip.is-foe.is-selected {
+  box-shadow: inset 3px 0 0 var(--foe);
+}
+
+.roster-chip.is-muted {
+  opacity: 0.5;
+}
+
+.controls-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.35rem 0.75rem 0.55rem;
+}
+
+.controls-row .seg {
+  flex: 1;
+}
+
+.controls-row .pause-btn {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+}
+
+.inspect-dock {
+  position: absolute;
+  top: calc(var(--stage-pad-top, 56px) + 8px);
+  width: min(15rem, calc(100% - 1.5rem));
+  max-height: min(20rem, 46%);
+  overflow: auto;
+  padding: var(--space-md);
+  border: 1.5px solid var(--bronze);
+  border-radius: var(--radius-lg);
+  background: rgba(40, 28, 18, 0.94);
+  pointer-events: auto;
+}
+
+.inspect-dock.is-left { left: 0.75rem; }
+.inspect-dock.is-right { right: 0.75rem; }
+
+.inspect-dock h3 {
+  margin: 0 0 0.15rem;
+  font-size: var(--type-title);
+}
+
+.inspect-dock .sub {
+  color: var(--muted);
+  font-size: var(--type-meta);
+  margin-bottom: 0.55rem;
+}
+
+.inspect-dock dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.75rem;
+  font-size: var(--type-meta);
+}
+
+.inspect-dock dt { color: var(--muted); }
+.inspect-dock dd { margin: 0; text-align: right; }
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+  background: rgba(10, 8, 6, 0.72);
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.overlay.is-hidden {
+  display: none;
+}
+
+.overlay-panel {
+  width: min(20rem, 100%);
+  padding: var(--space-lg);
+  border: 1.5px solid var(--bronze);
+  border-radius: var(--radius-lg);
+  background: rgba(40, 28, 18, 0.96);
+}
+
+.overlay-panel h2 {
+  margin: 0 0 var(--space-md);
+  font-size: var(--type-title);
+  text-align: center;
+}
+
+.overlay-panel .stack {
+  width: 100%;
+}
+
+.overlay-panel .banner {
+  margin: 0 0 var(--space-lg);
+  text-align: center;
+  font-size: var(--type-banner);
+  font-weight: 700;
+}
+

@@ -32,7 +32,8 @@ export interface ArenaDrawOpts {
 export { SUN };
 
 function plateKey(seed: number): string {
-  return `${materialCacheTag()}:arena:${seed >>> 0}`;
+  const { arenaRX: rx, arenaRY: ry, arenaCX: cx, arenaCY: cy } = combatTuning;
+  return `${materialCacheTag()}:arena:${seed >>> 0}:${cx},${cy},${rx}x${ry}`;
 }
 
 function getPlate(seed: number): HTMLCanvasElement | OffscreenCanvas {
@@ -68,24 +69,26 @@ function paintStaticPlate(ctx: CanvasRenderingContext2D, rng: SeededRNG): void {
 }
 
 function paintSky(ctx: CanvasRenderingContext2D): void {
+  // Soft dusk wash — no hard mid-frame cliff outside the cavea.
   const sky = ctx.createLinearGradient(0, 0, 0, ARENA_WORLD_H);
-  sky.addColorStop(0, '#3a2414');
-  sky.addColorStop(0.35, '#2a1c12');
-  sky.addColorStop(0.7, '#1e1610');
+  sky.addColorStop(0, '#2e2016');
+  sky.addColorStop(0.45, '#241810');
+  sky.addColorStop(0.85, '#1c1510');
   sky.addColorStop(1, colors.bg);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, ARENA_WORLD_W, ARENA_WORLD_H);
 
-  // Soft haze
+  // Soft haze centered on the amphitheatre, not a sudden band.
   const haze = ctx.createRadialGradient(
-    ARENA_WORLD_W * 0.35,
-    ARENA_WORLD_H * 0.15,
-    20,
     ARENA_WORLD_W * 0.5,
-    ARENA_WORLD_H * 0.4,
-    ARENA_WORLD_W * 0.7,
+    ARENA_WORLD_H * 0.42,
+    Math.min(ARENA_WORLD_W, ARENA_WORLD_H) * 0.15,
+    ARENA_WORLD_W * 0.5,
+    ARENA_WORLD_H * 0.5,
+    ARENA_WORLD_W * 0.62,
   );
-  haze.addColorStop(0, 'rgba(220,160,90,0.12)');
+  haze.addColorStop(0, 'rgba(220,160,90,0.1)');
+  haze.addColorStop(0.55, 'rgba(40,28,16,0.04)');
   haze.addColorStop(1, 'rgba(20,12,6,0)');
   ctx.fillStyle = haze;
   ctx.fillRect(0, 0, ARENA_WORLD_W, ARENA_WORLD_H);

@@ -8,10 +8,10 @@ import type { CombatEvent, FighterSnapshot, MatchResult } from '../../domain/com
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../../shell/canvas';
 import type { Input } from '../../shell/input';
 import {
-  spawnDust,
   stepDust,
   type DustParticle,
 } from '../../view/arena';
+import { applyCombatEvents, fightCombatFxHooks } from '../../view/combatFx';
 import { ArenaCamera } from '../../view/arenaCamera';
 import type { Synth } from '../../view/audio';
 import {
@@ -23,7 +23,7 @@ import {
 } from '../../view/stagePaint';
 import type { WorldViewTransform } from '../../view/layout';
 import { FightHud, type FightHudAction } from '../../ui/fightHud';
-import type { SandboxConfig } from '../../ui/practiceView';
+import type { SandboxConfig } from '../../domain/combat/types';
 
 export type FightAction =
   | { type: 'NONE' }
@@ -439,6 +439,14 @@ export class FightScene {
     if (input.wheelDelta !== 0) {
       this.cam.nudgeZoom(-Math.sign(input.wheelDelta) * 0.06);
     }
+    if (input.pinchDelta !== 0) {
+      this.cam.nudgeZoom(input.pinchDelta * 0.55);
+    }
+    if (input.isPinching) {
+      if (this.cam.isDragging()) this.cam.endDrag();
+      this.ptrWasDown = false;
+      return;
+    }
     const p = input.pointer;
     const v = stageViewRect(cssW, cssH);
     const t = this.worldT ?? this.cam.toTransform(v);
@@ -483,53 +491,27 @@ export class FightScene {
   }
 
   private consumeEvents(events: CombatEvent[]): void {
-    for (const ev of events) {
-      switch (ev.kind) {
-        case 'HIT':
-          this.synth.play('hit');
-          this.shake = Math.min(10, this.shake + 4);
-          this.hitStop = Math.max(this.hitStop, 3);
-          spawnDust(this.dust, ev.x, ev.y, 4, this.fxRng, 'dust');
-          spawnDust(this.dust, ev.x, ev.y, 3, this.fxRng, 'blood');
-          this.interestX = ev.x;
-          this.interestY = ev.y;
-          this.interestLife = 45;
-          break;
-        case 'GUARD':
-          this.synth.play('block');
-          this.shake = Math.min(8, this.shake + 2);
-          this.hitStop = Math.max(this.hitStop, 2);
-          break;
-        case 'SIDESTEP':
-          this.synth.play('dodge');
-          break;
-        case 'STUMBLE':
-        case 'POISE_BREAK':
-          this.synth.play('stun');
-          this.shake = Math.min(14, this.shake + 6);
-          this.hitStop = Math.max(this.hitStop, 6);
-          spawnDust(this.dust, ev.x, ev.y, 8, this.fxRng);
-          break;
-        case 'ABORT':
-          this.synth.play('dodge');
-          break;
-        case 'TIP_CATCH':
-          this.synth.play('net');
-          this.hitStop = Math.max(this.hitStop, 4);
-          break;
-        case 'KO':
-          this.shake = Math.min(16, this.shake + 8);
-          this.hitStop = Math.max(this.hitStop, 8);
-          spawnDust(this.dust, ev.x, ev.y, 5, this.fxRng, 'dust');
-          spawnDust(this.dust, ev.x, ev.y, 6, this.fxRng, 'blood');
-          this.interestX = ev.x;
-          this.interestY = ev.y;
-          this.interestLife = 70;
-          break;
-        default:
-          break;
-      }
-    }
+    applyCombatEvents(
+      events,
+      fightCombatFxHooks({
+        play: (kind) => this.synth.play(kind),
+        getShake: () => this.shake,
+        setShake: (n) => {
+          this.shake = n;
+        },
+        getHitStop: () => this.hitStop,
+        setHitStop: (n) => {
+          this.hitStop = n;
+        },
+        dust: this.dust,
+        fxRng: this.fxRng,
+        setInterest: (x, y, life) => {
+          this.interestX = x;
+          this.interestY = y;
+          this.interestLife = life;
+        },
+      }),
+    );
   }
 }
 

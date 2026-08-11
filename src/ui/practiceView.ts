@@ -4,26 +4,19 @@ import { PAIRING_PRESETS } from '../content/pairings';
 import {
   generateQuickTeam,
   generateVenatioTeams,
-  type MatchKind,
   type QuickCard,
 } from '../domain/combat/quickGen';
-import type { FighterSpawnSpec, TeamSize } from '../domain/combat/types';
+import type {
+  FighterSpawnSpec,
+  MatchKind,
+  SandboxConfig,
+  TeamSize,
+} from '../domain/combat/types';
 import type { Input } from '../shell/input';
 import type { Synth } from '../view/audio';
 import { posedCardsToSnapshots } from '../view/posedPreview';
 import { placePreviewInWorld } from '../view/stagePaint';
 import { btn, clear, el, segment } from './dom';
-
-export interface SandboxConfig {
-  teamSize: TeamSize;
-  seed: number;
-  team0: ArmaturaId[];
-  team1: ArmaturaId[];
-  lockedMatchup: boolean;
-  team0Specs?: FighterSpawnSpec[];
-  team1Specs?: FighterSpawnSpec[];
-  matchKind?: MatchKind;
-}
 
 export type SandboxAction =
   | { type: 'START'; config: SandboxConfig }
@@ -177,8 +170,6 @@ export class PracticeView {
       team1: c1.map((c) => c.armatura),
       team0Specs: c0.map((c) => c.spec),
       team1Specs: c1.map((c) => c.spec),
-      lockedMatchup: true,
-      matchKind: this.matchKind,
     };
   }
 
@@ -196,23 +187,16 @@ export class PracticeView {
         team1: beasts.map(() => 'MURMILLO' as ArmaturaId),
         team0Specs: undefined,
         team1Specs: beasts.map((b) => beastSpec(b)),
-        lockedMatchup: this.slots1.slice(0, n).every((p) => p !== 'RANDOM'),
-        matchKind: 'venatio',
       };
     }
     const team1 = this.slots1
       .slice(0, n)
       .map((p, i) => resolveHuman(p as HumanPick, this.seed + 7 + i * 5));
-    const locked =
-      this.slots0.slice(0, n).every((p) => p !== 'RANDOM') &&
-      this.slots1.slice(0, n).every((p) => p !== 'RANDOM');
     return {
       teamSize: n,
       seed: this.seed,
       team0,
       team1,
-      lockedMatchup: locked,
-      matchKind: 'matchup',
     };
   }
 
@@ -496,8 +480,6 @@ export class PracticeView {
                   seed: this.seed,
                   team0: [p.team0[0]!],
                   team1: [p.team1[0]!],
-                  lockedMatchup: true,
-                  matchKind: 'matchup',
                 },
               });
             },

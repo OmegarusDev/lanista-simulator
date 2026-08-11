@@ -343,46 +343,6 @@ export function metalFill(
   ctx.drawImage(plate as CanvasImageSource, x, y, w, h);
 }
 
-export function carvedBand(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  opts: {
-    seed: number;
-    tone?: 'dark' | 'warm';
-    lip?: 'top' | 'bottom' | 'none';
-    shade?: number;
-  },
-): void {
-  const tone = opts.tone ?? 'dark';
-  const lip = opts.lip ?? 'none';
-  const lipH = Math.min(10, Math.max(6, h * 0.12));
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  woodFill(ctx, x, y, w, h, { seed: opts.seed, tone });
-  if (lip === 'bottom') {
-    ctx.fillStyle = 'rgba(196, 154, 85, 0.45)';
-    ctx.fillRect(x, y + h - lipH, w, lipH);
-    ctx.fillStyle = 'rgba(40, 24, 10, 0.35)';
-    ctx.fillRect(x, y + h - lipH, w, 1);
-  } else if (lip === 'top') {
-    ctx.fillStyle = 'rgba(196, 154, 85, 0.45)';
-    ctx.fillRect(x, y, w, lipH);
-    ctx.fillStyle = 'rgba(40, 24, 10, 0.35)';
-    ctx.fillRect(x, y + lipH - 1, w, 1);
-  }
-  const shade = opts.shade ?? 0;
-  if (shade > 0) {
-    ctx.fillStyle = `rgba(0,0,0,${shade})`;
-    ctx.fillRect(x, y, w, h);
-  }
-  ctx.restore();
-}
-
 export function bronzeStroke(
   ctx: CanvasRenderingContext2D,
   path: () => void,
@@ -400,26 +360,6 @@ export function bronzeStroke(
   ctx.lineWidth = Math.max(0.5, width * 0.35);
   ctx.strokeStyle = 'rgba(255,220,160,0.35)';
   path();
-  ctx.stroke();
-  ctx.restore();
-}
-
-export function carveFrame(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  rad: number,
-): void {
-  ctx.save();
-  roundPath(ctx, x, y, w, h, rad);
-  ctx.strokeStyle = 'rgba(255,220,170,0.14)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  roundPath(ctx, x + 2, y + 2, w - 4, h - 4, Math.max(1, rad - 1));
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = 1.5;
   ctx.stroke();
   ctx.restore();
 }

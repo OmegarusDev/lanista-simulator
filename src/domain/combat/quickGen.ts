@@ -5,9 +5,9 @@ import type { GladiatorGrade } from '../../content/rpg';
 import { spawnSpecFromGladiator } from '../campaign/combatMods';
 import { rollFighter } from '../campaign/rollFighter';
 import { SeededRNG } from '../rng';
-import type { FighterSpawnSpec, TeamSize } from '../combat/types';
+import type { FighterSpawnSpec, MatchKind, TeamSize } from '../combat/types';
 
-export type MatchKind = 'matchup' | 'venatio';
+export type { MatchKind };
 
 export interface QuickCard {
   name: string;

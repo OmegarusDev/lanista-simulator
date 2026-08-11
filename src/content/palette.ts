@@ -3,7 +3,7 @@
  * `bg` MUST match index.html `--shell-bg`.
  * Bump `PALETTE_REV` when tokens change so arena/lab plate caches invalidate.
  */
-export const PALETTE_REV = 4;
+export const PALETTE_REV = 5;
 
 export const colors = {
   bg: '#1a1410',

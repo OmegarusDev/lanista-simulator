@@ -111,9 +111,10 @@ export const combatTuning = {
   /** Soft time cap — ~55s; most bouts should end earlier via KO */
   maxFightTicks: 60 * 55,
   arenaCX: 480,
-  arenaCY: 300,
-  arenaRX: 380,
-  arenaRY: 160,
+  arenaCY: 275,
+  /** Sand oval — wider than tall, but tall enough for portrait stage use. */
+  arenaRX: 365,
+  arenaRY: 200,
 
   /**
    * Naturalism: reaction lag before treating foe windup as a real threat.

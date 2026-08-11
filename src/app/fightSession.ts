@@ -1,6 +1,6 @@
 import type { Synth } from '../view/audio';
 import type { FightHud } from '../ui/fightHud';
-import type { SandboxConfig } from '../ui/practiceView';
+import type { SandboxConfig } from '../domain/combat/types';
 import { FightScene, type FightAction } from './scenes/fight';
 
 /** Owns the active FightScene lifecycle. */

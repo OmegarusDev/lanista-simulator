@@ -64,10 +64,15 @@ export interface FighterSnapshot {
   guarding: boolean;
   alive: boolean;
   flash: number;
+  /** Kit piece ids when spawn used partsOverride — drives lookFromParts. */
+  partsOverride?: string[];
 }
 
 /** Campaign supports up to 3v3; Instant Match supports 1–3 as well. */
 export type TeamSize = 1 | 2 | 3;
+
+/** Lab / career bout flavor — drives team generation, not Match.step. */
+export type MatchKind = 'matchup' | 'venatio';
 
 /** Optional career / lab spawn overrides applied after class kit. */
 export interface FighterSpawnSpec {
@@ -100,6 +105,19 @@ export interface MatchConfig {
   team1Specs?: FighterSpawnSpec[];
   arenaWidth: number;
   arenaHeight: number;
+}
+
+/**
+ * Launch DTO for Instant Match / career bouts — mapped to MatchConfig in FightScene.
+ * Not absorbed into MatchConfig (arena size is scene-owned).
+ */
+export interface SandboxConfig {
+  teamSize: TeamSize;
+  seed: number;
+  team0: ArmaturaId[];
+  team1: ArmaturaId[];
+  team0Specs?: FighterSpawnSpec[];
+  team1Specs?: FighterSpawnSpec[];
 }
 
 export type MatchResult = 'ONGOING' | 'TEAM0' | 'TEAM1' | 'DRAW';

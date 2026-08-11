@@ -9,8 +9,12 @@ import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
 import { drawArena, drawDust, type DustParticle } from './arena';
 import { ArenaCamera } from './arenaCamera';
 import { drawGladiator } from './gladiatorDraw';
-import { designToWorld, fightArenaZoom, type WorldViewTransform } from './layout';
-import type { Rect } from './ui';
+import {
+  designToWorld,
+  fightArenaZoom,
+  type Rect,
+  type WorldViewTransform,
+} from './layout';
 
 export function stageViewRect(cssW: number, cssH: number): Rect {
   return { x: 0, y: 0, w: cssW, h: cssH };

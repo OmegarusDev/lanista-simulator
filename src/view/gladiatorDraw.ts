@@ -1,5 +1,6 @@
 import { ARMATURAE, effectiveAttackArc } from '../content/armatura';
 import { ARMATURA_LOOK, massScale, type ArmaturaLook } from '../content/appearance';
+import { lookFromParts } from '../content/kitLook';
 import { BEASTS } from '../content/beasts';
 import { colors } from '../content/palette';
 import type { FighterSnapshot } from '../domain/combat/types';
@@ -7,7 +8,79 @@ import { SUN } from './arena';
 import { fleshFill, leatherFill, metalFill as metalPlateFill, mosaicFill, mosaicPalettes } from './materials';
 import { paintContactShadow } from '../gfx/light';
 import { fontStack, typeScale } from './theme';
-import { bar } from './ui';
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rad: number,
+): void {
+  const rr = Math.min(rad, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function lightenHex(hex: string, amt: number): string {
+  if (!hex.startsWith('#') || (hex.length !== 7 && hex.length !== 4)) return hex;
+  const full =
+    hex.length === 4
+      ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+      : hex;
+  const n = parseInt(full.slice(1), 16);
+  const r = Math.min(255, ((n >> 16) & 255) + Math.round(255 * amt));
+  const g = Math.min(255, ((n >> 8) & 255) + Math.round(255 * amt));
+  const b = Math.min(255, (n & 255) + Math.round(255 * amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+function darkenHex(hex: string, amt: number): string {
+  if (!hex.startsWith('#') || (hex.length !== 7 && hex.length !== 4)) return hex;
+  const full =
+    hex.length === 4
+      ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+      : hex;
+  const n = parseInt(full.slice(1), 16);
+  const r = Math.max(0, ((n >> 16) & 255) - Math.round(255 * amt));
+  const g = Math.max(0, ((n >> 8) & 255) - Math.round(255 * amt));
+  const b = Math.max(0, (n & 255) - Math.round(255 * amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+function bar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  ratio: number,
+  fill: string,
+): void {
+  const rr = Math.min(2, h / 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  roundRect(ctx, x, y, w, h, rr);
+  ctx.fill();
+  const fw = Math.max(0, w * Math.min(1, Math.max(0, ratio)));
+  if (fw > 0.5) {
+    const g = ctx.createLinearGradient(x, y, x, y + h);
+    g.addColorStop(0, lightenHex(fill, 0.14));
+    g.addColorStop(0.55, fill);
+    g.addColorStop(1, darkenHex(fill, 0.18));
+    ctx.fillStyle = g;
+    roundRect(ctx, x, y, fw, h, rr);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, x, y, w, h, rr);
+  ctx.stroke();
+}
 
 type Pose = 'idle' | 'windup' | 'strike' | 'recover' | 'guard' | 'sidestep' | 'broken' | 'fallen';
 
@@ -150,7 +223,9 @@ function drawGladiatorGlyph(
   }
 
   const def = ARMATURAE[f.armatura];
-  const look = ARMATURA_LOOK[f.armatura];
+  const stock = ARMATURA_LOOK[f.armatura];
+  const look =
+    f.partsOverride?.length ? lookFromParts(f.partsOverride, stock) : stock;
   const teamTint = f.team === 0 ? colors.ally : colors.foe;
   const scale = massScale(def.mass);
   const pose = poseOf(f);

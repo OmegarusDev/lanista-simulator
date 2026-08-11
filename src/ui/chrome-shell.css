@@ -1,0 +1,99 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background: var(--shell-bg, #1a1410);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Kill browser page pinch-zoom; gameplay zoom is canvas-only via ArenaCamera. */
+  touch-action: none;
+  color: var(--parchment, #ead9b4);
+  font-family: var(--font-ui, "Palatino Linotype", Palatino, Georgia, serif);
+}
+
+#app {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: grid;
+  grid-template: 1fr / 1fr;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  background:
+    var(--tex-wood, none),
+    radial-gradient(ellipse 70% 55% at 50% 35%, rgba(90, 58, 32, 0.35), transparent 70%),
+    linear-gradient(180deg, #241810 0%, var(--shell-bg, #1a1410) 55%, #120e0a 100%);
+  background-blend-mode: soft-light, normal, normal;
+  color-scheme: dark;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#chrome,
+#stage-wrap {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+#chrome {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#chrome .screen,
+#chrome .hud,
+#chrome .sheet,
+#chrome .overlay {
+  pointer-events: auto;
+}
+
+#stage-wrap {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  /* Fight/Practice: leave room for DOM rails via CSS vars set by views */
+  padding-top: var(--stage-pad-top, 0px);
+  padding-bottom: var(--stage-pad-bottom, 0px);
+  padding-left: var(--stage-pad-left, 0px);
+  padding-right: var(--stage-pad-right, 0px);
+  pointer-events: none;
+}
+
+#app.has-stage #stage-wrap {
+  pointer-events: auto;
+}
+
+#stage-wrap.is-hidden {
+  visibility: hidden;
+  pointer-events: none !important;
+}
+
+#stage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  touch-action: none;
+  background: var(--shell-bg, #1a1410);
+}
+

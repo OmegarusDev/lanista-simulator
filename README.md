@@ -33,7 +33,7 @@ npm run build
 
 **Title:** Instant Match (one click) · New Season · Continue (if saved).  
 **Instant Match:** Lab amphitheatre — 1v1/2v2/3v3, Match/Venatio — no career side effects.  
-**Season:** Ludus hub → Munera board (class-gated classics + spectacles/melees up to 3v3) → slot Lineup → Fight → Aftermath → End Day (`economy.seasonDays`, currently 14). Heal, rest days, upkeep, virtus tiers. Insolvency or season end closes the run.
+**Season:** Ludus hub → Munera board (class-gated classics + spectacles/melees up to 3v3) → slot Lineup → Fight → Aftermath → End Day (`economy.seasonDays`, currently 18). Heal, rest days, upkeep, virtus tiers. Insolvency or season end closes the run.
 
 ## Controls
 

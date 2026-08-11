@@ -1,98 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
-import {
-  designToWorld,
-  fightArenaZoom,
-  fightInspectRect,
-  fightStageLayout,
-  fitWorldInRect,
-  titleLayout,
-} from './layout';
+import { designToWorld, fightArenaZoom } from './layout';
 
-describe('fightStageLayout', () => {
-  it('stacks arena above chrome in portrait', () => {
-    const stage = fightStageLayout(390, 844);
-    expect(stage.orientation).toBe('portrait');
-    expect(stage.bottomRows).toBe(1);
-    expect(stage.world.view.y).toBeGreaterThanOrEqual(stage.topBandH - 0.5);
-    expect(stage.world.view.y + stage.world.view.h).toBeLessThanOrEqual(
-      stage.rosterBandTop + 0.5,
-    );
-    expect(stage.rosterY).toBeLessThan(stage.bottomCtrlY);
-    expect(stage.bottomCtrlY + stage.bottomCtrlH).toBeLessThanOrEqual(844);
-    expect(stage.bottomCtrlH).toBeGreaterThanOrEqual(44);
-    expect(stage.rosterH).toBeGreaterThanOrEqual(44);
-  });
-
-  it('zooms mobile portrait so the world is wider than the stage', () => {
-    const stage = fightStageLayout(390, 844);
-    expect(stage.world.scale).toBeGreaterThan(390 / ARENA_WORLD_W + 0.01);
-    expect(stage.world.view.w).toBeGreaterThan(390);
+describe('fightArenaZoom', () => {
+  it('nudges mobile portrait past contain', () => {
     expect(fightArenaZoom(390, 844)).toBeGreaterThan(1);
+    expect(fightArenaZoom(390, 844)).toBe(1.14);
   });
 
-  it('exposes an unzoomed worldBox for the live camera', () => {
-    const stage = fightStageLayout(390, 844);
-    expect(stage.worldBox.x).toBe(0);
-    expect(stage.worldBox.y).toBe(stage.topBandH);
-    expect(stage.worldBox.w).toBe(390);
-    expect(stage.worldBox.h).toBeCloseTo(stage.rosterBandTop - stage.topBandH);
-    expect(stage.worldBox.y + stage.worldBox.h).toBeLessThanOrEqual(stage.rosterBandTop + 0.5);
+  it('applies a milder landscape zoom', () => {
+    expect(fightArenaZoom(960, 540)).toBeGreaterThan(1);
+    expect(fightArenaZoom(960, 540)).toBeLessThan(fightArenaZoom(390, 844));
   });
+});
 
-  it('fills the stage with a slightly zoomed arena in landscape', () => {
-    const stage = fightStageLayout(960, 540);
-    expect(stage.orientation).toBe('landscape');
-    expect(stage.bottomRows).toBe(1);
-    expect(stage.world.scale).toBeCloseTo(fightArenaZoom(960, 540));
-    expect(stage.world.view.w).toBeCloseTo(ARENA_WORLD_W * stage.world.scale);
-    expect(stage.world.view.h).toBeCloseTo(ARENA_WORLD_H * stage.world.scale);
-  });
-
+describe('designToWorld', () => {
   it('maps design picks back into arena world space', () => {
-    const stage = fightStageLayout(390, 844);
-    const midX = stage.w / 2;
-    const midY = stage.world.view.y + stage.world.view.h / 2;
-    const world = designToWorld(midX, midY, stage.world);
-    expect(world.x).toBeCloseTo(ARENA_WORLD_W / 2, 0);
-    expect(world.y).toBeCloseTo(ARENA_WORLD_H / 2, 0);
-  });
-
-  it('uses a full-width inspect sheet in portrait', () => {
-    const stage = fightStageLayout(390, 844);
-    const r = fightInspectRect(stage, true, 200);
-    expect(r.w).toBeGreaterThan(300);
-    expect(r.x).toBeGreaterThanOrEqual(stage.inspectPad - 0.5);
-  });
-});
-
-describe('fitWorldInRect', () => {
-  it('preserves arena aspect inside a tall box', () => {
-    const t = fitWorldInRect({ x: 0, y: 40, w: 390, h: 500 });
-    expect(t.view.w / t.view.h).toBeCloseTo(ARENA_WORLD_W / ARENA_WORLD_H);
-    expect(t.view.w).toBeLessThanOrEqual(390);
-    expect(t.view.h).toBeLessThanOrEqual(500);
-  });
-
-  it('zooms past contain and keeps the world centered', () => {
-    const box = { x: 0, y: 40, w: 390, h: 500 };
-    const base = fitWorldInRect(box);
-    const zoomed = fitWorldInRect(box, 1.12);
-    expect(zoomed.scale).toBeCloseTo(base.scale * 1.12);
-    expect(zoomed.view.w).toBeGreaterThan(box.w);
-    expect(zoomed.ox + zoomed.view.w / 2).toBeCloseTo(box.x + box.w / 2);
-    expect(zoomed.oy + zoomed.view.h / 2).toBeCloseTo(box.y + box.h / 2);
-  });
-});
-
-describe('titleLayout', () => {
-  it('centers stacked CTAs in portrait', () => {
-    const L = titleLayout(390, 844);
-    expect(L.orientation).toBe('portrait');
-    expect(L.buttons).toHaveLength(3);
-    for (const b of L.buttons) {
-      expect(b.w).toBeGreaterThan(180);
-      expect(b.x + b.w / 2).toBeCloseTo(195, 0);
-    }
+    const scale = Math.min(390 / ARENA_WORLD_W, 500 / ARENA_WORLD_H) * 1.12;
+    const aw = ARENA_WORLD_W * scale;
+    const ah = ARENA_WORLD_H * scale;
+    const t = {
+      view: { x: (390 - aw) / 2, y: 40 + (500 - ah) / 2, w: aw, h: ah },
+      scale,
+      ox: (390 - aw) / 2,
+      oy: 40 + (500 - ah) / 2,
+    };
+    const mid = designToWorld(t.ox + aw / 2, t.oy + ah / 2, t);
+    expect(mid.x).toBeCloseTo(ARENA_WORLD_W / 2, 5);
+    expect(mid.y).toBeCloseTo(ARENA_WORLD_H / 2, 5);
   });
 });

@@ -17,13 +17,14 @@ import { FightHud } from '../ui/fightHud';
 import { LineupView } from '../ui/lineupView';
 import { LudusView } from '../ui/ludusView';
 import { OffersView } from '../ui/offersView';
-import { PracticeView, type SandboxConfig } from '../ui/practiceView';
+import { PracticeView } from '../ui/practiceView';
 import { SeasonEndView } from '../ui/seasonEndView';
 import { TitleView } from '../ui/titleView';
 import { FightSession } from './fightSession';
 import { SeasonController } from './seasonController';
 import type { FightAction } from './scenes/fight';
 import type { SeasonState } from '../domain/campaign/types';
+import type { SandboxConfig } from '../domain/combat/types';
 
 type Mode =
   | 'title'
@@ -142,7 +143,7 @@ export class App {
     setStageVisible(this.shell, stageOn);
 
     this.title.show(mode === 'title');
-    this.ludus.show(mode === 'ludus', this.season);
+    this.ludus.show(mode === 'ludus', this.season, this.ludusQueries());
     this.offers.show(mode === 'offers', this.season);
     this.lineup.show(mode === 'lineup', this.season, this.career.pendingOffer);
     this.aftermathView.show(mode === 'aftermath', this.season, this.career.pendingAftermath);
@@ -231,7 +232,12 @@ export class App {
 
   private paintPracticeStage(): void {
     const { cssW, cssH } = resizeStageCanvas(this.shell.stage, this.shell.stageCtx);
-    this.previewCam.zoom = defaultStageZoom(cssW, cssH);
+    if (this.input.wheelDelta !== 0) {
+      this.previewCam.nudgeZoom(-Math.sign(this.input.wheelDelta) * 0.06);
+    }
+    if (this.input.pinchDelta !== 0) {
+      this.previewCam.nudgeZoom(this.input.pinchDelta * 0.55);
+    }
     this.previewCam.tickSmooth();
     const snaps = this.practice.previewSnapshots();
     const t = paintStageWorld(this.shell.stageCtx, {
@@ -245,6 +251,11 @@ export class App {
     });
 
     if (this.practice.mode === 'custom') {
+      this.previewPtrWasDown = this.input.pointer.down;
+      return;
+    }
+    // Pinch: don't treat as fighter pick
+    if (this.input.isPinching) {
       this.previewPtrWasDown = this.input.pointer.down;
       return;
     }
@@ -299,6 +310,26 @@ export class App {
     }
   }
 
+  private ludusQueries() {
+    const c = this.career;
+    return {
+      upkeepCost: () => c.upkeepCost(),
+      fightableCount: () => c.fightableCount(),
+      rosterCap: () => c.rosterCap(),
+      medicusCost: (tier: Parameters<SeasonController['medicusCost']>[0]) => c.medicusCost(tier),
+      injuryLabel: (inj: Parameters<SeasonController['injuryLabel']>[0]) => c.injuryLabel(inj),
+    };
+  }
+
+  private afterLudusMutation(): void {
+    if (this.career.isTerminal()) {
+      clearSeasonSave();
+      this.setMode('seasonEnd');
+    } else {
+      this.ludus.refresh(this.season!, this.ludusQueries());
+    }
+  }
+
   private pollLudus(): void {
     if (!this.season) {
       this.goTitle();
@@ -327,12 +358,7 @@ export class App {
     }
     if (action.type === 'END_DAY') {
       this.career.endDay();
-      if (this.career.isTerminal()) {
-        clearSeasonSave();
-        this.setMode('seasonEnd');
-      } else {
-        this.ludus.refresh(this.season!);
-      }
+      this.afterLudusMutation();
       return;
     }
     if (action.type === 'TITLE') {
@@ -340,9 +366,9 @@ export class App {
       this.goTitle();
       return;
     }
-    if (action.type === 'RESTED') {
+    if (action.type === 'REST') {
+      if (!this.career.restDay()) return;
       this.career.pendingAftermath = this.season.lastAftermath;
-      this.career.persist();
       if (this.career.isTerminal()) {
         clearSeasonSave();
         this.setMode('seasonEnd');
@@ -351,14 +377,33 @@ export class App {
       }
       return;
     }
-    if (action.type === 'CHANGED') {
-      this.career.persist();
-      if (this.career.isTerminal()) {
-        clearSeasonSave();
-        this.setMode('seasonEnd');
-      } else {
-        this.ludus.refresh(this.season!);
-      }
+    if (action.type === 'ASSIGN') {
+      if (this.career.setAssignment(action.id, action.assignment)) this.afterLudusMutation();
+      return;
+    }
+    if (action.type === 'MEDICUS') {
+      if (this.career.applyMedicus(action.id, action.tier)) this.afterLudusMutation();
+      return;
+    }
+    if (action.type === 'RELEASE') {
+      if (this.career.release(action.id)) this.afterLudusMutation();
+      return;
+    }
+    if (action.type === 'BUY_RECRUIT') {
+      if (this.career.buyRecruit(action.offerId)) this.afterLudusMutation();
+      return;
+    }
+    if (action.type === 'SET_DOCTRINA') {
+      this.career.setDoctrina(action.doctrina);
+      this.afterLudusMutation();
+      return;
+    }
+    if (action.type === 'BUY_FACILITY') {
+      if (this.career.buyFacility(action.kind)) this.afterLudusMutation();
+      return;
+    }
+    if (action.type === 'UPGRADE_GEAR') {
+      if (this.career.upgradeGear(action.id)) this.afterLudusMutation();
     }
   }
 

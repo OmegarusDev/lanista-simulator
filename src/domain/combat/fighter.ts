@@ -36,6 +36,8 @@ export class Fighter {
   name: string;
   /** Career / doctrina overlay of class kit — null means stock armatura. */
   private defOverride: ArmaturaDef | null = null;
+  /** Optional kit piece ids for draw (armory / lab overrides). */
+  partsOverride: string[] | null = null;
 
   x: number;
   y: number;
@@ -140,6 +142,9 @@ export class Fighter {
     if (spec.kind === 'beast' && spec.beast) {
       this.kind = 'beast';
       this.beastId = spec.beast;
+    }
+    if (spec.partsOverride?.length) {
+      this.partsOverride = [...spec.partsOverride];
     }
     const base = this.stockKit();
     const d: ArmaturaDef = { ...base };
@@ -465,6 +470,7 @@ export class Fighter {
       guarding: this.guarding,
       alive: this.alive,
       flash: this.flash,
+      partsOverride: this.partsOverride ?? undefined,
     };
   }
 }
