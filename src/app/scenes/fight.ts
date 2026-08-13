@@ -548,7 +548,9 @@ export class FightScene {
           this.toggleSelect(hit.id);
           this.synth.play('ui');
           this.hudDirty = true;
-        } else {
+        } else if (this.selectedId !== null || cam.mode === 'focus') {
+          // Tapping empty sand only releases an actual selection/focus —
+          // never yank a manual camera back to the director mid-look.
           this.selectedId = null;
           cam.clearFocus();
           this.hudDirty = true;

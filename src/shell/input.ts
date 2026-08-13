@@ -5,6 +5,19 @@ export interface PointerState {
   clicked: boolean;
 }
 
+/**
+ * Pure pinch math: how much zoom one move step contributes.
+ * The base is clamped upward so fingers landing close together still zoom —
+ * but gently: a 10px base spreading to 200px would otherwise be a ratio of 20
+ * and slam the camera to max zoom in a single frame.
+ */
+export function pinchDeltaFor(dist: number, base: number): number {
+  if (dist < 16) return 0; // fingers on top of each other — no signal
+  const b = Math.max(16, base);
+  const delta = (dist / b - 1) * 0.85;
+  return Math.max(-0.4, Math.min(0.4, delta));
+}
+
 export class Input {
   readonly pointer: PointerState = { x: 0, y: 0, down: false, clicked: false };
   /** Accumulated wheel delta this frame (positive = scroll down). Cleared in endFrame. */
@@ -128,15 +141,9 @@ export class Input {
         this.orbitDy += c.y - this.prevCentroidY;
         this.prevCentroidX = c.x;
         this.prevCentroidY = c.y;
-        if (this.pinchBaseDist > 8) {
-          const d = touchDist();
-          if (d > 8) {
-            // log-ish scale: ratio > 1 → zoom in
-            const ratio = d / this.pinchBaseDist;
-            this.pinchDelta += (ratio - 1) * 0.85;
-            this.pinchBaseDist = d;
-          }
-        }
+        const d = touchDist();
+        this.pinchDelta += pinchDeltaFor(d, this.pinchBaseDist);
+        if (d > 16) this.pinchBaseDist = d;
       }
     };
 
