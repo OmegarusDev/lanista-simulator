@@ -250,11 +250,14 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
       material: materialOf(f),
     });
     if (f.crestHeight > 0) {
+      // Crest fin sits on the bowl's apex, sticking out above it.
+      const profileTop = f.profile[f.profile.length - 1]![0];
+      const bowlTop = 24 * bulk - mid + (profileTop - mid);
       out.push({
         kind: 'crest',
         geo: { kind: 'frustum', params: frustumKey(11, f.crestHeight, 1.6, 4, 0.8) },
         ox: 0,
-        oy: 24 * bulk + f.crestHeight * 0.55,
+        oy: bowlTop + f.crestHeight * 0.5,
         oz: 0,
         sx: 1,
         sy: 1,
@@ -409,15 +412,33 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
         break;
       }
       case 'sica': {
-        const gx = grip.x + f.gripOffset;
+        const gx = grip.x;
         const gz = grip.z;
+        out.push({
+          kind: 'sica',
+          geo: {
+            kind: 'frustum',
+            params: frustumKey(0.9, f.gripOffset, 0.9, 1.1, 1.1),
+          },
+          ox: gx + f.gripOffset * 0.5,
+          oy: 13,
+          oz: gz,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: leather(look),
+          accent: null,
+          material: 'leather',
+        });
         out.push({
           kind: 'sica',
           geo: {
             kind: 'bent',
             params: bentKey(f.bladeLength, f.bladeWidth, f.bladeThickness, f.curvature),
           },
-          ox: gx + f.bladeLength * 0.45,
+          ox: gx + f.gripOffset + f.bladeLength * 0.45,
           oy: 13,
           oz: gz,
           sx: 1,
@@ -434,7 +455,26 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
       case 'trident': {
         const gx = grip.x;
         const gz = grip.z;
+        // Weapon starts AT the hand — pommel at the grip, tines at the tip.
         const shaftLen = f.totalLength - f.bladeLength - 2;
+        out.push({
+          kind: 'trident',
+          geo: {
+            kind: 'frustum',
+            params: frustumKey(0.9, f.gripOffset, 0.9, 1.1, 1.1),
+          },
+          ox: gx + f.gripOffset * 0.5,
+          oy: 13,
+          oz: gz,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: leather(look),
+          accent: null,
+          material: 'leather',
+        });
         out.push({
           kind: 'trident',
           geo: { kind: 'frustum', params: frustumKey(1.1, shaftLen, 1.1, 1.4, 1.4) },
@@ -508,13 +548,31 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
         break;
       }
       case 'spear': {
-        const gx = grip.x + f.gripOffset;
+        const gx = grip.x;
         const gz = grip.z;
         const shaftLen = f.totalLength - f.bladeLength - 3;
         out.push({
           kind: 'spear',
+          geo: {
+            kind: 'frustum',
+            params: frustumKey(0.9, f.gripOffset, 0.9, 1.1, 1.1),
+          },
+          ox: gx + f.gripOffset * 0.5,
+          oy: 13,
+          oz: gz,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: leather(look),
+          accent: null,
+          material: 'leather',
+        });
+        out.push({
+          kind: 'spear',
           geo: { kind: 'frustum', params: frustumKey(1.1, shaftLen, 1.1, 1.1, 1.1) },
-          ox: gx + shaftLen * 0.5,
+          ox: gx + f.gripOffset + shaftLen * 0.5,
           oy: 13,
           oz: gz,
           sx: 1,
@@ -529,7 +587,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
         out.push({
           kind: 'spear',
           geo: { kind: 'frustum', params: frustumKey(1.6, f.bladeLength, 1.6, 0.2, 0.2) },
-          ox: gx + shaftLen + f.bladeLength * 0.5,
+          ox: gx + f.gripOffset + shaftLen + f.bladeLength * 0.5,
           oy: 13,
           oz: gz,
           sx: 1,
@@ -638,12 +696,13 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
   addGreaves(shapeForPart(f.parts.find((id) => KIT_PARTS[id]?.slot === 'greaves')));
   addManica(shapeForPart(f.parts.find((id) => KIT_PARTS[id]?.slot === 'manica')));
 
-  // Breastplate — provocator's chest armour (tagged on its helm part).
+  // Breastplate — provocator's chest armour, ON the torso's front surface
+  // (bodyR is the full X extent; the surface sits at bodyR/2).
   if (f.parts.some((id) => KIT_PARTS[id]?.tags.includes('breastplate'))) {
     out.push({
       kind: 'breastplate',
-      geo: { kind: 'frustum', params: frustumKey(13, 9, 8, 11, 7.5) },
-      ox: 0,
+      geo: { kind: 'frustum', params: frustumKey(2.6, 10, 8, 3.5, 11) },
+      ox: bodyR * 0.55,
       oy: 17,
       oz: 0,
       sx: 1,

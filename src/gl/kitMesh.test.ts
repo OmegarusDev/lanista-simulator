@@ -135,4 +135,30 @@ describe('kitMesh', () => {
     expect(wTip).toBeLessThan(w); // tapers toward the tip
     expect(tTip).toBeLessThanOrEqual(t);
   });
+
+  it('NO FLOATING WEAPONS: every weapon starts at its hand (no gap)', () => {
+    const HAND_ANGLES = { MURMILLO: 0.72, THRAEX: 0.78, SECUTOR: 0.72, HOPLOMACHUS: 0.55, PROVOCATOR: 0.7, DIMACHAERUS: 0.85, RETIARIUS: 0.7, SCISSOR: 0.75 } as const;
+    const WEAPON_KINDS = new Set(['gladius', 'sica', 'trident', 'spear', 'dual', 'scissor']);
+    // Extent along +X after the rz=−90 roll: frustums carry length in their
+    // sy param; bent blades in their length param.
+    const extentX = (p: ReturnType<typeof kitPartsForFighter>[number]): number => {
+      if (p.geo.kind === 'frustum') return parseGeometryParams(p.geo)![1]!;
+      if (p.geo.kind === 'bent') return parseGeometryParams(p.geo)![0]!;
+      return p.sy;
+    };
+    for (const armatura of ARMATURA_LIST) {
+      const parts = kitPartsForFighter(toFighterDraw(stub({ armatura })));
+      const angle = HAND_ANGLES[armatura as keyof typeof HAND_ANGLES] ?? 0.72;
+      const handX = Math.cos(angle) * 9;
+      for (const kind of WEAPON_KINDS) {
+        const starts = parts
+          .filter((p) => p.kind === kind)
+          .map((p) => p.ox - extentX(p) / 2);
+        if (starts.length === 0) continue;
+        const minStart = Math.min(...starts);
+        expect(minStart, `${armatura} ${kind} start=${minStart.toFixed(2)} hand=${handX.toFixed(2)}`)
+          .toBeLessThan(handX + 0.75);
+      }
+    }
+  });
 });
