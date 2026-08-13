@@ -1,9 +1,19 @@
 import type { StageCamera } from './camera';
 import type { GlContext } from './context';
 import type { FighterDraw } from './drawModel';
-import { kitPartsForFighter, type PartMeshKind } from './kitMesh';
+import { kitPartsForFighter, type KitPartDraw } from './kitMesh';
 import { mat4Identity } from './math';
-import { createBox, createCylinder, createSphere, drawMesh, type Mesh } from './mesh';
+import {
+  createBentBlade,
+  createBox,
+  createCylinder,
+  createFrustum,
+  createLathe,
+  createSphere,
+  createTorus,
+  drawMesh,
+  type Mesh,
+} from './mesh';
 import { PALETTE_RGB } from './paletteRgb';
 import { createProgram, type GlProgram } from './shader';
 import { SOLID_FS, SOLID_VS } from './shaders';
@@ -18,37 +28,81 @@ export function simFacingToYaw(facing: number): number {
   return -facing;
 }
 
-function meshForKind(kind: PartMeshKind, box: Mesh, cyl: Mesh, sph: Mesh): Mesh {
-  switch (kind) {
-    case 'body':
-    case 'beastBody':
-    case 'greaves':
-    case 'manica':
-      return cyl;
-    case 'helm':
-    case 'roundShield':
-    case 'shield':
-    case 'net':
-      return sph;
-    default:
-      // Blades / crest / polearms stay boxy so silhouette reads as gear, not soft mass.
-      return box;
+const D2R = Math.PI / 180;
+
+/** Shared, geometry-cached VAOs — the math is the weapon, and it is cached. */
+class GeometryCache {
+  private readonly map = new Map<string, Mesh>();
+  private readonly shared: Mesh;
+  private readonly cyl: Mesh;
+  private readonly sph: Mesh;
+  private static readonly MAX = 96;
+
+  constructor(private readonly gl: WebGL2RenderingContext) {
+    this.shared = createBox(gl, 1, 1, 1);
+    this.cyl = createCylinder(gl, 14);
+    this.sph = createSphere(gl, 12, 10);
+  }
+
+  resolve(geo: KitPartDraw['geo']): Mesh {
+    if (geo.kind === 'box' || geo.params === '') return this.shared;
+    if (geo.kind === 'cyl') return this.cyl;
+    if (geo.kind === 'sph') return this.sph;
+    let m = this.map.get(geo.params);
+    if (m) return m;
+    switch (geo.kind) {
+      case 'frustum': {
+        const [sx1, sy, sz1, sx2, sz2] = geo.params.split(':').map((v) => Number(v) / 100);
+        m = createFrustum(this.gl, sx1!, sy!, sz1!, sx2!, sz2!);
+        break;
+      }
+      case 'lathe': {
+        const profile = geo.params.split(';').map((p) => {
+          const [y, r] = p.split(',').map((v) => Number(v) / 100);
+          return [y!, r!] as [number, number];
+        });
+        m = createLathe(this.gl, profile);
+        break;
+      }
+      case 'bent': {
+        const [len, w, t, c] = geo.params.split(':').map((v) => Number(v) / 100);
+        m = createBentBlade(this.gl, len!, w!, t!, c!);
+        break;
+      }
+      case 'torus': {
+        const [inner, outer] = geo.params.split(':').map((v) => Number(v) / 100);
+        m = createTorus(this.gl, inner!, outer!);
+        break;
+      }
+      default:
+        m = this.shared;
+    }
+    if (this.map.size >= GeometryCache.MAX) {
+      const first = this.map.keys().next().value;
+      if (first != null) this.map.delete(first);
+    }
+    this.map.set(geo.params, m);
+    return m;
+  }
+
+  dispose(): void {
+    this.shared.dispose();
+    this.cyl.dispose();
+    this.sph.dispose();
+    for (const m of this.map.values()) m.dispose();
+    this.map.clear();
   }
 }
 
 export class SceneFighters {
   private prog: GlProgram;
-  private box: Mesh;
-  private cyl: Mesh;
-  private sph: Mesh;
+  private geo: GeometryCache;
   private model = mat4Identity();
   private disposed = false;
 
   constructor(private readonly ctx: GlContext) {
     this.prog = createProgram(ctx.gl, SOLID_VS, SOLID_FS);
-    this.box = createBox(ctx.gl, 1, 1, 1);
-    this.cyl = createCylinder(ctx.gl, 14);
-    this.sph = createSphere(ctx.gl, 12, 10);
+    this.geo = new GeometryCache(ctx.gl);
   }
 
   private writeModel(
@@ -57,29 +111,44 @@ export class SceneFighters {
     y: number,
     z: number,
     yaw: number,
-    sx: number,
-    sy: number,
-    sz: number,
     ox: number,
     oy: number,
     oz: number,
+    sx: number,
+    sy: number,
+    sz: number,
+    ry: number,
+    rz: number,
   ): void {
     const m = this.model;
     mat4Identity(m);
     const c = Math.cos(yaw);
     const s = Math.sin(yaw);
-    // Column-major Ry(yaw) * S. Local +X → world (cos, 0, -sin).
-    m[0] = c * sx;
-    m[2] = -s * sx;
-    m[5] = sy;
-    m[8] = s * sz;
-    m[10] = c * sz;
-    const lx = ox;
-    const ly = oy;
-    const lz = oz;
-    m[12] = x + c * lx + s * lz;
-    m[13] = y + ly;
-    m[14] = z - s * lx + c * lz;
+    const cyaw = Math.cos(yaw + ry * D2R);
+    const syaw = Math.sin(yaw + ry * D2R);
+    const cr = Math.cos(rz * D2R);
+    const sr = Math.sin(rz * D2R);
+    // World offset of the local origin after facing yaw.
+    const wx = x + c * ox + s * oz;
+    const wy = y + oy;
+    const wz = z - s * ox + c * oz;
+    // M = T(world) · Ry(facing + ry) · Rz(rz) · S  (column-major)
+    m[0] = cyaw * cr * sx;
+    m[1] = sr * sx;
+    m[2] = syaw * cr * sx;
+    m[3] = 0;
+    m[4] = -cyaw * sr * sy;
+    m[5] = cr * sy;
+    m[6] = -syaw * sr * sy;
+    m[7] = 0;
+    m[8] = -syaw * sz;
+    m[9] = 0;
+    m[10] = cyaw * sz;
+    m[11] = 0;
+    m[12] = wx;
+    m[13] = wy;
+    m[14] = wz;
+    m[15] = 1;
     gl.uniformMatrix4fv(this.prog.uniform('u_model'), false, m);
   }
 
@@ -110,27 +179,15 @@ export class SceneFighters {
         const fg = rim[1]! + flash * 0.45;
         const fb = rim[2]! + flash * 0.25;
         gl.uniform3f(this.prog.uniform('u_albedo'), fr, fg, fb);
-        this.writeModel(
-          gl,
-          f.x,
-          baseY,
-          f.y,
-          yaw,
-          18 * (1.08 + flash * 0.06),
-          24 * height * 1.05,
-          14 * (1.08 + flash * 0.06),
-          0,
-          0,
-          0,
-        );
-        drawMesh(gl, this.cyl);
+        this.writeModel(gl, f.x, baseY, f.y, yaw, 0, 0, 0, 18 * (1.08 + flash * 0.06), 24 * height * 1.05, 14 * (1.08 + flash * 0.06), 0, 0);
+        drawMesh(gl, this.geo.resolve({ kind: 'cyl', params: '' }));
       }
 
       // Poise-break ring cue — thin bright hoop at feet
       if (f.poiseBroken && f.alive) {
         gl.uniform3f(this.prog.uniform('u_albedo'), 0.85, 0.75, 0.45);
-        this.writeModel(gl, f.x, baseY + 1.5, f.y, yaw, 22, 1.2, 22, 0, 0, 0);
-        drawMesh(gl, this.cyl);
+        this.writeModel(gl, f.x, baseY + 1.5, f.y, yaw, 0, 0, 0, 22, 1.2, 22, 0, 0);
+        drawMesh(gl, this.geo.resolve({ kind: 'cyl', params: '' }));
       }
 
       const parts = kitPartsForFighter(f);
@@ -144,8 +201,22 @@ export class SceneFighters {
         const ox = p.ox * phaseReach + hitch * 4;
         const oy = p.oy * height + lean * 3;
         const oz = p.oz + tell.lateral * 4 + tell.guardOpen * (p.kind.includes('shield') ? -3 : 0);
-        this.writeModel(gl, f.x, baseY, f.y, yaw, p.sx, p.sy * height, p.sz, ox, oy, oz);
-        drawMesh(gl, meshForKind(p.kind, this.box, this.cyl, this.sph));
+        this.writeModel(
+          gl,
+          f.x,
+          baseY,
+          f.y,
+          yaw,
+          ox,
+          oy,
+          oz,
+          p.sx,
+          p.sy * height,
+          p.sz,
+          p.ry,
+          p.rz,
+        );
+        drawMesh(gl, this.geo.resolve(p.geo));
       }
 
       // World meters (selected or always-thin)
@@ -171,19 +242,17 @@ export class SceneFighters {
   ): void {
     const r = Math.max(0, Math.min(1, ratio));
     gl.uniform3f(this.prog.uniform('u_albedo'), 0.12, 0.12, 0.14);
-    this.writeModel(gl, x, y, z, 0, 16, 1.2, 2, 0, 0, 0);
-    drawMesh(gl, this.box);
+    this.writeModel(gl, x, y, z, 0, 0, 0, 0, 16, 1.2, 2, 0, 0);
+    drawMesh(gl, this.geo.resolve({ kind: 'box', params: '' }));
     gl.uniform3f(this.prog.uniform('u_albedo'), rgb[0], rgb[1], rgb[2]);
-    this.writeModel(gl, x - 8 * (1 - r), y, z, 0, 16 * r, 1.4, 2.2, 0, 0, 0);
-    drawMesh(gl, this.box);
+    this.writeModel(gl, x - 8 * (1 - r), y, z, 0, 0, 0, 0, 16 * r, 1.4, 2.2, 0, 0);
+    drawMesh(gl, this.geo.resolve({ kind: 'box', params: '' }));
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.box.dispose();
-    this.cyl.dispose();
-    this.sph.dispose();
+    this.geo.dispose();
     this.prog.dispose();
   }
 }

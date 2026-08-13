@@ -1,30 +1,31 @@
 /**
- * Procedural kit part dimensions from part tags — geometry identity, not stickers.
+ * Shape-driven kit meshes — the math is the weapon.
+ * Every part's geometry descends from its shape (content/shapes.ts):
+ *   derive → geometry params → GeoKey strings → cached VAOs in sceneFighters.
+ * The same numbers feed hitboxes and combat defaults, so render === hitbox.
  */
-import { KIT_PARTS, type KitPartId } from '../content/kitPieces';
-import { ARMATURA_LOOK } from '../content/appearance';
+import { KIT_PARTS } from '../content/kitPieces';
+import {
+  ARMATURA_LOOK,
+  type ArmaturaLook,
+} from '../content/appearance';
 import type { ArmaturaId } from '../content/armatura';
+import {
+  shapeForPart,
+  type PartShape,
+  type HelmShape,
+  type ShieldShape,
+  type WeaponShape,
+} from '../content/shapes';
 import type { FighterDraw } from './drawModel';
 
-export type PartMeshKind =
-  | 'body'
-  | 'helm'
-  | 'crest'
-  | 'shield'
-  | 'roundShield'
-  | 'blade'
-  | 'curvedBlade'
-  | 'trident'
-  | 'net'
-  | 'spear'
-  | 'dualBlade'
-  | 'scissor'
-  | 'beastBody'
-  | 'greaves'
-  | 'manica';
+/** Geometry families resolved to shared (cached) VAOs in sceneFighters. */
+export type GeoKind = 'box' | 'cyl' | 'sph' | 'frustum' | 'lathe' | 'bent' | 'torus';
 
 export interface KitPartDraw {
   kind: PartMeshKind;
+  /** Geometry cache key — shared meshes, never per-fighter VAOs. */
+  geo: { kind: GeoKind; params: string };
   /** Local offset (forward X, up Y, right Z) before facing yaw. */
   ox: number;
   oy: number;
@@ -32,8 +33,37 @@ export interface KitPartDraw {
   sx: number;
   sy: number;
   sz: number;
+  /** Local yaw (swing/tilt, composed after fighter facing). */
+  ry: number;
+  /** Local roll (shield tilt, blade orientation). */
+  rz: number;
   albedo: [number, number, number];
+  /** Second tone (rims, bosses, crossguards) — Phase 3 material pass. */
+  accent: [number, number, number] | null;
+  material: 'metal' | 'leather' | 'cloth' | 'flesh' | 'wood' | 'bone';
+  /** Face takes the fighter's team color (shields). */
+  teamPaint?: boolean;
 }
+
+export type PartMeshKind =
+  | 'body'
+  | 'helm'
+  | 'crest'
+  | 'shield'
+  | 'roundShield'
+  | 'shieldRim'
+  | 'shieldBoss'
+  | 'gladius'
+  | 'sica'
+  | 'trident'
+  | 'spear'
+  | 'dual'
+  | 'scissor'
+  | 'net'
+  | 'greaves'
+  | 'manica'
+  | 'breastplate'
+  | 'beastBody';
 
 function hexRgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
@@ -48,16 +78,6 @@ function hueShift(rgb: [number, number, number], seed: number): [number, number,
     Math.max(0, Math.min(1, rgb[1] - t * 0.4)),
     Math.max(0, Math.min(1, rgb[2] + t * 0.2)),
   ];
-}
-
-function tagsOf(parts: readonly KitPartId[]): Set<string> {
-  const s = new Set<string>();
-  for (const id of parts) {
-    const p = KIT_PARTS[id];
-    if (!p) continue;
-    for (const t of p.tags) s.add(t);
-  }
-  return s;
 }
 
 /** Identity key for kit mesh cache — appearance + parts, not pose. */
@@ -77,6 +97,55 @@ function cacheKit(key: string, parts: KitPartDraw[]): KitPartDraw[] {
   return parts;
 }
 
+/** Geometry param string helpers — deterministic cache keys. */
+function f(n: number): string {
+  return Math.round(n * 100).toString();
+}
+
+function frustumKey(
+  sx1: number, sy: number, sz1: number, sx2: number, sz2: number,
+): string {
+  return `f${f(sx1)}:${f(sy)}:${f(sz1)}:${f(sx2)}:${f(sz2)}`;
+}
+
+function latheKey(profile: readonly [number, number][]): string {
+  return profile.map(([y, r]) => `${f(y)},${f(r)}`).join(';');
+}
+
+function bentKey(
+  length: number, width: number, thickness: number, curvature: number,
+): string {
+  return `b${f(length)}:${f(width)}:${f(thickness)}:${f(curvature)}`;
+}
+
+function torusKey(inner: number, outer: number): string {
+  return `t${f(inner)}:${f(outer)}`;
+}
+
+const H = -90; // rz for blades: frustum's +Y rotated onto +X (forward)
+
+function metal(look: ArmaturaLook): [number, number, number] {
+  return hexRgb(look.metal);
+}
+
+function leather(look: ArmaturaLook): [number, number, number] {
+  return hexRgb(look.leather);
+}
+
+function cloth(look: ArmaturaLook): [number, number, number] {
+  return hexRgb(look.cloth);
+}
+
+function materialOf(shape: PartShape): KitPartDraw['material'] {
+  if (shape.slot === 'weapon') {
+    return shape.material === 'wood' ? 'wood' : 'metal';
+  }
+  if (shape.slot === 'helm' || shape.slot === 'shield') {
+    return shape.material === 'bronze' || shape.material === 'iron' ? 'metal' : 'leather';
+  }
+  return shape.material === 'iron' || shape.material === 'bronze' ? 'metal' : shape.material;
+}
+
 export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
   const key = kitIdentityKey(f);
   const hit = KIT_CACHE.get(key);
@@ -90,229 +159,500 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
     return cacheKit(key, [
       {
         kind: 'beastBody',
+        geo: { kind: 'cyl', params: '' },
         ox: 0,
         oy: 10 * bulk,
         oz: 0,
         sx: 22 * bulk,
         sy: 18 * bulk,
         sz: 20 * bulk,
+        ry: 0,
+        rz: 0,
         albedo: [0.42 + ((seed % 7) / 70), 0.3, 0.2],
+        accent: null,
+        material: 'leather',
       },
       {
         kind: 'beastBody',
+        geo: { kind: 'cyl', params: '' },
         ox: 12,
         oy: 9 * bulk,
         oz: 0,
         sx: snout,
         sy: 8 * bulk,
         sz: 8,
+        ry: 0,
+        rz: 0,
         albedo: [0.38, 0.28, 0.18],
+        accent: null,
+        material: 'leather',
       },
     ]);
   }
 
   const look = ARMATURA_LOOK[f.armatura as ArmaturaId] ?? ARMATURA_LOOK.MURMILLO;
-  const tags = tagsOf(f.parts);
   const flesh = hueShift(hexRgb(look.bodyFill), f.appearanceSeed);
-  const metal = hexRgb(look.metal);
-  const leather = hexRgb(look.leather);
   const bulk = 1 + ((f.appearanceSeed % 17) / 17 - 0.5) * 0.12;
-
-  // Body mass is a Y-cylinder in sceneFighters; keep XZ near-circular for round silhouette.
   const bodyR = ((look.bodyRx + look.bodyRy) * 0.5) * 1.55 * bulk;
+
   const out: KitPartDraw[] = [
     {
       kind: 'body',
+      geo: { kind: 'cyl', params: '' },
       ox: 0,
       oy: 11 * bulk,
       oz: 0,
       sx: bodyR,
       sy: 22 * bulk,
       sz: bodyR * (0.92 + ((f.appearanceSeed % 11) / 11) * 0.12),
+      ry: 0,
+      rz: 0,
       albedo: flesh,
+      accent: null,
+      material: 'flesh',
     },
   ];
 
-  if (tags.has('bareHead')) {
+  const addHelm = (f: HelmShape | null): void => {
+    const bare = !f || f.form === 'bare';
+    if (bare) {
+      out.push({
+        kind: 'helm',
+        geo: { kind: 'sph', params: '' },
+        ox: 0,
+        oy: 24 * bulk,
+        oz: 0,
+        sx: 9,
+        sy: 9,
+        sz: 9,
+        ry: 0,
+        rz: 0,
+        albedo: flesh,
+        accent: null,
+        material: 'flesh',
+      });
+      return;
+    }
+    const mid = (f.profile[0]![0] + f.profile[f.profile.length - 1]![0]) / 2;
     out.push({
       kind: 'helm',
+      geo: { kind: 'lathe', params: latheKey(f.profile) },
       ox: 0,
-      oy: 24 * bulk,
+      oy: 24 * bulk - mid,
       oz: 0,
-      sx: 9,
-      sy: 9,
-      sz: 9,
-      albedo: flesh,
+      sx: 1,
+      sy: 1,
+      sz: 1,
+      ry: 0,
+      rz: 0,
+      albedo: metal(look),
+      accent: null,
+      material: materialOf(f),
     });
-  } else {
-    const helm = tags.has('smoothHelm') ? 11 : 12;
-    out.push({
-      kind: 'helm',
-      ox: 0,
-      oy: 24 * bulk,
-      oz: 0,
-      sx: helm,
-      sy: helm * 0.95,
-      sz: helm,
-      albedo: metal,
-    });
-    if (tags.has('crest')) {
+    if (f.crestHeight > 0) {
       out.push({
         kind: 'crest',
+        geo: { kind: 'frustum', params: frustumKey(11, f.crestHeight, 1.6, 4, 0.8) },
         ox: 0,
-        oy: 32 * bulk,
+        oy: 24 * bulk + f.crestHeight * 0.55,
         oz: 0,
-        sx: 3,
-        sy: 10,
-        sz: 14,
-        albedo: hexRgb(look.cloth),
+        sx: 1,
+        sy: 1,
+        sz: 1,
+        ry: 0,
+        rz: 0,
+        albedo: cloth(look),
+        accent: null,
+        material: 'cloth',
       });
     }
   }
 
-  if (tags.has('shield') || tags.has('roundShield')) {
-    const round = tags.has('roundShield');
+  const addShield = (f: ShieldShape | null): void => {
+    if (!f || f.form === 'none') return;
+    const round = f.form !== 'scutum';
+    const faceY = round ? f.diameter * 0.95 : f.diameter;
+    const faceZ = f.diameter * 0.62;
     out.push({
       kind: round ? 'roundShield' : 'shield',
+      geo: { kind: 'sph', params: '' },
       ox: Math.cos(look.offHandAngle) * look.offHandDist,
       oy: 12,
       oz: Math.sin(look.offHandAngle) * look.offHandDist,
-      // Thin ellipsoid disks — round vs tall oval still readable.
-      sx: round ? 3.5 : 4.5,
-      sy: round ? 15 : 20,
-      sz: round ? 15 : 13,
-      albedo: metal,
+      sx: f.depth * 0.5,
+      sy: faceY * 0.55,
+      sz: faceZ * 0.55,
+      ry: 0,
+      rz: 0,
+      albedo: metal(look),
+      accent: null,
+      material: materialOf(f),
+      teamPaint: true,
     });
-  }
-
-  const mainOx = Math.cos(look.mainHandAngle) * look.mainHandDist;
-  const mainOz = Math.sin(look.mainHandAngle) * look.mainHandDist;
-  if (tags.has('trident')) {
+    if (f.boss) {
+      out.push({
+        kind: 'shieldBoss',
+        geo: { kind: 'sph', params: '' },
+        ox: Math.cos(look.offHandAngle) * look.offHandDist,
+        oy: 12,
+        oz: Math.sin(look.offHandAngle) * look.offHandDist,
+        sx: f.depth * 0.4,
+        sy: f.diameter * 0.16,
+        sz: f.diameter * 0.16,
+        ry: 0,
+        rz: 0,
+        albedo: metal(look),
+        accent: null,
+        material: 'metal',
+      });
+    }
+    // Rim ring in the shield's plane (Y-Z): torus built in XZ, rolled 90°.
     out.push({
-      kind: 'trident',
-      ox: mainOx + 10,
-      oy: 14,
-      oz: mainOz,
-      sx: 28,
-      sy: 3,
-      sz: 8,
-      albedo: metal,
-    });
-  } else if (tags.has('spear')) {
-    out.push({
-      kind: 'spear',
-      ox: mainOx + 14,
-      oy: 14,
-      oz: mainOz,
-      sx: 34,
-      sy: 2.5,
-      sz: 2.5,
-      albedo: metal,
-    });
-  } else if (tags.has('curvedBlade')) {
-    out.push({
-      kind: 'curvedBlade',
-      ox: mainOx + 8,
-      oy: 13,
-      oz: mainOz,
-      sx: 18,
-      sy: 3,
-      sz: 6,
-      albedo: metal,
-    });
-  } else if (tags.has('dualBlade')) {
-    out.push({
-      kind: 'dualBlade',
-      ox: mainOx + 7,
-      oy: 13,
-      oz: mainOz,
-      sx: 16,
-      sy: 2.5,
-      sz: 3,
-      albedo: metal,
-    });
-    out.push({
-      kind: 'dualBlade',
-      ox: -mainOx + 7,
-      oy: 13,
-      oz: -mainOz,
-      sx: 16,
-      sy: 2.5,
-      sz: 3,
-      albedo: metal,
-    });
-  } else if (tags.has('scissorArm')) {
-    out.push({
-      kind: 'scissor',
-      ox: mainOx + 6,
+      kind: 'shieldRim',
+      geo: { kind: 'torus', params: torusKey(f.diameter * 0.48 - f.rimWidth, f.diameter * 0.48) },
+      ox: Math.cos(look.offHandAngle) * look.offHandDist,
       oy: 12,
-      oz: mainOz,
-      sx: 20,
-      sy: 4,
-      sz: 10,
-      albedo: metal,
+      oz: Math.sin(look.offHandAngle) * look.offHandDist,
+      sx: 1,
+      sy: 1,
+      sz: 1,
+      ry: 0,
+      rz: 90,
+      albedo: leather(look),
+      accent: null,
+      material: 'leather',
     });
-  } else {
+  }
+
+  const addBlade = (
+    kind: PartMeshKind,
+    length: number,
+    width: number,
+    thickness: number,
+    grip: { x: number; z: number },
+    gripLen: number,
+    side: 1 | -1 = 1,
+  ): void => {
+    const baseOx = grip.x;
+    const baseOz = side * grip.z;
+    const taper = 0.3;
     out.push({
-      kind: 'blade',
-      ox: mainOx + 8,
+      kind,
+      geo: {
+        kind: 'frustum',
+        params: frustumKey(0.9, gripLen, 0.9, 1.2, 1.2),
+      },
+      ox: baseOx + gripLen * 0.5,
       oy: 13,
-      oz: mainOz,
-      sx: 16,
-      sy: 2.5,
-      sz: 3,
-      albedo: metal,
-    });
-  }
-
-  if (tags.has('net')) {
-    out.push({
-      kind: 'net',
-      ox: Math.cos(look.offHandAngle) * (look.offHandDist + 4),
-      oy: 10,
-      oz: Math.sin(look.offHandAngle) * (look.offHandDist + 4),
-      sx: 14,
-      sy: 4,
-      sz: 14,
-      albedo: leather,
-    });
-  }
-
-  // Greaves / manica — kit identity on the sand (was tag-only combat before)
-  if (tags.has('greaves')) {
-    const heavy = f.parts.some((id) => id.includes('heavy') || id.includes('hop'));
-    out.push({
-      kind: 'greaves',
-      ox: 2,
-      oy: 3.5,
-      oz: 4,
-      sx: heavy ? 5.5 : 4.5,
-      sy: heavy ? 9 : 7,
-      sz: heavy ? 5.5 : 4.5,
-      albedo: metal,
+      oz: baseOz,
+      sx: 1,
+      sy: 1,
+      sz: 1,
+      ry: 0,
+      rz: H,
+      albedo: leather(look),
+      accent: null,
+      material: 'leather',
     });
     out.push({
-      kind: 'greaves',
-      ox: 2,
-      oy: 3.5,
-      oz: -4,
-      sx: heavy ? 5.5 : 4.5,
-      sy: heavy ? 9 : 7,
-      sz: heavy ? 5.5 : 4.5,
-      albedo: metal,
+      kind,
+      geo: {
+        kind: 'frustum',
+        params: frustumKey(width, 1.6, thickness + 2, width * 0.8, thickness * 0.8 + 1.5),
+      },
+      ox: baseOx + gripLen,
+      oy: 13,
+      oz: baseOz,
+      sx: 1,
+      sy: 1,
+      sz: 1,
+      ry: 0,
+      rz: H,
+      albedo: metal(look),
+      accent: null,
+      material: 'metal',
     });
+    out.push({
+      kind,
+      geo: {
+        kind: 'frustum',
+        params: frustumKey(width, length, thickness, width * taper, thickness * 0.4),
+      },
+      ox: baseOx + gripLen + length * 0.5,
+      oy: 13,
+      oz: baseOz,
+      sx: 1,
+      sy: 1,
+      sz: 1,
+      ry: 0,
+      rz: H,
+      albedo: metal(look),
+      accent: null,
+      material: 'metal',
+    });
+  };
+
+  const addWeapon = (f: WeaponShape | null): void => {
+    if (!f) return;
+    const grip = {
+      x: Math.cos(look.mainHandAngle) * look.mainHandDist,
+      z: Math.sin(look.mainHandAngle) * look.mainHandDist,
+    };
+    switch (f.family) {
+      case 'gladius':
+        addBlade('gladius', f.bladeLength, f.bladeWidth, f.bladeThickness, grip, f.gripOffset);
+        break;
+      case 'dual': {
+        addBlade('dual', f.bladeLength, f.bladeWidth, f.bladeThickness, grip, f.gripOffset);
+        addBlade('dual', f.bladeLength, f.bladeWidth, f.bladeThickness, grip, f.gripOffset, -1);
+        break;
+      }
+      case 'sica': {
+        const gx = grip.x + f.gripOffset;
+        const gz = grip.z;
+        out.push({
+          kind: 'sica',
+          geo: {
+            kind: 'bent',
+            params: bentKey(f.bladeLength, f.bladeWidth, f.bladeThickness, f.curvature),
+          },
+          ox: gx + f.bladeLength * 0.45,
+          oy: 13,
+          oz: gz,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: metal(look),
+          accent: null,
+          material: 'metal',
+        });
+        break;
+      }
+      case 'trident': {
+        const gx = grip.x;
+        const gz = grip.z;
+        const shaftLen = f.totalLength - f.bladeLength - 2;
+        out.push({
+          kind: 'trident',
+          geo: { kind: 'frustum', params: frustumKey(1.1, shaftLen, 1.1, 1.4, 1.4) },
+          ox: gx + f.gripOffset + shaftLen * 0.5,
+          oy: 13,
+          oz: gz,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: metal(look),
+          accent: null,
+          material: 'metal',
+        });
+        const tineLen = f.bladeLength;
+        const tines = Math.max(2, f.tines);
+        const span = f.tineSpan;
+        for (let i = 0; i < tines; i++) {
+          const dz = -span / 2 + (i * span) / (tines - 1);
+          out.push({
+            kind: 'trident',
+            geo: { kind: 'frustum', params: frustumKey(0.8, tineLen, 0.8, 0.15, 0.15) },
+            ox: gx + f.gripOffset + shaftLen + tineLen * 0.5,
+            oy: 13,
+            oz: gz + dz,
+            sx: 1,
+            sy: 1,
+            sz: 1,
+            ry: 0,
+            rz: H,
+            albedo: metal(look),
+            accent: null,
+            material: 'metal',
+          });
+        }
+        // Crossbar
+        out.push({
+          kind: 'trident',
+          geo: { kind: 'frustum', params: frustumKey(1.6, 2, f.tineSpan * 0.5, 1.2, 1.2) },
+          ox: gx + f.gripOffset + shaftLen + 1,
+          oy: 13,
+          oz: gz,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: 0,
+          albedo: metal(look),
+          accent: null,
+          material: 'metal',
+        });
+        // Net loop at the off hand.
+        const offX = Math.cos(look.offHandAngle) * (look.offHandDist + 4);
+        const offZ = Math.sin(look.offHandAngle) * (look.offHandDist + 4);
+        out.push({
+          kind: 'net',
+          geo: { kind: 'torus', params: torusKey(3, 12) },
+          ox: offX,
+          oy: 10,
+          oz: offZ,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: 0,
+          albedo: leather(look),
+          accent: null,
+          material: 'leather',
+        });
+        break;
+      }
+      case 'spear': {
+        const gx = grip.x + f.gripOffset;
+        const gz = grip.z;
+        const shaftLen = f.totalLength - f.bladeLength - 3;
+        out.push({
+          kind: 'spear',
+          geo: { kind: 'frustum', params: frustumKey(1.1, shaftLen, 1.1, 1.1, 1.1) },
+          ox: gx + shaftLen * 0.5,
+          oy: 13,
+          oz: gz,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: materialOf(f) === 'wood' ? hexRgb('#6a4a30') : metal(look),
+          accent: null,
+          material: 'wood',
+        });
+        out.push({
+          kind: 'spear',
+          geo: { kind: 'frustum', params: frustumKey(1.6, f.bladeLength, 1.6, 0.2, 0.2) },
+          ox: gx + shaftLen + f.bladeLength * 0.5,
+          oy: 13,
+          oz: gz,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: metal(look),
+          accent: null,
+          material: 'metal',
+        });
+        break;
+      }
+      case 'scissor': {
+        // Tube arm straight along +X, crescent blade at the far end.
+        out.push({
+          kind: 'scissor',
+          geo: { kind: 'frustum', params: frustumKey(3.2, f.gripOffset + 6, 3.2, 2.6, 2.6) },
+          ox: grip.x + (f.gripOffset + 6) * 0.5,
+          oy: 13,
+          oz: grip.z,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: metal(look),
+          accent: null,
+          material: 'metal',
+        });
+        out.push({
+          kind: 'scissor',
+          geo: {
+            kind: 'bent',
+            params: bentKey(f.bladeLength, f.bladeWidth, f.bladeThickness, f.curvature),
+          },
+          ox: grip.x + f.gripOffset + 6 + f.bladeLength * 0.45,
+          oy: 13,
+          oz: grip.z,
+          sx: 1,
+          sy: 1,
+          sz: 1,
+          ry: 0,
+          rz: H,
+          albedo: metal(look),
+          accent: null,
+          material: 'metal',
+        });
+        break;
+      }
+    }
   }
 
-  if (tags.has('manica') || f.parts.some((id) => KIT_PARTS[id]?.slot === 'manica')) {
+  const addGreaves = (f: PartShape | null): void => {
+    if (!f || f.slot !== 'greaves' || f.coverage <= 0) return;
+    const heavy = f.coverage > 0.8;
+    const len = heavy ? 10 : 7;
+    const thick = heavy ? 5.5 : 4.5;
+    for (const side of [1, -1] as const) {
+      out.push({
+        kind: 'greaves',
+        geo: { kind: 'frustum', params: frustumKey(thick, len, thick, thick * 0.6, thick * 0.6) },
+        ox: 2,
+        oy: 3.5 + len * 0.5,
+        oz: side * 4,
+        sx: 1,
+        sy: 1,
+        sz: 1,
+        ry: 0,
+        rz: 0,
+        albedo: metal(look),
+        accent: null,
+        material: materialOf(f),
+      });
+    }
+  }
+
+  const addManica = (f: PartShape | null): void => {
+    if (!f || f.slot !== 'manica' || f.coverage <= 0) return;
+    const armX = Math.cos(look.mainHandAngle) * look.mainHandDist * 0.35;
+    const armZ = Math.sin(look.mainHandAngle) * look.mainHandDist * 0.35 + 5;
     out.push({
       kind: 'manica',
-      ox: mainOx * 0.35,
+      geo: { kind: 'frustum', params: frustumKey(4.5, 11, 5.5, 3.6, 4.2) },
+      ox: armX,
       oy: 14,
-      oz: mainOz * 0.35 + 5,
-      sx: 5,
-      sy: 10,
-      sz: 6,
-      albedo: leather,
+      oz: armZ,
+      sx: 1,
+      sy: 1,
+      sz: 1,
+      ry: 0,
+      rz: 0,
+      albedo: materialOf(f) === 'metal' ? metal(look) : leather(look),
+      accent: null,
+      material: materialOf(f),
+    });
+  }
+
+  addHelm(shapeForPart(f.parts.find((id) => KIT_PARTS[id]?.slot === 'helm')) as HelmShape | null);
+  addShield(
+    shapeForPart(f.parts.find((id) => KIT_PARTS[id]?.slot === 'shield')) as ShieldShape | null,
+  );
+  addWeapon(
+    shapeForPart(f.parts.find((id) => KIT_PARTS[id]?.slot === 'weapon')) as WeaponShape | null,
+  );
+  addGreaves(shapeForPart(f.parts.find((id) => KIT_PARTS[id]?.slot === 'greaves')));
+  addManica(shapeForPart(f.parts.find((id) => KIT_PARTS[id]?.slot === 'manica')));
+
+  // Breastplate — provocator's chest armour (tagged on its helm part).
+  if (f.parts.some((id) => KIT_PARTS[id]?.tags.includes('breastplate'))) {
+    out.push({
+      kind: 'breastplate',
+      geo: { kind: 'frustum', params: frustumKey(13, 9, 8, 11, 7.5) },
+      ox: 0,
+      oy: 17,
+      oz: 0,
+      sx: 1,
+      sy: 1,
+      sz: 1,
+      ry: 0,
+      rz: 0,
+      albedo: metal(look),
+      accent: null,
+      material: 'metal',
     });
   }
 
@@ -326,6 +666,7 @@ export function appearanceHash(f: FighterDraw): number {
   for (const p of parts) {
     h = (Math.imul(h ^ Math.floor(p.sx * 100), 16777619) >>> 0);
     h = (Math.imul(h ^ Math.floor(p.albedo[0] * 1000), 16777619) >>> 0);
+    h = (Math.imul(h ^ p.geo.params.length, 16777619) >>> 0);
   }
   h = (Math.imul(h ^ f.parts.length, 16777619) >>> 0);
   return h >>> 0;

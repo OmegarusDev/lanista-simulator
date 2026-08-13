@@ -11,6 +11,7 @@
  */
 
 import type { ArmaturaDef, ArmaturaId } from './armatura';
+import { deriveCombat, shapeForPart } from './shapes';
 
 export type KitSlot = 'helm' | 'shield' | 'weapon' | 'greaves' | 'manica';
 
@@ -764,7 +765,12 @@ function applyCombat(target: CombatSlice, patch: Partial<CombatSlice>): void {
   }
 }
 
-/** Assemble a runtime kit from part ids (armory will pass arbitrary combinations later). */
+/**
+ * Assemble a runtime kit from part ids (armory will pass arbitrary combinations later).
+ * Precedence: KIT_BASE → shape-derived defaults → explicit part overrides.
+ * Parts with any explicit combat fields skip derivation entirely, so the tuned
+ * stock set is bit-identical; brand-new parts get shape-driven numbers for free.
+ */
 export function assembleKitFromParts(
   identity: Pick<ArmaturaDef, 'id' | 'name' | 'short' | 'color'>,
   partIds: readonly (KitPartId | null)[],
@@ -774,6 +780,11 @@ export function assembleKitFromParts(
     if (!id) continue;
     const part = KIT_PARTS[id];
     if (!part) throw new Error(`Unknown kit part: ${id}`);
+    const explicit = part.combat && Object.keys(part.combat).length > 0;
+    if (!explicit) {
+      const shape = shapeForPart(id);
+      if (shape) applyCombat(combat, deriveCombat(shape));
+    }
     applyCombat(combat, part.combat);
   }
   return { ...identity, ...combat };
