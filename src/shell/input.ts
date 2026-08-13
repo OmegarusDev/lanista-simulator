@@ -25,17 +25,7 @@ export class Input {
   private pinchBaseDist = 0;
   private prevCentroidX = 0;
   private prevCentroidY = 0;
-  private pinchCx = 0;
-  private pinchCy = 0;
   private readonly activeTouches = new Map<number, { x: number; y: number }>();
-
-  /**
-   * Current two-finger centroid (design px) — the focal point a pinch should
-   * zoom toward. Only meaningful while multi-touch is active.
-   */
-  get pinchCentroid(): { x: number; y: number } | null {
-    return this.activeTouches.size >= 2 ? { x: this.pinchCx, y: this.pinchCy } : null;
-  }
 
   attach(
     el: HTMLElement,
@@ -121,8 +111,6 @@ export class Input {
         const c = touchCentroid();
         this.prevCentroidX = c.x;
         this.prevCentroidY = c.y;
-        this.pinchCx = c.x;
-        this.pinchCy = c.y;
         this.pointer.down = false;
         this.pointer.clicked = false;
       }
@@ -140,8 +128,6 @@ export class Input {
         this.orbitDy += c.y - this.prevCentroidY;
         this.prevCentroidX = c.x;
         this.prevCentroidY = c.y;
-        this.pinchCx = c.x;
-        this.pinchCy = c.y;
         if (this.pinchBaseDist > 8) {
           const d = touchDist();
           if (d > 8) {

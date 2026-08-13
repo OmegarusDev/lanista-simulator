@@ -232,16 +232,11 @@ export class App {
     if (!this.shell.frame) return;
     const { cssW, cssH } = resizeStageCanvas(this.shell);
     this.shell.frame.camera.updateDirector([]);
-    const focal = this.input.pinchCentroid ?? { x: this.input.pointer.x, y: this.input.pointer.y };
     this.shell.frame.camera.applyZoomInput(
       this.input.wheelDelta,
       this.input.pinchDelta,
       this.input.orbitDx,
       this.input.orbitDy,
-      focal.x,
-      focal.y,
-      cssW,
-      cssH,
     );
     this.handleAmbientDrag(cssW, cssH);
     const seed = this.season?.seed ?? this.ambientSeed;
@@ -270,17 +265,7 @@ export class App {
     if (!this.shell.frame) return;
     const { cssW, cssH } = resizeStageCanvas(this.shell);
     const cam = this.shell.frame.camera;
-    const focal = this.input.pinchCentroid ?? { x: this.input.pointer.x, y: this.input.pointer.y };
-    cam.applyZoomInput(
-      this.input.wheelDelta,
-      this.input.pinchDelta,
-      this.input.orbitDx,
-      this.input.orbitDy,
-      focal.x,
-      focal.y,
-      cssW,
-      cssH,
-    );
+    cam.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta, this.input.orbitDx, this.input.orbitDy);
     if (this.input.wasKeyPressed('Equal') || this.input.wasKeyPressed('NumpadAdd')) {
       cam.nudgeDolly(0.08);
     }
@@ -399,16 +384,11 @@ export class App {
   private handleAmbientDrag(cssW: number, cssH: number): void {
     const cam = this.shell.frame?.camera;
     if (!cam) return;
-    const focal = this.input.pinchCentroid ?? { x: this.input.pointer.x, y: this.input.pointer.y };
     cam.applyZoomInput(
       this.input.wheelDelta,
       this.input.pinchDelta,
       this.input.orbitDx,
       this.input.orbitDy,
-      focal.x,
-      focal.y,
-      cssW,
-      cssH,
     );
     if (this.input.isPinching) {
       if (cam.isDragging()) cam.endDrag();

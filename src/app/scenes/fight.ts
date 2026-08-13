@@ -518,17 +518,7 @@ export class FightScene {
     cssH: number,
   ): void {
     const cam = this.glFrame.camera;
-    const focal = input.pinchCentroid ?? { x: input.pointer.x, y: input.pointer.y };
-    cam.applyZoomInput(
-      input.wheelDelta,
-      input.pinchDelta,
-      input.orbitDx,
-      input.orbitDy,
-      focal.x,
-      focal.y,
-      cssW,
-      cssH,
-    );
+    cam.applyZoomInput(input.wheelDelta, input.pinchDelta, input.orbitDx, input.orbitDy);
     if (input.wasKeyPressed('Equal') || input.wasKeyPressed('NumpadAdd')) {
       cam.nudgeDolly(0.08);
     }

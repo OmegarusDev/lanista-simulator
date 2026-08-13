@@ -184,45 +184,10 @@ export class StageCamera {
   }
 
   /** Wheel/pinch → dolly, two-finger centroid drag → orbit (positive delta = zoom in). */
-  applyZoomInput(
-    wheelDelta: number,
-    pinchDelta: number,
-    orbitDx = 0,
-    orbitDy = 0,
-    focalX?: number,
-    focalY?: number,
-    cssW?: number,
-    cssH?: number,
-  ): void {
-    if (wheelDelta) this.zoomAt(focalX, focalY, cssW, cssH, wheelDelta * 0.55);
-    if (pinchDelta) this.zoomAt(focalX, focalY, cssW, cssH, -pinchDelta * 180);
+  applyZoomInput(wheelDelta: number, pinchDelta: number, orbitDx = 0, orbitDy = 0): void {
+    if (wheelDelta) this.dollyBy(wheelDelta * 0.55);
+    if (pinchDelta) this.dollyBy(-pinchDelta * 180);
     if (orbitDx || orbitDy) this.orbit(orbitDx * 0.0045, orbitDy * 0.003);
-  }
-
-  /**
-   * Zoom keeping the point under the fingers (or cursor) fixed on screen —
-   * the pinch is anchored to where it happens, not the screen center.
-   */
-  zoomAt(
-    focalX: number | undefined,
-    focalY: number | undefined,
-    cssW: number | undefined,
-    cssH: number | undefined,
-    delta: number,
-  ): void {
-    if (
-      focalX == null || focalY == null || !cssW || !cssH ||
-      focalX < 0 || focalY < 0 || focalX > cssW || focalY > cssH
-    ) {
-      this.dollyBy(delta);
-      return;
-    }
-    const before = this.worldFromScreen(focalX, focalY, cssW, cssH);
-    this.dollyBy(delta);
-    if (before) {
-      const after = this.worldFromScreen(focalX, focalY, cssW, cssH);
-      if (after) this.panOnPlane(before.x - after.x, before.y - after.y);
-    }
   }
 
   nudgeDolly(frac: number): void {
