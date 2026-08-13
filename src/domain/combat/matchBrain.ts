@@ -96,7 +96,9 @@ export function runCommit(
   const d = f.def();
   if (decision.sidestep && !f.busy) {
     if (f.startAction('SIDESTEP', 2, d.dodgeDuration, 6)) {
-      f.stamina -= d.dodgeStamina;
+      f.stamina -= d.dodgeStamina * combatTuning.dodgeStaminaScale;
+      // Evasion is winded work — pause regen so dodging is a budget, not a rhythm
+      f.staminaRegenDelay = Math.max(f.staminaRegenDelay, combatTuning.dodgeStaminaRegenDelay);
       pushEvent('SIDESTEP', f);
     }
     return;

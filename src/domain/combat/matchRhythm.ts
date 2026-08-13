@@ -27,6 +27,7 @@ export function assignIntention(
                 ? combatTuning.resetTicks
                 : 20);
   f.setIntention(kind, tick + dur);
+  if (kind === 'RESET') f.lastResetTick = tick;
 }
 
 /** Fresh posture break: victim scrambles, attacker gets a short punish PRESS. */
@@ -184,7 +185,10 @@ export function updateStareRhythm(
       anyStuckPair = true;
       break;
     }
-    if (intent === 'NONE' && inMeasure) {
+    if (
+      (intent === 'NONE' || intent === 'RESET' || intent === 'YIELD') &&
+      inMeasure
+    ) {
       anyStuckPair = true;
       break;
     }
@@ -216,11 +220,17 @@ export function updateStareRhythm(
       pick = f;
     }
   }
-  assignIntention(pick, 'ANGLE', tick);
-  pick.desiredDist = Math.max(
-    pick.desiredDist,
-    (pick.def().measureMin + pick.def().measureMax) * 0.55,
-  );
+  // Healthy pick collapses (radial PRESS); shaken pick orbits off the line.
+  // ANGLE alone cannot break an orbital/RESET lock — the collapse is the lever.
+  const broken = pick.poiseBroken || pick.poiseTier === 'BROKEN';
+  const shaky = pick.poiseTier === 'CRITICAL';
+  assignIntention(pick, broken || shaky ? 'ANGLE' : 'PRESS', tick);
+  if (broken || shaky) {
+    pick.desiredDist = Math.max(
+      pick.desiredDist,
+      (pick.def().measureMin + pick.def().measureMax) * 0.55,
+    );
+  }
   pick.tempoUntil = Math.max(pick.tempoUntil, tick + 12);
   const other = nearestEnemy(pick, fighters);
   if (other) {

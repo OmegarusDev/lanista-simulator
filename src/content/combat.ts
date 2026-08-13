@@ -40,12 +40,24 @@ export const combatTuning = {
 
   knockbackOnHit: 14,
   knockbackOnGuard: 6,
+  /** Stamina cost to the blocker per blocked cut (× attacker mass) */
+  guardStaminaCost: 8,
+  /** Blocking pauses the blocker's stamina regen this many ticks — repeated shields gas out */
+  guardStaminaRegenDelay: 220,
+  /** Scale on kit shieldShock poise back-pressure when a cut lands on guard */
+  guardShockScale: 1.6,
+  /** Dodge stamina drain scale — spam-dodging drains the bar, blocking counter-offense */
+  dodgeStaminaScale: 1.7,
+  /** Dodging pauses stamina regen this many ticks — evasion is winded work, like blocking */
+  dodgeStaminaRegenDelay: 150,
   arenaPadding: 48,
   bodyRadius: 16,
   commitMoveMul: 0.16,
   guardMoveMul: 0.4,
   guardTurnMul: 0.55,
   dodgeSpeedMul: 1.7,
+  /** Fraction of the dodge active phase that grants i-frames — the rest is catchable recover. */
+  dodgeIFrameFrac: 1.0,
   /** Below this stamina ratio, pressing in is discouraged */
   lowStamina: 0.38,
   /** Move speed scale at empty stamina */
@@ -95,6 +107,8 @@ export const combatTuning = {
   staleStareTicks: 72,
   /** Long exchange → RESET breath */
   exchangeResetTicks: 130,
+  /** RESET cannot be re-picked this soon after ending — breaks the 18/3 tick deterministic re-pick lock */
+  resetCooldownTicks: 40,
 
   /** Early windup abort window (fraction of windup) */
   abortWindowFrac: 0.45,

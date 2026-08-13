@@ -410,8 +410,13 @@ function pickIdleIntention(
     return rng.chance(0.4) ? 'RESET' : 'YIELD';
   }
 
-  // Long quiet exchange → RESET
-  if (self.ticksSinceContact > combatTuning.exchangeResetTicks && inMeasure) {
+  // Long quiet exchange → RESET (cooldown prevents the deterministic
+  // re-pick that otherwise keeps NONE invisible to the commit clock)
+  if (
+    self.ticksSinceContact > combatTuning.exchangeResetTicks &&
+    inMeasure &&
+    tick - self.lastResetTick > combatTuning.resetCooldownTicks
+  ) {
     return 'RESET';
   }
 
@@ -535,12 +540,15 @@ export function decideCommit(
     self.stamina > 6 &&
     !lowStam;
 
-  // Sidestep uses canDodge — broken fighters may still desperate-dive off the line
+  // Sidestep uses canDodge — broken fighters may still desperate-dive off the line.
+  // Gassed fighters cannot dodge: the stamina scale makes spam-dodging a losing
+  // economy, so the read is a budget decision, not a permanent answer.
   const sidestep =
     self.canDodge &&
     !guard &&
+    !lowStam &&
     self.dodgeCd <= 0 &&
-    self.canAfford(d.dodgeStamina) &&
+    self.canAfford(d.dodgeStamina * combatTuning.dodgeStaminaScale) &&
     (enemyCuttingMe || (selfBroken && distance < clinchDist * 1.35)) &&
     (selfBroken ||
       selfCritical ||
@@ -574,6 +582,21 @@ export function decideCommit(
     intent !== 'RESET' &&
     intent !== 'YIELD';
 
+  // Broken-foe punish is an opportunity — beats own YIELD caution
+  // (still refuses RESET so the breath state is respected).
+  const punishLegal =
+    punishOpen &&
+    !selfBroken &&
+    inCutRange &&
+    lineOn &&
+    self.attackCd <= 0 &&
+    self.canAfford(d.attackStamina) &&
+    !enemyCuttingMe &&
+    !(enemyGuardingLine && rng.chance(0.55)) &&
+    !lowStam &&
+    bearingErr < atkArc * 0.9 &&
+    intent !== 'RESET';
+
   // FEINT: after micro-in, commit a fake windup
   let feintCut = false;
   if (
@@ -593,7 +616,7 @@ export function decideCommit(
     cut = false;
   } else if (
     whiffPunish ||
-    (punishOpen && canCut) ||
+    punishLegal ||
     (enemy.poiseTier === 'CRITICAL' && canCut && rng.chance(0.75))
   ) {
     cut = true;

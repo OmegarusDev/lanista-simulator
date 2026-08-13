@@ -79,10 +79,19 @@ export function resolveCuts(
       const atkArc = effectiveAttackArc(d, atk.footwork);
       if (!inCone(atk.facing, toTgt, atkArc)) continue;
 
-      // Sidestep i-frames — fully avoids the cut (no HP or poise)
+      // Sidestep i-frames — fully avoids the cut (no HP or poise), but the
+      // throw is still a committed action: attacker eats whiff rhythm,
+      // dodger wins a tempo window to counter.
       if (tgt.sidestepping) {
         pushEvent('SIDESTEP', tgt, atk);
         atk.hitConnected = true;
+        atk.markExchangeContact();
+        tgt.markExchangeContact();
+        assignIntention(atk, 'YIELD', tick);
+        atk.tempoUntil = Math.max(atk.tempoUntil, tick + combatTuning.tempoAfterCommit);
+        assignIntention(tgt, 'PRESS', tick);
+        tgt.tempoUntil = Math.max(tgt.tempoUntil, tick + 8);
+        setStareTicks(0);
         continue;
       }
 
@@ -124,11 +133,21 @@ export function resolveCuts(
       if (inGuard && !broke) {
         const absorbed = weaponDmg * tgt.def().guardAbsorb * 0.35;
         tgt.hp = Math.max(0, tgt.hp - absorbed);
-        tgt.stamina = Math.max(0, tgt.stamina - 4 * atk.def().mass);
+        tgt.stamina = Math.max(
+          0,
+          tgt.stamina - combatTuning.guardStaminaCost * atk.def().mass,
+        );
+        // Blocking is winded work — pause regen so repeated shields gas out
+        tgt.staminaRegenDelay = Math.max(
+          tgt.staminaRegenDelay,
+          combatTuning.guardStaminaRegenDelay,
+        );
         atk.stamina = Math.max(0, atk.stamina - 2);
         // Shield shock: planted guard cracks the attacker's posture
         if (tgt.def().shieldShock > 0) {
-          const shocked = atk.applyPoiseDamage(tgt.def().shieldShock);
+          const shocked = atk.applyPoiseDamage(
+            tgt.def().shieldShock * combatTuning.guardShockScale,
+          );
           if (shocked) {
             pushEvent('POISE_BREAK', tgt, atk, band.bloodMul * 10);
             applyPoiseBreakRhythm(tgt, atk, tick);

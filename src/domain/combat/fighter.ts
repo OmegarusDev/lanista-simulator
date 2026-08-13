@@ -108,6 +108,10 @@ export class Fighter {
   brokenPunishContacts = 0;
   /** Absolute tick until wound-shock move/tempo tax ends. */
   woundShockUntil = 0;
+  /** Tick of the most recent RESET intention — gates immediate re-pick so NONE stays visible to the commit clock. */
+  lastResetTick = 0;
+  /** Stamina regen pause after blocking a cut — repeated shields gas out */
+  staminaRegenDelay = 0;
   /** Lineup Weak order — finish-target preference in pickThreat. */
   preferWeakest = false;
   /** Withdraw order — missio lean via entertainment boost. */
@@ -222,7 +226,13 @@ export class Fighter {
   }
 
   get sidestepping(): boolean {
-    return this.action === 'SIDESTEP' && this.phase === 'ACTIVE';
+    // I-frames only cover the first part of the dodge — an early reaction
+    // gets caught in the tail, so dodging is a timing read, not a blanket avoid.
+    return (
+      this.action === 'SIDESTEP' &&
+      this.phase === 'ACTIVE' &&
+      this.phaseT < this.def().dodgeDuration * combatTuning.dodgeIFrameFrac
+    );
   }
 
   /** Guard needs posture. */
@@ -295,10 +305,14 @@ export class Fighter {
     if (this.flash > 0) this.flash--;
     this.ticksSinceContact++;
     if (this.guidingIdleRegen()) {
-      const regen = this.guarding
-        ? combatTuning.staminaRegenHolding
-        : combatTuning.staminaRegenPerTick;
-      this.stamina = Math.min(this.maxStamina, this.stamina + regen);
+      if (this.staminaRegenDelay > 0) {
+        this.staminaRegenDelay--;
+      } else {
+        const regen = this.guarding
+          ? combatTuning.staminaRegenHolding
+          : combatTuning.staminaRegenPerTick;
+        this.stamina = Math.min(this.maxStamina, this.stamina + regen);
+      }
     }
 
     // Poise: delay fully elapses before refill starts (stamina-like pause)
