@@ -1,3 +1,11 @@
+<p align="center">
+  <a href="https://omegarusdev.github.io/lanista-simulator/">
+    <img src="https://img.shields.io/badge/▶_PLAY_NOW-playable_in_browser-brightgreen?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Play Now" height="40" />
+  </a>
+</p>
+
+<p align="center"><strong>No install.</strong> Works in the browser (desktop &amp; mobile).</p>
+
 Roman lanista roguelite — thin season management plus a **raw WebGL2** procedural amphitheatre autobattler. Zero external art/audio assets; zero runtime deps beyond Vite/TS.
 
 **Play online:** [omegarusdev.github.io/lanista-simulator](https://omegarusdev.github.io/lanista-simulator/)
