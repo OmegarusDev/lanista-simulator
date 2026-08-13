@@ -222,34 +222,34 @@ export class App {
     switch (this.mode) {
       case 'title':
         this.pollTitle();
-        this.paintAmbient('rest');
+        if (this.mode === 'title') this.paintAmbient('rest');
         break;
       case 'sandbox':
         this.pollPractice();
-        this.paintPracticeStage();
+        if (this.mode === 'sandbox') this.paintPracticeStage();
         break;
       case 'ludus':
         this.pollLudus();
-        this.paintLudusStage();
+        if (this.mode === 'ludus') this.paintLudusStage();
         break;
       case 'offers':
         this.pollOffers();
-        this.paintAmbient('quiet');
+        if (this.mode === 'offers') this.paintAmbient('quiet');
         break;
       case 'lineup':
         this.pollLineup();
-        this.paintLineupStage();
+        if (this.mode === 'lineup') this.paintLineupStage();
         break;
       case 'fight':
         this.paintFight();
         break;
       case 'aftermath':
         this.pollAftermath();
-        this.paintAftermathStage();
+        if (this.mode === 'aftermath') this.paintAftermathStage();
         break;
       case 'seasonEnd':
         this.pollSeasonEnd();
-        this.paintAmbient('quiet');
+        if (this.mode === 'seasonEnd') this.paintAmbient('quiet');
         break;
     }
   }

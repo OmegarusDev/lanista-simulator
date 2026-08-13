@@ -21,17 +21,71 @@ export type FightHudAction =
   | { type: 'LEAVE' }
   | { type: 'CONTINUE' };
 
+export interface FightHudRender {
+  teamSize: number;
+  seed: number;
+  career: boolean;
+  speed: number;
+  paused: boolean;
+  finished: boolean;
+  resultLabel: string;
+  muted: boolean;
+  snaps: FighterSnapshot[];
+  selectedId: number | null;
+  favorBlue: number;
+  favorRed: number;
+  crowdCaption: string;
+  inspect: null | {
+    title: string;
+    subtitle: string;
+    stateLine: string;
+    preferLeft: boolean;
+    lines: { label: string; value: string }[];
+    debugLines?: string[];
+  };
+  debugFeel: boolean;
+  ticker?: string[];
+  mvp?: string | null;
+}
+
 function fighterTag(f: FighterSnapshot): string {
   if (f.kind === 'beast' && f.beastId) return BEASTS[f.beastId].short;
   return ARMATURAE[f.armatura].short;
 }
 
+/**
+ * Fight chrome with a stable DOM — the rails are built once and only patched
+ * in place, so combat updates never flash the whole HUD.
+ */
 export class FightHud {
   readonly root: HTMLElement;
   private pending: FightHudAction = { type: 'NONE' };
   /** Chrome layout hints for inspect/debug — stage itself is full-bleed. */
   private padTop = 64;
   private padBottom = 128;
+
+  private built = false;
+  private formatEl!: HTMLElement;
+  private lineupEl!: HTMLElement;
+  private seedEl!: HTMLElement;
+  private favorBlueEl!: HTMLElement;
+  private favorRedEl!: HTMLElement;
+  private captionEl!: HTMLElement;
+  private tickerEl!: HTMLElement;
+  private debugEl!: HTMLElement;
+  private dockSlot!: HTMLElement;
+  private dockEl: HTMLElement | null = null;
+  private dockValueEls: HTMLElement[] = [];
+  private dockStateEl: HTMLElement | null = null;
+  private chips: { root: HTMLButtonElement; bar: HTMLElement }[] = [];
+  private segBtns: HTMLButtonElement[] = [];
+  private pauseBtn!: HTMLButtonElement;
+  private overlaySlot!: HTMLElement;
+  private overlayEl: HTMLElement | null = null;
+
+  private lastSelectedId: number | null = null;
+  private lastTickerKey = '';
+  private lastDebug = false;
 
   constructor(private readonly onUi: () => void) {
     this.root = el('div', { className: 'hud fight-hud is-hidden' });
@@ -60,89 +114,47 @@ export class FightHud {
     this.pending = action;
   }
 
-  render(opts: {
-    teamSize: number;
-    seed: number;
-    career: boolean;
-    speed: number;
-    paused: boolean;
-    finished: boolean;
-    resultLabel: string;
-    muted: boolean;
-    snaps: FighterSnapshot[];
-    selectedId: number | null;
-    favorBlue: number;
-    favorRed: number;
-    crowdCaption: string;
-    inspect: null | {
-      title: string;
-      subtitle: string;
-      stateLine: string;
-      preferLeft: boolean;
-      lines: { label: string; value: string }[];
-      debugLines?: string[];
-    };
-    debugFeel: boolean;
-    ticker?: string[];
-    mvp?: string | null;
-  }): void {
+  render(opts: FightHudRender): void {
+    if (!this.built) {
+      this.build(opts);
+      this.built = true;
+    }
+    this.patch(opts);
+  }
+
+  private build(opts: FightHudRender): void {
     clear(this.root);
 
     const top = el('div', { className: 'hud-rail hud-top' });
     const row = el('div', { className: 'hud-top-row' });
-    row.append(el('span', { className: 'hud-format', text: `${opts.teamSize}v${opts.teamSize}` }));
+    this.formatEl = el('span', { className: 'hud-format', text: `${opts.teamSize}v${opts.teamSize}` });
     const lineup = opts.snaps
       .map((f) => `${f.team === 0 ? 'B' : 'R'}:${fighterTag(f)}`)
       .join('  ·  ');
-    row.append(el('span', { className: 'hud-lineup', text: lineup }));
-    if (!opts.career) {
-      row.append(el('span', { className: 'hud-seed', text: `#${opts.seed.toString(16)}` }));
-    }
+    this.lineupEl = el('span', { className: 'hud-lineup', text: lineup });
+    this.seedEl = el('span', { className: 'hud-seed', text: '' });
+    row.append(this.formatEl, this.lineupEl, this.seedEl);
+    if (!opts.career) this.seedEl.textContent = `#${opts.seed.toString(16)}`;
     top.append(row);
 
-    const favorSum = opts.favorBlue + opts.favorRed;
-    const bluePct = favorSum > 0 ? (opts.favorBlue / favorSum) * 100 : 50;
     const meter = el('div', { className: 'favor-meter' });
-    meter.append(el('div', { className: 'blue', attrs: { style: `width:${bluePct}%` } }));
-    meter.append(
-      el('div', { className: 'red', attrs: { style: `width:${100 - bluePct}%` } }),
-    );
+    this.favorBlueEl = el('div', { className: 'blue' });
+    this.favorRedEl = el('div', { className: 'red' });
+    meter.append(this.favorBlueEl, this.favorRedEl);
     top.append(meter);
-    top.append(el('div', { className: 'crowd-caption', text: opts.crowdCaption }));
+    this.captionEl = el('div', { className: 'crowd-caption' });
+    top.append(this.captionEl);
     this.root.append(top);
 
-    if (opts.ticker?.length) {
-      const ticker = el('div', { className: 'fight-ticker' });
-      for (const line of opts.ticker.slice(-2)) {
-        ticker.append(el('span', { className: 'ticker-line', text: line }));
-      }
-      this.root.append(ticker);
-    }
+    this.tickerEl = el('div', { className: 'fight-ticker' });
+    this.root.append(this.tickerEl);
 
-    if (opts.inspect) {
-      const dock = el('div', {
-        className: `inspect-dock ${opts.inspect.preferLeft ? 'is-left' : 'is-right'}`,
-      });
-      dock.append(el('h3', { text: opts.inspect.title }));
-      dock.append(el('div', { className: 'sub', text: opts.inspect.subtitle }));
-      dock.append(el('div', { className: 'meta', text: opts.inspect.stateLine }));
-      const dl = el('dl');
-      for (const line of opts.inspect.lines) {
-        dl.append(el('dt', { text: line.label }));
-        dl.append(el('dd', { text: line.value }));
-      }
-      dock.append(dl);
-      if (opts.inspect.debugLines?.length) {
-        for (const d of opts.inspect.debugLines) {
-          dock.append(el('div', { className: 'debug-line', text: d }));
-        }
-      }
-      this.root.append(dock);
-    }
+    this.dockSlot = el('div');
+    this.root.append(this.dockSlot);
 
-    if (opts.debugFeel) {
-      this.root.append(el('div', { className: 'debug-badge', text: 'FEEL' }));
-    }
+    this.debugEl = el('div', { className: 'debug-badge', text: 'FEEL' });
+    this.debugEl.classList.add('is-hidden');
+    this.root.append(this.debugEl);
 
     const bottom = el('div', { className: 'hud-rail hud-bottom' });
     const roster = el('div', { className: 'roster-band' });
@@ -165,27 +177,26 @@ export class FightHud {
     const red = opts.snaps.filter((f) => f.team === 1).sort((a, b) => a.id - b.id);
     const rowR = el('div', { className: 'roster-row' });
     const sideB = el('div', { className: 'side' });
-    for (const f of blue) sideB.append(this.chip(f, opts.selectedId, false));
+    for (const f of blue) sideB.append(this.buildChip(f));
     const sideR = el('div', { className: 'side red' });
-    for (const f of red) sideR.append(this.chip(f, opts.selectedId, true));
+    for (const f of red) sideR.append(this.buildChip(f));
     rowR.append(sideB, el('div', { className: 'divider' }), sideR);
     roster.append(rowR);
     bottom.append(roster);
 
     const controls = el('div', { className: 'controls-row' });
     const speedIdx = SPEEDS.indexOf(opts.speed as (typeof SPEEDS)[number]);
-    controls.append(
-      segment(['1×', '2×', '4×'], speedIdx >= 0 ? speedIdx : 0, (i) => {
-        this.emit({ type: 'SPEED', speed: SPEEDS[i]! });
-      }),
-    );
-    controls.append(
-      btn('Pause', {
-        className: 'pause-btn',
-        active: opts.paused,
-        onClick: () => this.emit({ type: 'PAUSE_TOGGLE' }),
-      }),
-    );
+    const seg = segment(['1×', '2×', '4×'], speedIdx >= 0 ? speedIdx : 0, (i) => {
+      this.emit({ type: 'SPEED', speed: SPEEDS[i]! });
+    });
+    this.segBtns = Array.from(seg.querySelectorAll('button'));
+    controls.append(seg);
+    this.pauseBtn = btn('Pause', {
+      className: 'pause-btn',
+      active: opts.paused,
+      onClick: () => this.emit({ type: 'PAUSE_TOGGLE' }),
+    });
+    controls.append(this.pauseBtn);
     controls.append(
       btn('Recenter', {
         className: 'quiet',
@@ -195,32 +206,121 @@ export class FightHud {
     bottom.append(controls);
     this.root.append(bottom);
 
+    this.overlaySlot = el('div');
+    this.root.append(this.overlaySlot);
+
     this.padTop = 64;
     this.padBottom = 128;
-
-    if (opts.paused && !opts.finished) {
-      this.root.append(this.pauseOverlay(opts.career, opts.muted));
-    }
-    if (opts.finished) {
-      this.root.append(this.endOverlay(opts.career, opts.resultLabel, opts.mvp));
-    }
   }
 
-  private chip(f: FighterSnapshot, selectedId: number | null, foe: boolean): HTMLButtonElement {
-    const b = el('button', {
-      className: `roster-chip${foe ? ' is-foe' : ''}${f.id === selectedId ? ' is-selected' : ''}${!f.alive ? ' is-muted' : ''}`,
-    });
+  private buildChip(f: FighterSnapshot): HTMLButtonElement {
+    const b = el('button', { className: 'roster-chip' });
     b.append(el('span', { className: 'name', text: f.name }));
     b.append(el('span', { className: 'tag', text: fighterTag(f) }));
     const bar = el('div', { className: 'hp-bar' });
-    bar.append(
-      el('span', { attrs: { style: `width:${Math.round((f.hp / f.maxHp) * 100)}%` } }),
-    );
+    bar.append(el('span'));
     b.append(bar);
-    b.addEventListener('click', () => {
-      this.emit({ type: 'SELECT', id: f.id === selectedId ? null : f.id });
-    });
+    b.addEventListener('click', () => this.emit({ type: 'SELECT', id: f.id }));
+    this.chips.push({ root: b, bar });
     return b;
+  }
+
+  private patch(opts: FightHudRender): void {
+    const favorSum = opts.favorBlue + opts.favorRed;
+    const bluePct = favorSum > 0 ? (opts.favorBlue / favorSum) * 100 : 50;
+    this.favorBlueEl.style.width = `${bluePct}%`;
+    this.favorRedEl.style.width = `${100 - bluePct}%`;
+    this.captionEl.textContent = opts.crowdCaption;
+
+    const blue = opts.snaps.filter((f) => f.team === 0).sort((a, b) => a.id - b.id);
+    const red = opts.snaps.filter((f) => f.team === 1).sort((a, b) => a.id - b.id);
+    const ordered = [...blue, ...red];
+    for (let i = 0; i < this.chips.length; i++) {
+      const f = ordered[i];
+      const chip = this.chips[i];
+      if (!f) continue;
+      chip.bar.firstElementChild!.setAttribute(
+        'style',
+        `width:${Math.round((f.hp / f.maxHp) * 100)}%`,
+      );
+      chip.root.classList.toggle('is-selected', f.id === opts.selectedId);
+      chip.root.classList.toggle('is-muted', !f.alive);
+    }
+
+    this.segBtns.forEach((b, i) => {
+      b.classList.toggle('is-active', SPEEDS[i] === opts.speed);
+    });
+    this.pauseBtn.classList.toggle('is-active', opts.paused);
+
+    const tk = opts.ticker?.slice(-2).join('\n') ?? '';
+    if (tk !== this.lastTickerKey) {
+      this.lastTickerKey = tk;
+      clear(this.tickerEl);
+      for (const line of tk.split('\n')) {
+        if (!line) continue;
+        this.tickerEl.append(el('span', { className: 'ticker-line', text: line }));
+      }
+    }
+
+    if (opts.inspect) {
+      if (opts.selectedId !== this.lastSelectedId) {
+        this.dockEl?.remove();
+        this.dockValueEls = [];
+        this.dockEl = this.buildDock(opts.inspect);
+        this.dockSlot.append(this.dockEl);
+      } else {
+        this.dockStateEl!.textContent = opts.inspect.stateLine;
+        for (let i = 0; i < this.dockValueEls.length; i++) {
+          const line = opts.inspect.lines[i];
+          if (line) this.dockValueEls[i]!.textContent = line.value;
+        }
+      }
+    } else if (this.dockEl) {
+      this.dockEl.remove();
+      this.dockEl = null;
+      this.dockValueEls = [];
+    }
+    this.lastSelectedId = opts.selectedId;
+
+    if (opts.debugFeel !== this.lastDebug) {
+      this.lastDebug = opts.debugFeel;
+      this.debugEl.classList.toggle('is-hidden', !opts.debugFeel);
+    }
+
+    const wantOverlay = opts.paused && !opts.finished ? 'pause' : opts.finished ? 'end' : null;
+    if (wantOverlay && this.overlayEl?.dataset.kind !== wantOverlay) {
+      this.overlayEl?.remove();
+      this.overlayEl = wantOverlay === 'pause' ? this.pauseOverlay(opts.career, opts.muted) : this.endOverlay(opts.career, opts.resultLabel, opts.mvp);
+      this.overlayEl.dataset.kind = wantOverlay;
+      this.overlaySlot.append(this.overlayEl);
+    } else if (!wantOverlay && this.overlayEl) {
+      this.overlayEl.remove();
+      this.overlayEl = null;
+    }
+  }
+
+  private buildDock(inspect: NonNullable<FightHudRender['inspect']>): HTMLElement {
+    const dock = el('div', {
+      className: `inspect-dock ${inspect.preferLeft ? 'is-left' : 'is-right'}`,
+    });
+    dock.append(el('h3', { text: inspect.title }));
+    dock.append(el('div', { className: 'sub', text: inspect.subtitle }));
+    this.dockStateEl = el('div', { className: 'meta', text: inspect.stateLine });
+    dock.append(this.dockStateEl);
+    const dl = el('dl');
+    for (const line of inspect.lines) {
+      dl.append(el('dt', { text: line.label }));
+      const dd = el('dd', { text: line.value });
+      this.dockValueEls.push(dd);
+      dl.append(dd);
+    }
+    dock.append(dl);
+    if (inspect.debugLines?.length) {
+      for (const d of inspect.debugLines) {
+        dock.append(el('div', { className: 'debug-line', text: d }));
+      }
+    }
+    return dock;
   }
 
   private pauseOverlay(career: boolean, muted: boolean): HTMLElement {

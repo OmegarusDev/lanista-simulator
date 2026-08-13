@@ -3,6 +3,7 @@ import {
   CAMERA_DOLLY_MAX,
   CAMERA_DOLLY_MIN,
   CAMERA_RECOVER_TICKS,
+  defaultStageDolly,
   StageCamera,
 } from './camera';
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
@@ -89,7 +90,7 @@ describe('StageCamera', () => {
   it('portrait keeps a usable horizontal view (hfov floor)', () => {
     const cam = new StageCamera();
     cam.resize(390, 844);
-    cam.frameArena();
+    cam.frameArena(defaultStageDolly(390, 844));
     const left = cam.worldFromScreen(0, 422, 390, 844);
     const right = cam.worldFromScreen(390, 422, 390, 844);
     expect(left).not.toBeNull();
@@ -98,15 +99,15 @@ describe('StageCamera', () => {
     expect(right!.x - left!.x).toBeGreaterThan(500);
   });
 
-  it('portrait landscape framing is unchanged', () => {
+  it('landscape default framing is unchanged', () => {
     const cam = new StageCamera();
     cam.resize(960, 540);
     cam.frameArena();
     const left = cam.worldFromScreen(0, 270, 960, 540);
     const right = cam.worldFromScreen(960, 270, 960, 540);
     const span = right!.x - left!.x;
-    expect(span).toBeGreaterThan(900);
-    expect(span).toBeLessThan(1100);
+    expect(span).toBeGreaterThan(850);
+    expect(span).toBeLessThan(950);
   });
 
   it('director frames a portrait fight so both fighters are on screen', () => {

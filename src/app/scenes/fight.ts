@@ -74,10 +74,12 @@ export class FightScene {
     this.match = this.makeMatch(config);
     this.fxRng = new SeededRNG(config.seed ^ 0xd057);
     // Always frame the sand disk first — director will track fighters once they exist.
-    this.glFrame.camera.frameArena(720);
+    this.glFrame.camera.frameArena(defaultStageDolly(960, 540));
     this.glFrame.fx.clear();
+    // Populate the HUD before showing it — no empty-rails frame on entry.
     this.hud.show(true);
     this.hudDirty = true;
+    this.refreshHud(this.match.snapshots());
   }
 
   dispose(): void {

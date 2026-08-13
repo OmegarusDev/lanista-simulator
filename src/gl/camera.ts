@@ -104,7 +104,7 @@ export class StageCamera {
   constructor() {
     // Never leave proj as identity — first paint before resize would clip the world.
     this.resize(ARENA_WORLD_W, ARENA_WORLD_H);
-    this.frameArena(720);
+    this.frameArena(defaultStageDolly(960, 540));
   }
 
   reset(dolly = 720): void {
@@ -397,8 +397,8 @@ export class StageCamera {
     alive: readonly { id: number; x: number; y: number; alive?: boolean }[],
   ): number {
     const span = spanOf(alive);
-    const halfW = 300 + span * 0.55;
-    const halfD = 160 + span * 0.35;
+    const halfW = 270 + span * 0.5;
+    const halfD = 145 + span * 0.32;
     const dollyW = halfW / this.hfovHalf;
     const dollyD = (halfD * Math.sin(this.smoothPitch)) / Math.tan(this.vfovHalf);
     return clamp(Math.max(dollyW, dollyD), CAMERA_DOLLY_MIN, CAMERA_DOLLY_MAX);
@@ -527,7 +527,7 @@ function spanOf(fighters: readonly { x: number; y: number }[]): number {
 /** Default dolly framing for a viewport aspect — portrait pulls back. */
 export function defaultStageDolly(cssW: number, cssH: number): number {
   const aspect = cssW / Math.max(1, cssH);
-  if (aspect < 0.75) return 1050;
-  if (aspect > 1.8) return 680;
-  return 720;
+  if (aspect < 0.75) return 950;
+  if (aspect > 1.8) return 615;
+  return 650;
 }
