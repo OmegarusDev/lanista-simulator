@@ -23,41 +23,111 @@ export type CommitDecision = {
   feintCut: boolean;
 };
 
+export type BoutNerve = {
+  /** Own HP comfort 0..1 — healthy → press-willing */
+  confidence: number;
+  /** Hurt / risk aversion 0..1 */
+  caution: number;
+  /** Finish greed when foe is low 0..1 */
+  finish: number;
+};
+
+/**
+ * Bout nerve — HP-aware risk reading shaped by spawn-baked personality biases.
+ * Poise-break scramble stays absolute elsewhere; nerve does not override BROKEN.
+ */
+export function boutNerve(self: Fighter, enemy: Fighter): BoutNerve {
+  const d = self.def();
+  const t = combatTuning;
+  const ownHp = self.maxHp > 0 ? self.hp / self.maxHp : 0;
+  const foeHp = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
+
+  let confidence = Math.max(0, Math.min(1, ownHp * t.nerveOwnHpConfidence + (1 - t.nerveOwnHpConfidence) * 0.35));
+  let caution = Math.max(0, Math.min(1, (1 - ownHp) * t.nerveOwnHpCaution));
+  let finish = Math.max(0, Math.min(1, (1 - foeHp) * t.nerveFoeHpFinish));
+
+  // High pursueBias (Ferox / Press / Aggressive): resist caution when hurt; finish harder
+  caution *= 1 - d.pursueBias * t.nervePursueCautionResist;
+  finish = Math.min(1, finish * (0.55 + d.pursueBias * t.nervePursueFinishBoost));
+
+  // High clinchPanic (Cautus / Cautious): earlier caution; weaker finish greed
+  caution = Math.min(1, caution * (0.65 + d.clinchPanic * t.nerveClinchCautionBoost));
+  finish *= 1 - d.clinchPanic * t.nerveClinchFinishDamp;
+
+  // circleArc (Histrio / Angle): spikier finish when foe low
+  finish = Math.min(1, finish * (1 + d.circleArcBonus * t.nerveArcFinishSpike));
+
+  // Fragilis-like: high clinch + low pursue → early caution when own HP dips
+  if (d.clinchPanic > 0.55 && d.pursueBias < 0.4 && ownHp < t.nerveFragileHpThresh) {
+    caution = Math.min(1, caution + t.nerveFragileYieldBoost * (t.nerveFragileHpThresh - ownHp));
+    confidence *= 0.75;
+  }
+
+  confidence = Math.max(0, Math.min(1, confidence));
+  caution = Math.max(0, Math.min(1, caution));
+  finish = Math.max(0, Math.min(1, finish));
+  return { confidence, caution, finish };
+}
+
 /**
  * Class personality as intention weights — geometry hooks, not scripts.
  * Secutor → PRESS, Ret → INVITE/FEINT, Thraex → ANGLE/FEINT.
+ * Nerve (HP × temperament) scales PRESS/YIELD/FEINT/RESET without replacing poise tiers.
  */
-export function intentionWeights(self: Fighter): Record<Intention, number> {
+export function intentionWeights(self: Fighter, enemy?: Fighter | null): Record<Intention, number> {
   const d = self.def();
   const broken = self.poiseBroken || self.poiseTier === 'BROKEN';
   const critical = self.poiseTier === 'CRITICAL';
+  const nerve = enemy && enemy.alive ? boutNerve(self, enemy) : null;
+  const ns = combatTuning.nerveWeightScale;
+
+  let press = broken ? 0.02 : critical ? 0.08 + d.pursueBias * 0.35 : 0.18 + d.pursueBias * 1.1;
+  let yieldW =
+    0.12 + d.clinchPanic * 0.55 + (broken ? 1.8 : critical ? 0.85 : 0);
+  let angle = 0.14 + d.circleArcBonus * 2.2 + (broken ? 0.35 : 0);
+  let invite = broken ? 0.02 : 0.1 + d.clinchPanic * 0.45 + (1 - d.pursueBias) * 0.25;
+  let feint = broken ? 0.02 : 0.08 + d.circleArcBonus * 1.4 + d.clinchPanic * 0.2;
+  let reset = 0.06 + (broken ? 0.25 : critical ? 0.12 : 0);
+
+  if (nerve && !broken) {
+    press *= 1 + (nerve.confidence * 0.45 + nerve.finish * 0.7 - nerve.caution * 0.55) * ns;
+    yieldW *= 1 + (nerve.caution * 0.9 - nerve.confidence * 0.25) * ns;
+    feint *= 1 + (nerve.finish * 0.55 + d.circleArcBonus * nerve.finish) * ns;
+    angle *= 1 + nerve.finish * 0.35 * ns * (0.5 + d.circleArcBonus);
+    reset *= 1 + nerve.caution * 0.4 * ns;
+    invite *= 1 + (nerve.caution * 0.25 - nerve.finish * 0.15) * ns;
+  }
+
   return {
     NONE: 0,
-    PRESS: broken ? 0.02 : critical ? 0.08 + d.pursueBias * 0.35 : 0.18 + d.pursueBias * 1.1,
-    YIELD:
-      0.12 +
-      d.clinchPanic * 0.55 +
-      (broken ? 1.8 : critical ? 0.85 : 0),
-    ANGLE: 0.14 + d.circleArcBonus * 2.2 + (broken ? 0.35 : 0),
-    INVITE: broken ? 0.02 : 0.1 + d.clinchPanic * 0.45 + (1 - d.pursueBias) * 0.25,
-    FEINT: broken ? 0.02 : 0.08 + d.circleArcBonus * 1.4 + d.clinchPanic * 0.2,
-    RESET: 0.06 + (broken ? 0.25 : critical ? 0.12 : 0),
+    PRESS: Math.max(0.01, press),
+    YIELD: Math.max(0.02, yieldW),
+    ANGLE: Math.max(0.02, angle),
+    INVITE: Math.max(0.01, invite),
+    FEINT: Math.max(0.01, feint),
+    RESET: Math.max(0.02, reset),
   };
 }
 
-/** Abort willingness from kit geometry (Ret high, Sec low). */
-export function abortBias(self: Fighter): number {
+/** Abort willingness from kit geometry (Ret high, Sec low) × nerve caution. */
+export function abortBias(self: Fighter, enemy?: Fighter | null): number {
   const d = self.def();
-  return Math.min(1, d.clinchPanic * 0.65 + (1 - d.pursueBias) * 0.3 + d.circleArcBonus * 0.4);
+  let b = Math.min(1, d.clinchPanic * 0.65 + (1 - d.pursueBias) * 0.3 + d.circleArcBonus * 0.4);
+  if (enemy && enemy.alive) {
+    const n = boutNerve(self, enemy);
+    b = Math.min(1, b + n.caution * combatTuning.nerveAbortScale * 0.5 - n.finish * 0.12);
+  }
+  return b;
 }
 
 /**
- * Desired measure d* from class mid-range, shifted by intention + kit bias.
+ * Desired measure d* from class mid-range, shifted by intention + kit bias + nerve.
  */
 export function computeDesiredDist(
   self: Fighter,
   distance: number,
   tick: number,
+  enemy?: Fighter | null,
 ): number {
   const d = self.def();
   const mid = (d.measureMin + d.measureMax) * 0.5;
@@ -104,6 +174,10 @@ export function computeDesiredDist(
   if (tier === 'CRITICAL') target += (d.measureMax - mid) * 0.45;
   if (tier === 'BROKEN' || self.poiseBroken) {
     target = Math.max(target, d.measureMax * 1.12);
+  } else if (enemy && enemy.alive) {
+    const n = boutNerve(self, enemy);
+    const span = d.measureMax - mid;
+    target += (n.caution - n.finish * 0.55 - n.confidence * 0.25) * span * combatTuning.nerveMeasureScale;
   }
 
   // Clinch panic when jammed — ease out, don't teleport d* to max reach
@@ -158,9 +232,19 @@ export function cutUrge(self: Fighter, tick: number, enemy: Fighter): number {
       urge *= 0.35;
     }
   }
-  // Own crack → stop throwing, scramble
+  // Own crack → stop throwing, scramble (absolute — nerve does not override)
   if (self.poiseBroken || self.poiseTier === 'BROKEN') urge *= 0.12;
   else if (self.poiseTier === 'CRITICAL') urge *= 0.45;
+  else {
+    const n = boutNerve(self, enemy);
+    urge = Math.min(
+      0.96,
+      Math.max(
+        0.05,
+        urge * (1 + (n.finish * 0.55 + n.confidence * 0.25 - n.caution * 0.45) * combatTuning.nerveUrgeScale),
+      ),
+    );
+  }
   return urge;
 }
 
@@ -202,7 +286,7 @@ export function decideFootwork(
   const selfBroken = self.poiseBroken || self.poiseTier === 'BROKEN';
   const selfCritical = self.poiseTier === 'CRITICAL';
 
-  let desiredDist = computeDesiredDist(self, distance, tick);
+  let desiredDist = computeDesiredDist(self, distance, tick, enemy);
   // Once outside foe's reach, stop yielding farther — re-enter the bout
   // (broken fighters keep scrambling; do not clamp them back into range)
   const foeRange = enemy.def().attackRange;
@@ -305,15 +389,26 @@ function pickIdleIntention(
   const inMeasure = distance >= d.measureMin * 0.9 && distance <= d.measureMax * 1.1;
   const stamOk = self.stamina / self.maxStamina > 0.45;
   const onTempo = tick < self.tempoUntil;
-  const w = intentionWeights(self);
+  const w = intentionWeights(self, enemy);
   const selfBroken = self.poiseBroken || self.poiseTier === 'BROKEN';
   const selfCritical = self.poiseTier === 'CRITICAL';
   const foeBroken = enemy.poiseBroken || enemy.poiseTier === 'BROKEN';
   const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
+  const nerve = boutNerve(self, enemy);
 
   // Own posture cracked → scramble / breathe, never re-PRESS into the blade
   if (selfBroken) return 'YIELD';
   if (selfCritical && rng.chance(0.62 + w.YIELD * 0.15)) return 'YIELD';
+
+  // Nerve: early YIELD / RESET when caution high and not finishing
+  if (
+    !selfBroken &&
+    nerve.caution > 0.55 &&
+    nerve.finish < 0.35 &&
+    rng.chance(0.12 + nerve.caution * 0.28)
+  ) {
+    return rng.chance(0.4) ? 'RESET' : 'YIELD';
+  }
 
   // Long quiet exchange → RESET
   if (self.ticksSinceContact > combatTuning.exchangeResetTicks && inMeasure) {
@@ -325,12 +420,20 @@ function pickIdleIntention(
     if (self.brokenPunishContacts >= combatTuning.brokenPunishMaxHits || distance < clinchDist) {
       return rng.chance(0.55) ? 'ANGLE' : 'RESET';
     }
-    if (rng.chance(0.55 + w.PRESS * 0.2)) return 'PRESS';
+    if (rng.chance(0.55 + w.PRESS * 0.2 + nerve.finish * 0.15)) return 'PRESS';
   }
 
   // Soft / critical foe → lean PRESS (recovering, still dangerous)
   if (enemy.poiseTier === 'SOFT' || enemy.poiseTier === 'CRITICAL') {
-    if (rng.chance(0.35 + w.PRESS * 0.25)) return 'PRESS';
+    if (rng.chance(0.35 + w.PRESS * 0.25 + nerve.finish * 0.12)) return 'PRESS';
+  }
+
+  // Low foe HP finish lean
+  if (nerve.finish > 0.45 && stamOk && rng.chance(0.18 + nerve.finish * 0.35 + w.PRESS * 0.15)) {
+    return 'PRESS';
+  }
+  if (nerve.finish > 0.5 && d.circleArcBonus > 0.12 && rng.chance(0.1 + nerve.finish * 0.2)) {
+    return rng.chance(0.5) ? 'FEINT' : 'ANGLE';
   }
 
   // Collapse on a recovering foe, or windup we can already perceive
@@ -498,9 +601,11 @@ export function decideCommit(
     let urge = cutUrge(self, tick, enemy);
     // INVITE suppresses own cuts but still allows tip-range opportunism for long kits
     if (intent === 'INVITE') urge *= distance <= d.attackRange * 0.92 ? 0.45 : 0.15;
-    // Micro-hesitation — reads as thought, not aimbot
-    const hesitate =
-      rng.chance(combatTuning.cutHesitation * (1.15 - d.pursueBias * 0.5));
+    // Micro-hesitation — reads as thought, not aimbot; caution raises hesitation
+    const nerve = boutNerve(self, enemy);
+    const hesitate = rng.chance(
+      combatTuning.cutHesitation * (1.15 - d.pursueBias * 0.5) * (1 + nerve.caution * 0.6),
+    );
     cut = !hesitate && rng.chance(urge);
   }
 
@@ -537,6 +642,7 @@ export function perceivesEnemyCut(self: Fighter, enemy: Fighter): boolean {
 
 /**
  * Threat pick — not pure nearest. Prefers recover/windup, low HP, threats on allies.
+ * Prefer-weakest orders and bout nerve finish scale amplify low-HP targeting.
  */
 export function pickThreat(self: Fighter, fighters: Fighter[]): Fighter | null {
   let best: Fighter | null = null;
@@ -554,10 +660,13 @@ export function pickThreat(self: Fighter, fighters: Fighter[]): Fighter | null {
     if (f.poiseTier === 'SOFT') score += 8;
 
     const hpRatio = f.hp / f.maxHp;
-    score += (1 - hpRatio) * combatTuning.finishHimBias * 1.35;
+    const nerve = boutNerve(self, f);
+    const finishScale = 1 + nerve.finish * combatTuning.nerveThreatFinishScale;
+    score += (1 - hpRatio) * combatTuning.finishHimBias * 1.35 * finishScale;
     // Melee readability: pile onto the weak link
-    if (hpRatio < 0.4) score += 35;
-    if (hpRatio < 0.25) score += 25;
+    if (hpRatio < 0.4) score += 35 * finishScale;
+    if (hpRatio < 0.25) score += 25 * finishScale;
+    if (self.preferWeakest) score += (1 - hpRatio) * 48;
 
     // Focus fire — if an ally is already close to this foe, join them
     for (const a of allies) {

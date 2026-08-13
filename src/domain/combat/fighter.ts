@@ -1,6 +1,7 @@
 import { ARMATURAE, type ArmaturaDef, type ArmaturaId } from '../../content/armatura';
 import { BEASTS, type BeastId } from '../../content/beasts';
 import { combatTuning } from '../../content/combat';
+import { assembleKitFromParts, type KitPartId } from '../../content/kitPieces';
 import type {
   ActionKind,
   CombatantKind,
@@ -105,6 +106,12 @@ export class Fighter {
    * Caps the punish window so PRESS does not farm stun forever.
    */
   brokenPunishContacts = 0;
+  /** Absolute tick until wound-shock move/tempo tax ends. */
+  woundShockUntil = 0;
+  /** Lineup Weak order — finish-target preference in pickThreat. */
+  preferWeakest = false;
+  /** Withdraw order — missio lean via entertainment boost. */
+  withdrawLean = false;
 
   constructor(team: TeamId, armatura: ArmaturaId, name: string, x: number, y: number, facing: number) {
     this.id = nextId++;
@@ -151,7 +158,15 @@ export class Fighter {
     if (spec.appearanceSeed != null) {
       this.appearanceSeed = spec.appearanceSeed >>> 0;
     }
-    const base = this.stockKit();
+    const stock = this.stockKit();
+    // Armory parts → combat pools (not look-only)
+    let base: ArmaturaDef = stock;
+    if (this.partsOverride?.length && this.kind !== 'beast') {
+      base = assembleKitFromParts(
+        { id: stock.id, name: stock.name, short: stock.short, color: stock.color },
+        this.partsOverride as KitPartId[],
+      );
+    }
     const d: ArmaturaDef = { ...base };
     const clampBias = (n: number) => Math.max(0, Math.min(1, n));
     if (spec.damageMul != null) d.damageMul = base.damageMul * spec.damageMul;
@@ -166,6 +181,8 @@ export class Fighter {
     if (spec.circleArcAdd != null) {
       d.circleArcBonus = Math.max(0, base.circleArcBonus + spec.circleArcAdd);
     }
+    if (spec.preferWeakest) this.preferWeakest = true;
+    if (spec.withdrawLean) this.withdrawLean = true;
     this.defOverride = d;
 
     const hpMul = spec.hpMul ?? 1;

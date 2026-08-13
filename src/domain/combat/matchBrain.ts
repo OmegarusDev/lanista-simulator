@@ -175,7 +175,7 @@ export function maybeAbortWindup(
   const notOnTempo = tick >= f.tempoUntil;
   if (!cooled || f.abortUsedExchange || !stamOk || !notOnTempo) return;
 
-  const bias = abortBias(f);
+  const bias = abortBias(f, enemy);
   if (!rng.chance(0.18 + bias * 0.4)) return;
 
   performAbort(f, enemy, false, tick, pushEvent);

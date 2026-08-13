@@ -18,6 +18,7 @@ export class GlFrame {
   private point: Mesh;
   private disposed = false;
   private loggedGlError = false;
+  private dustHintTick = 0;
 
   constructor(readonly ctx: GlContext) {
     this.arena = new SceneArena(ctx);
@@ -48,7 +49,28 @@ export class GlFrame {
       }
       if (model.shake > 0) this.camera.shake(model.shake * 0.35);
       this.camera.tickSmooth();
-      this.arena.draw(this.camera, model.seed);
+
+      // Footwork dust hints → particles (throttled)
+      if (model.dustHints?.length && this.dustHintTick <= 0) {
+        this.fx.spawnDustHints(model.dustHints, () => Math.random());
+        this.dustHintTick = 3;
+      }
+      if (this.dustHintTick > 0) this.dustHintTick--;
+
+      const withStains: StageDrawModel = {
+        ...model,
+        stains:
+          model.stains ??
+          this.fx.stains.map((s) => ({
+            x: s.x,
+            y: s.y,
+            radius: s.radius,
+            strength: s.strength,
+            lifeRatio: s.life / s.maxLife,
+          })),
+      };
+
+      this.arena.draw(this.camera, withStains);
       this.fighters.draw(this.camera, model.fighters);
       this.drawFx();
       if (!this.loggedGlError) {
@@ -76,26 +98,32 @@ export class GlFrame {
       let r = 0.75,
         g = 0.65,
         b = 0.45;
+      let blendAdd = false;
       if (p.kind === 'blood') {
-        r = 0.55;
-        g = 0.08;
-        b = 0.08;
+        r = 0.45;
+        g = 0.05;
+        b = 0.05;
       } else if (p.kind === 'spark') {
         r = 1;
         g = 0.85;
         b = 0.4;
+        blendAdd = true;
       } else if (p.kind === 'shatter') {
         r = 0.7;
         g = 0.8;
         b = 0.95;
+        blendAdd = true;
       } else if (p.kind === 'ring') {
         r = 0.85;
         g = 0.75;
         b = 0.45;
+        blendAdd = true;
       }
+      if (blendAdd) gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      else gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.uniform3f(this.fxProg.uniform('u_center'), p.x, p.y, p.z);
       gl.uniform1f(this.fxProg.uniform('u_size'), p.size);
-      gl.uniform4f(this.fxProg.uniform('u_color'), r, g, b, a);
+      gl.uniform4f(this.fxProg.uniform('u_color'), r, g, b, a * (p.kind === 'blood' ? 0.9 : 1));
       drawMesh(gl, this.point);
     }
     gl.depthMask(true);

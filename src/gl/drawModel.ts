@@ -54,11 +54,22 @@ export interface DustHint {
   life: number;
 }
 
+export interface SandStainDraw {
+  x: number;
+  y: number;
+  radius: number;
+  /** 0..1 opacity / darkness. */
+  strength: number;
+  lifeRatio: number;
+}
+
 export interface StageDrawModel {
   seed: number;
   shake: number;
   fighters: FighterDraw[];
   dustHints?: DustHint[];
+  /** Persistent blood stains on the sand (arena pass). */
+  stains?: SandStainDraw[];
   /** Crowd favor 0..1 bias toward team0 when set. */
   favor?: number;
   /** Ambient mood for non-fight modes. */
@@ -131,6 +142,7 @@ export function toStageDrawModel(
     selectedId?: number | null;
     appearanceSeeds?: ReadonlyMap<number, number>;
     dustHints?: DustHint[];
+    stains?: SandStainDraw[];
     favor?: number;
     mood?: StageDrawModel['mood'];
   },
@@ -141,6 +153,7 @@ export function toStageDrawModel(
     favor: opts.favor,
     mood: opts.mood,
     dustHints: opts.dustHints,
+    stains: opts.stains,
     fighters: fighters.map((f) =>
       toFighterDraw(f, {
         selected: opts.selectedId === f.id,

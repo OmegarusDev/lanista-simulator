@@ -1,15 +1,16 @@
-import { colors } from '../content/palette';
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
 import type { StageCamera } from './camera';
 import type { GlContext } from './context';
 import { clearSky } from './context';
-import { mat4Identity, hexToRgb, type Mat4 } from './math';
+import type { SandStainDraw, StageDrawModel } from './drawModel';
+import { mat4Identity } from './math';
 import { createDisk, createRing, createFullscreenQuad, drawMesh, type Mesh } from './mesh';
 import { beginNoiseBakeFrame, getSandNoiseTex } from './noiseTex';
-import { caveaSteps, gfxQuality, bakeBudgetPerFrame } from './quality';
+import { PALETTE_RGB } from './paletteRgb';
+import { caveaSteps, gfxQuality, bakeBudgetPerFrame, shadowsEnabled } from './quality';
 import { createProgram, type GlProgram } from './shader';
 import { LIT_FS, LIT_VS, SKY_FS, SKY_VS } from './shaders';
-import { skyClearRgb, skyHighRgb, skyLowRgb, skyMidRgb } from './skyStops';
+import { skyTinted } from './skyStops';
 
 const CX = ARENA_WORLD_W * 0.5;
 const CZ = ARENA_WORLD_H * 0.5;
@@ -22,6 +23,7 @@ export class SceneArena {
   private sand: Mesh;
   private rings: Mesh[] = [];
   private lip: Mesh;
+  private stainDisk: Mesh;
   private model = mat4Identity();
   private disposed = false;
 
@@ -32,6 +34,7 @@ export class SceneArena {
     this.quad = createFullscreenQuad(gl);
     this.sand = createDisk(gl, SAND_R, 72);
     this.lip = createRing(gl, SAND_R, SAND_R * 1.06, 72);
+    this.stainDisk = createDisk(gl, 1, 16);
     this.rebuildCavea();
   }
 
@@ -47,7 +50,7 @@ export class SceneArena {
     }
   }
 
-  private setModelTranslate(x: number, y: number, z: number): Mat4 {
+  private setModelTranslate(x: number, y: number, z: number): ReturnType<typeof mat4Identity> {
     const m = this.model;
     mat4Identity(m);
     m[12] = x;
@@ -56,22 +59,30 @@ export class SceneArena {
     return m;
   }
 
-  draw(cam: StageCamera, seed: number): void {
+  private setModelScale(x: number, y: number, z: number, sx: number, sy: number, sz: number): void {
+    const m = this.model;
+    mat4Identity(m);
+    m[0] = sx;
+    m[5] = sy;
+    m[10] = sz;
+    m[12] = x;
+    m[13] = y;
+    m[14] = z;
+  }
+
+  draw(cam: StageCamera, model: StageDrawModel): void {
     if (this.disposed || this.ctx.lost) return;
     const gl = this.ctx.gl;
-    const clear = skyClearRgb();
-    clearSky(gl, clear[0], clear[1], clear[2]);
+    const sky = skyTinted(model.favor, model.mood);
+    clearSky(gl, sky.clear[0]!, sky.clear[1]!, sky.clear[2]!);
 
     // Fullscreen sky (no depth write, no cull — NDC quad)
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
     this.skyProg.use();
-    const hi = skyHighRgb();
-    const mid = skyMidRgb();
-    const lo = skyLowRgb();
-    gl.uniform3f(this.skyProg.uniform('u_high'), hi[0], hi[1], hi[2]);
-    gl.uniform3f(this.skyProg.uniform('u_mid'), mid[0], mid[1], mid[2]);
-    gl.uniform3f(this.skyProg.uniform('u_low'), lo[0], lo[1], lo[2]);
+    gl.uniform3f(this.skyProg.uniform('u_high'), sky.high[0]!, sky.high[1]!, sky.high[2]!);
+    gl.uniform3f(this.skyProg.uniform('u_mid'), sky.mid[0]!, sky.mid[1]!, sky.mid[2]!);
+    gl.uniform3f(this.skyProg.uniform('u_low'), sky.low[0]!, sky.low[1]!, sky.low[2]!);
     drawMesh(gl, this.quad);
     gl.enable(gl.DEPTH_TEST);
     // Keep cull off for sand/rings — winding bugs must never blank the arena again.
@@ -79,23 +90,28 @@ export class SceneArena {
 
     beginNoiseBakeFrame();
     const q = gfxQuality();
-    const noise = getSandNoiseTex(gl, seed, q, bakeBudgetPerFrame(q));
+    const noise = getSandNoiseTex(gl, model.seed, q, bakeBudgetPerFrame(q));
 
     this.litProg.use();
     gl.uniformMatrix4fv(this.litProg.uniform('u_viewProj'), false, cam.getViewProj());
     gl.uniform3f(this.litProg.uniform('u_lightDir'), 0.35, 0.85, 0.25);
-    gl.uniform3f(this.litProg.uniform('u_lightColor'), 1.05, 0.95, 0.8);
-    gl.uniform3f(this.litProg.uniform('u_ambient'), 0.28, 0.3, 0.34);
+    const shade = shadowsEnabled(q) ? 1 : 0.92;
+    gl.uniform3f(this.litProg.uniform('u_lightColor'), 1.05 * shade, 0.95 * shade, 0.8 * shade);
+    // Cavea picks up slight favor tint (cool ally / warm foe)
+    const favor = model.favor ?? 0.5;
+    const ambR = 0.28 + (0.5 - favor) * 0.04;
+    const ambB = 0.34 + (favor - 0.5) * 0.05;
+    gl.uniform3f(this.litProg.uniform('u_ambient'), ambR, 0.3, ambB);
 
     // Cavea rings
-    const stone = hexToRgb(colors.stoneMid);
+    const stone = PALETTE_RGB.stoneMid;
     for (let i = 0; i < this.rings.length; i++) {
-      const shade = 0.55 + i * 0.06;
+      const ringShade = 0.55 + i * 0.06;
       gl.uniform3f(
         this.litProg.uniform('u_albedo'),
-        stone[0] * shade,
-        stone[1] * shade,
-        stone[2] * shade,
+        stone[0]! * ringShade,
+        stone[1]! * ringShade,
+        stone[2]! * ringShade,
       );
       gl.uniform1i(this.litProg.uniform('u_useNoise'), 0);
       gl.uniform1f(this.litProg.uniform('u_noiseAmt'), 0);
@@ -108,15 +124,15 @@ export class SceneArena {
     }
 
     // Stone lip
-    const lipCol = hexToRgb(colors.stoneLit);
-    gl.uniform3f(this.litProg.uniform('u_albedo'), lipCol[0], lipCol[1], lipCol[2]);
+    const lipCol = PALETTE_RGB.stoneLit;
+    gl.uniform3f(this.litProg.uniform('u_albedo'), lipCol[0]!, lipCol[1]!, lipCol[2]!);
     gl.uniform1i(this.litProg.uniform('u_useNoise'), 0);
     gl.uniformMatrix4fv(this.litProg.uniform('u_model'), false, this.setModelTranslate(CX, 1.2, CZ));
     drawMesh(gl, this.lip);
 
     // Sand disk
-    const sand = hexToRgb(colors.sandMid);
-    gl.uniform3f(this.litProg.uniform('u_albedo'), sand[0], sand[1], sand[2]);
+    const sand = PALETTE_RGB.sandMid;
+    gl.uniform3f(this.litProg.uniform('u_albedo'), sand[0]!, sand[1]!, sand[2]!);
     gl.uniform1f(this.litProg.uniform('u_noiseAmt'), 0.18);
     if (noise) {
       gl.activeTexture(gl.TEXTURE0);
@@ -128,6 +144,33 @@ export class SceneArena {
     }
     gl.uniformMatrix4fv(this.litProg.uniform('u_model'), false, this.setModelTranslate(CX, 0, CZ));
     drawMesh(gl, this.sand);
+
+    // Blood stains — flat disks on sand before fighters
+    this.drawStains(gl, model.stains);
+  }
+
+  private drawStains(gl: WebGL2RenderingContext, stains: readonly SandStainDraw[] | undefined): void {
+    if (!stains?.length) return;
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    const deep = PALETTE_RGB.sandDeep;
+    gl.uniform1i(this.litProg.uniform('u_useNoise'), 0);
+    gl.uniform1f(this.litProg.uniform('u_noiseAmt'), 0);
+    for (const s of stains) {
+      const a = Math.max(0.08, Math.min(0.75, s.strength * s.lifeRatio));
+      gl.uniform3f(
+        this.litProg.uniform('u_albedo'),
+        deep[0]! * 0.35 + 0.25 * a,
+        deep[1]! * 0.2,
+        deep[2]! * 0.15,
+      );
+      this.setModelScale(s.x, 0.15, s.y, s.radius, 1, s.radius);
+      gl.uniformMatrix4fv(this.litProg.uniform('u_model'), false, this.model);
+      drawMesh(gl, this.stainDisk);
+    }
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
   }
 
   dispose(): void {
@@ -136,6 +179,7 @@ export class SceneArena {
     this.quad.dispose();
     this.sand.dispose();
     this.lip.dispose();
+    this.stainDisk.dispose();
     for (const r of this.rings) r.dispose();
     this.skyProg.dispose();
     this.litProg.dispose();

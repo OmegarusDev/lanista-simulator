@@ -30,11 +30,38 @@ export function ageCombatMul(age: number): { pools: number; damage: number; caut
   return { pools: 1, damage: 1, caution: 0 };
 }
 
-function stanceMods(orders?: FightOrders): { pursue: number; clinch: number } {
-  if (!orders) return { pursue: 0, clinch: 0 };
-  if (orders.stance === 'AGGRESSIVE') return { pursue: 0.12, clinch: -0.08 };
-  if (orders.stance === 'CAUTIOUS') return { pursue: -0.12, clinch: 0.12 };
-  return { pursue: 0, clinch: 0 };
+function stanceMods(orders?: FightOrders): {
+  pursue: number;
+  clinch: number;
+  preferWeakest: boolean;
+  withdrawLean: boolean;
+} {
+  if (!orders) return { pursue: 0, clinch: 0, preferWeakest: false, withdrawLean: false };
+  let pursue = 0;
+  let clinch = 0;
+  if (orders.stance === 'AGGRESSIVE') {
+    pursue = 0.12;
+    clinch = -0.08;
+  } else if (orders.stance === 'CAUTIOUS') {
+    pursue = -0.12;
+    clinch = 0.12;
+  }
+  // Weak → caution↑ / finish↓ (via clinch↑ pursue↓); also preferWeakest targeting
+  if (orders.targetPriority === 'weakest') {
+    pursue -= 0.06;
+    clinch += 0.08;
+  }
+  // Withdraw → strong caution + missio lean
+  if (orders.withdrawRequested) {
+    pursue -= 0.14;
+    clinch += 0.22;
+  }
+  return {
+    pursue,
+    clinch,
+    preferWeakest: orders.targetPriority === 'weakest',
+    withdrawLean: orders.withdrawRequested,
+  };
 }
 
 /**
@@ -98,6 +125,8 @@ export function spawnSpecFromGladiator(
     clinchPanicAdd: clinch,
     circleArcAdd: temp.circleArcAdd + (doc.id === 'ANGLE' ? 0.06 : 0) + inj.measureErr * 0.05,
     startHpRatio: clamp01(vit * (g.injury === 'LIGHT' ? 0.92 : g.injury === 'SEVERE' ? 0.8 : 1)),
+    preferWeakest: stance.preferWeakest,
+    withdrawLean: stance.withdrawLean,
   };
 }
 

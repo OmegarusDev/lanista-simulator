@@ -108,9 +108,12 @@ export function mat4Multiply(out: Mat4, a: Mat4, b: Mat4): Mat4 {
   return out;
 }
 
+/** Scratch for invert — avoid per-call Float32Array alloc on the camera hot path. */
+const INV_SCRATCH = new Float32Array(16);
+
 export function mat4Invert(out: Mat4, a: Mat4): Mat4 | null {
   const m = a;
-  const inv = new Float32Array(16);
+  const inv = INV_SCRATCH;
   inv[0] =
     m[5]! * m[10]! * m[15]! -
     m[5]! * m[11]! * m[14]! -

@@ -8,6 +8,7 @@ import {
   turnToward,
 } from './geometry';
 import type { Fighter } from './fighter';
+import { woundShockMoveMul } from './matchRhythm';
 
 export type FaceMode = 'ENEMY' | 'TANGENT' | 'HOLD';
 
@@ -34,7 +35,7 @@ export function applyMotion(f: Fighter, fighters: Fighter[], maps: MotionMaps, t
 
   let mx = 0;
   let my = 0;
-  let speed = d.moveSpeed * stamMove;
+  let speed = d.moveSpeed * stamMove * woundShockMoveMul(f, tick);
 
   if (f.action === 'ATTACK') {
     speed *= combatTuning.commitMoveMul;

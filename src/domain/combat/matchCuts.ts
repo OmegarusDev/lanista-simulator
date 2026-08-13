@@ -1,5 +1,6 @@
 import { effectiveAttackArc } from '../../content/armatura';
 import { combatTuning } from '../../content/combat';
+import type { ArmaturaDef } from '../../content/armatura';
 import { angleTo, dist, inCone } from './geometry';
 import type { Fighter } from './fighter';
 import type { SeededRNG } from '../rng';
@@ -8,6 +9,7 @@ import {
   applyGuardRhythm,
   applyHitRhythm,
   applyPoiseBreakRhythm,
+  applyWoundShock,
   assignIntention,
 } from './matchRhythm';
 
@@ -17,6 +19,43 @@ export type PushCombatEvent = (
   target?: Fighter,
   amount?: number,
 ) => void;
+
+export type MeasureBand = 'tip' | 'mid' | 'clinch';
+
+export type MeasureBandQuality = {
+  band: MeasureBand;
+  hpMul: number;
+  poiseMul: number;
+  bloodMul: number;
+};
+
+/** Tip = lighter/cleaner; mid = full; clinch = messy/high blood, awkward poise. */
+export function measureBandQuality(distance: number, d: ArmaturaDef): MeasureBandQuality {
+  const t = combatTuning;
+  const clinchDist = t.bodyRadius * t.clinchOrbitMul;
+  if (distance < clinchDist) {
+    return {
+      band: 'clinch',
+      hpMul: t.measureBandClinchHpMul,
+      poiseMul: t.measureBandClinchPoiseMul,
+      bloodMul: t.measureBandClinchBloodMul,
+    };
+  }
+  if (distance >= d.attackRange * t.measureBandTipRatio) {
+    return {
+      band: 'tip',
+      hpMul: t.measureBandTipHpMul,
+      poiseMul: t.measureBandTipPoiseMul,
+      bloodMul: t.measureBandTipBloodMul,
+    };
+  }
+  return {
+    band: 'mid',
+    hpMul: t.measureBandMidHpMul,
+    poiseMul: t.measureBandMidPoiseMul,
+    bloodMul: t.measureBandMidBloodMul,
+  };
+}
 
 export function resolveCuts(
   fighters: Fighter[],
@@ -47,8 +86,9 @@ export function resolveCuts(
         continue;
       }
 
-      const weaponDmg = atk.def().strength * d.damageMul * combatTuning.damageScale;
-      const poiseDmg = weaponDmg * d.poiseMul * combatTuning.poiseDamageScale;
+      const band = measureBandQuality(distance, d);
+      const weaponDmg = atk.def().strength * d.damageMul * combatTuning.damageScale * band.hpMul;
+      const poiseDmg = weaponDmg * d.poiseMul * combatTuning.poiseDamageScale * band.poiseMul;
 
       const toAtk = angleTo(tgt.x, tgt.y, atk.x, atk.y);
       const inGuard =
@@ -63,8 +103,10 @@ export function resolveCuts(
       // Poise always chips on contact — cannot be blocked
       const broke = tgt.applyPoiseDamage(poiseDmg);
       if (broke) {
-        pushEvent('POISE_BREAK', atk, tgt);
+        // Encode blood quality in amount for FX (poise break is heavy)
+        pushEvent('POISE_BREAK', atk, tgt, band.bloodMul * 12);
         applyPoiseBreakRhythm(atk, tgt, tick);
+        applyWoundShock(tgt, tick, true);
       }
 
       // Soft-tier stumble threat invites PRESS, not stalemate
@@ -88,8 +130,9 @@ export function resolveCuts(
         if (tgt.def().shieldShock > 0) {
           const shocked = atk.applyPoiseDamage(tgt.def().shieldShock);
           if (shocked) {
-            pushEvent('POISE_BREAK', tgt, atk);
+            pushEvent('POISE_BREAK', tgt, atk, band.bloodMul * 10);
             applyPoiseBreakRhythm(tgt, atk, tick);
+            applyWoundShock(atk, tick, true);
           }
         }
         tgt.x += nx * combatTuning.knockbackOnGuard * 0.4;
@@ -99,7 +142,7 @@ export function resolveCuts(
         pushEvent('GUARD', tgt, atk, absorbed);
         atk.hitConnected = true;
         applyGuardRhythm(atk, tgt, tick, rng, setStareTicks);
-        if (tgt.hp <= 0) pushEvent('KO', atk, tgt);
+        if (tgt.hp <= 0) pushEvent('KO', atk, tgt, band.bloodMul * 18);
         continue;
       }
 
@@ -108,9 +151,11 @@ export function resolveCuts(
       tgt.x += nx * kb;
       tgt.y += ny * kb;
       tgt.flash = 8;
-      pushEvent('HIT', atk, tgt, weaponDmg);
+      // amount carries damage; FX layer also reads blood via amount scale
+      pushEvent('HIT', atk, tgt, weaponDmg * (0.85 + band.bloodMul * 0.15));
       atk.hitConnected = true;
       applyHitRhythm(atk, tgt, tick, rng, setStareTicks);
+      applyWoundShock(tgt, tick, false);
 
       // Tip catch (pause) — resist shortens/negates (Secutor helm, Scissor, etc.)
       if (
@@ -125,7 +170,7 @@ export function resolveCuts(
         }
       }
 
-      if (tgt.hp <= 0) pushEvent('KO', atk, tgt);
+      if (tgt.hp <= 0) pushEvent('KO', atk, tgt, band.bloodMul * 20);
     }
   }
 }

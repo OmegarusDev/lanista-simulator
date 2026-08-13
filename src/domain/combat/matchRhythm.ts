@@ -39,6 +39,27 @@ export function applyPoiseBreakRhythm(atk: Fighter, tgt: Fighter, tick: number):
 }
 
 /**
+ * Wound shock — short self tempo / stamina / move tax after heavy contact.
+ * clinchPanic amplifies; pursueBias resists. Feeds nerve via HP + temporary gates.
+ */
+export function applyWoundShock(tgt: Fighter, tick: number, fromBreak: boolean): void {
+  const d = tgt.def();
+  const t = combatTuning;
+  const base = fromBreak ? t.woundShockBreakTicks : t.woundShockHitTicks;
+  const amp = 1 + d.clinchPanic * t.woundShockPanicAmp - d.pursueBias * t.woundShockPursueResist;
+  const dur = Math.max(6, Math.round(base * Math.max(0.55, amp)));
+  tgt.woundShockUntil = Math.max(tgt.woundShockUntil, tick + dur);
+  const stamTax = fromBreak ? t.woundShockStaminaBreak : t.woundShockStaminaHit;
+  tgt.stamina = Math.max(0, tgt.stamina - stamTax * amp);
+  tgt.tempoUntil = Math.max(tgt.tempoUntil, tick + Math.floor(dur * 0.65));
+}
+
+export function woundShockMoveMul(f: Fighter, tick: number): number {
+  if (tick >= f.woundShockUntil) return 1;
+  return combatTuning.woundShockMoveMul;
+}
+
+/**
  * Attacker intention after contact on a still-broken foe.
  * Caps PRESS farming — after a few hits / clinch, ease to ANGLE/RESET.
  */

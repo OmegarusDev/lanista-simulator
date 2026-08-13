@@ -97,6 +97,10 @@ export interface FighterSpawnSpec {
   circleArcAdd?: number;
   /** Fraction of max HP at bout start (after pool scale). */
   startHpRatio?: number;
+  /** Lineup Weak — prefer low-HP threats. */
+  preferWeakest?: boolean;
+  /** Lineup Withdraw — caution + missio entertainment lean. */
+  withdrawLean?: boolean;
 }
 
 export interface MatchConfig {

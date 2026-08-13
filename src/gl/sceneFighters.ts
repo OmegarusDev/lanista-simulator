@@ -1,10 +1,10 @@
-import { colors } from '../content/palette';
 import type { StageCamera } from './camera';
 import type { GlContext } from './context';
 import type { FighterDraw } from './drawModel';
 import { kitPartsForFighter, type PartMeshKind } from './kitMesh';
-import { mat4Identity, hexToRgb } from './math';
+import { mat4Identity } from './math';
 import { createBox, createCylinder, createSphere, drawMesh, type Mesh } from './mesh';
+import { PALETTE_RGB } from './paletteRgb';
 import { createProgram, type GlProgram } from './shader';
 import { SOLID_FS, SOLID_VS } from './shaders';
 import { tellPose } from './tells';
@@ -22,6 +22,8 @@ function meshForKind(kind: PartMeshKind, box: Mesh, cyl: Mesh, sph: Mesh): Mesh 
   switch (kind) {
     case 'body':
     case 'beastBody':
+    case 'greaves':
+    case 'manica':
       return cyl;
     case 'helm':
     case 'roundShield':
@@ -94,23 +96,49 @@ export class SceneFighters {
       gl.uniform1f(this.prog.uniform('u_desat'), desat);
 
       const yaw = simFacingToYaw(f.facing);
+      const flash = Math.max(0, Math.min(1, f.flash / 10));
 
       const lean = tell.lean * 0.12;
       const hitch = f.actionPhase === 'WINDUP' && tell.hitch > 0 ? tell.hitch * 0.15 : 0;
       const height = tell.height * (f.alive ? 1 : 0.35);
       const baseY = f.alive ? 0 : -4;
 
-      // Team rim — slightly larger body tint pass
-      if (f.selected || tell.rim > 0.5) {
-        const rim = hexToRgb(f.team === 0 ? colors.ally : colors.foe);
-        gl.uniform3f(this.prog.uniform('u_albedo'), rim[0], rim[1], rim[2]);
-        this.writeModel(gl, f.x, baseY, f.y, yaw, 18 * 1.08, 24 * height * 1.05, 14 * 1.08, 0, 0, 0);
+      // Team rim — slightly larger body tint pass; flash boosts rim on impact
+      if (f.selected || tell.rim > 0.5 || flash > 0.15) {
+        const rim = f.team === 0 ? PALETTE_RGB.ally : PALETTE_RGB.foe;
+        const fr = rim[0]! + flash * 0.55;
+        const fg = rim[1]! + flash * 0.45;
+        const fb = rim[2]! + flash * 0.25;
+        gl.uniform3f(this.prog.uniform('u_albedo'), fr, fg, fb);
+        this.writeModel(
+          gl,
+          f.x,
+          baseY,
+          f.y,
+          yaw,
+          18 * (1.08 + flash * 0.06),
+          24 * height * 1.05,
+          14 * (1.08 + flash * 0.06),
+          0,
+          0,
+          0,
+        );
+        drawMesh(gl, this.cyl);
+      }
+
+      // Poise-break ring cue — thin bright hoop at feet
+      if (f.poiseBroken && f.alive) {
+        gl.uniform3f(this.prog.uniform('u_albedo'), 0.85, 0.75, 0.45);
+        this.writeModel(gl, f.x, baseY + 1.5, f.y, yaw, 22, 1.2, 22, 0, 0, 0);
         drawMesh(gl, this.cyl);
       }
 
       const parts = kitPartsForFighter(f);
       for (const p of parts) {
-        gl.uniform3f(this.prog.uniform('u_albedo'), p.albedo[0], p.albedo[1], p.albedo[2]);
+        const ar = Math.min(1, p.albedo[0] + flash * 0.5);
+        const ag = Math.min(1, p.albedo[1] + flash * 0.4);
+        const ab = Math.min(1, p.albedo[2] + flash * 0.2);
+        gl.uniform3f(this.prog.uniform('u_albedo'), ar, ag, ab);
         const phaseReach =
           f.actionPhase === 'ACTIVE' ? 1.15 : f.actionPhase === 'WINDUP' ? 0.9 : 1;
         const ox = p.ox * phaseReach + hitch * 4;
@@ -122,10 +150,10 @@ export class SceneFighters {
 
       // World meters (selected or always-thin)
       if (f.selected || f.alive) {
-        this.drawMeter(gl, cam, f.x, f.y, 28 * height + 6, f.hpRatio, hexToRgb(colors.hp), 0);
+        this.drawMeter(gl, cam, f.x, f.y, 28 * height + 6, f.hpRatio, PALETTE_RGB.hp, 0);
         if (f.selected) {
-          this.drawMeter(gl, cam, f.x, f.y, 28 * height + 9, f.staminaRatio, hexToRgb(colors.stamina), 0);
-          this.drawMeter(gl, cam, f.x, f.y, 28 * height + 12, f.poiseRatio, hexToRgb(colors.poise), 0);
+          this.drawMeter(gl, cam, f.x, f.y, 28 * height + 9, f.staminaRatio, PALETTE_RGB.stamina, 0);
+          this.drawMeter(gl, cam, f.x, f.y, 28 * height + 12, f.poiseRatio, PALETTE_RGB.poise, 0);
         }
       }
     }
@@ -138,7 +166,7 @@ export class SceneFighters {
     z: number,
     y: number,
     ratio: number,
-    rgb: [number, number, number],
+    rgb: readonly [number, number, number],
     _slot: number,
   ): void {
     const r = Math.max(0, Math.min(1, ratio));

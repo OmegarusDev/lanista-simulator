@@ -129,4 +129,58 @@ export const combatTuning = {
   allyAssistBias: 18,
   /** Prefer finishing low-HP foes */
   finishHimBias: 26,
+
+  /**
+   * Bout nerve — HP-aware risk reading shaped by pursueBias / clinchPanic / circleArc.
+   * confidence↑ when healthy; caution↑ when hurt; finish↑ when foe is low.
+   */
+  nerveOwnHpConfidence: 0.85,
+  nerveOwnHpCaution: 1.05,
+  nerveFoeHpFinish: 1.3,
+  /** High pursueBias resists caution when hurt; amplifies finish greed */
+  nervePursueCautionResist: 0.48,
+  nervePursueFinishBoost: 0.55,
+  /** High clinchPanic → earlier caution, weaker finish greed */
+  nerveClinchCautionBoost: 0.55,
+  nerveClinchFinishDamp: 0.4,
+  /** circleArc → spikier finish + FEINT/ANGLE lean when foe low */
+  nerveArcFinishSpike: 0.65,
+  /** Fragilis-like (high clinch, low pursue): early YIELD/RESET when own HP dips */
+  nerveFragileHpThresh: 0.55,
+  nerveFragileYieldBoost: 0.7,
+
+  /** How strongly nerve scales intention / urge / measure / abort / threat */
+  nerveWeightScale: 0.55,
+  nerveUrgeScale: 0.4,
+  nerveMeasureScale: 0.28,
+  nerveAbortScale: 0.35,
+  nerveThreatFinishScale: 0.45,
+
+  /**
+   * Wound shock — short self tax after heavy HIT / POISE_BREAK so hurt fighters
+   * do not instantly re-PRESS at full health tempo.
+   */
+  woundShockHitTicks: 9,
+  woundShockBreakTicks: 14,
+  woundShockStaminaHit: 2.6,
+  woundShockStaminaBreak: 4.2,
+  woundShockMoveMul: 0.8,
+  /** clinchPanic amplifies shock duration; pursueBias resists */
+  woundShockPanicAmp: 0.45,
+  woundShockPursueResist: 0.4,
+
+  /**
+   * Measure-band cut quality — tip lighter/cleaner, mid full, clinch messy.
+   * tipRatio of attackRange = tip band start; clinch uses bodyRadius * clinchOrbitMul.
+   */
+  measureBandTipRatio: 0.82,
+  measureBandTipHpMul: 1,
+  measureBandTipPoiseMul: 1,
+  measureBandTipBloodMul: 0.55,
+  measureBandMidHpMul: 1,
+  measureBandMidPoiseMul: 1,
+  measureBandMidBloodMul: 1,
+  measureBandClinchHpMul: 1,
+  measureBandClinchPoiseMul: 0.8,
+  measureBandClinchBloodMul: 1.55,
 };
