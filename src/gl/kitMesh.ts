@@ -306,7 +306,8 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
         material: 'metal',
       });
     }
-    // Rim ring in the shield's plane (Y-Z): torus built in XZ, rolled 90°.
+    // Rim ring in the shield's plane (Y-Z): torus built in XZ, rolled 90°,
+    // squashed by the face's ellipse ratio so it hugs the oval face edge.
     out.push({
       kind: 'shieldRim',
       geo: { kind: 'torus', params: torusKey(f.diameter * 0.48 - f.rimWidth, f.diameter * 0.48) },
@@ -315,7 +316,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
       oz: Math.sin(look.offHandAngle) * look.offHandDist,
       sx: 1,
       sy: 1,
-      sz: 1,
+      sz: round ? 1 : 0.62,
       ry: 0,
       rz: 90,
       albedo: leather(look),
@@ -358,7 +359,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
       kind,
       geo: {
         kind: 'frustum',
-        params: frustumKey(width, 1.6, thickness + 2, width * 0.8, thickness * 0.8 + 1.5),
+        params: frustumKey(2, 1.6, width + 3, 1.6, width + 2.4),
       },
       ox: baseOx + gripLen,
       oy: 13,

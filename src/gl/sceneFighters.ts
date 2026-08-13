@@ -30,6 +30,56 @@ export function simFacingToYaw(facing: number): number {
 
 const D2R = Math.PI / 180;
 
+/**
+ * Kit part world matrix — the ONLY place local→world for parts is defined.
+ * Convention (matches the pre-shape pipeline): local +X maps to
+ * (cos, 0, −sin) at yaw, i.e. the rotation is Ry(−yaw) in standard terms.
+ * M = T(world) · Ry(−(yaw+ry)) · Rz(rz) · S  (column-major, unit 1×1×1).
+ */
+export function buildKitMatrix(
+  x: number,
+  y: number,
+  z: number,
+  yaw: number,
+  ox: number,
+  oy: number,
+  oz: number,
+  sx: number,
+  sy: number,
+  sz: number,
+  ry: number,
+  rz: number,
+): Float32Array {
+  const m = new Float32Array(16);
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  const cyaw = Math.cos(yaw + ry * D2R);
+  const syaw = Math.sin(yaw + ry * D2R);
+  const cr = Math.cos(rz * D2R);
+  const sr = Math.sin(rz * D2R);
+  // World offset of the local origin after facing yaw.
+  const wx = x + c * ox + s * oz;
+  const wy = y + oy;
+  const wz = z - s * ox + c * oz;
+  m[0] = cyaw * cr * sx;
+  m[1] = sr * sx;
+  m[2] = -syaw * cr * sx;
+  m[3] = 0;
+  m[4] = -cyaw * sr * sy;
+  m[5] = cr * sy;
+  m[6] = syaw * sr * sy;
+  m[7] = 0;
+  m[8] = syaw * sz;
+  m[9] = 0;
+  m[10] = cyaw * sz;
+  m[11] = 0;
+  m[12] = wx;
+  m[13] = wy;
+  m[14] = wz;
+  m[15] = 1;
+  return m;
+}
+
 /** Shared, geometry-cached VAOs — the math is the weapon, and it is cached. */
 class GeometryCache {
   private readonly map = new Map<string, Mesh>();
@@ -120,35 +170,8 @@ export class SceneFighters {
     ry: number,
     rz: number,
   ): void {
-    const m = this.model;
-    mat4Identity(m);
-    const c = Math.cos(yaw);
-    const s = Math.sin(yaw);
-    const cyaw = Math.cos(yaw + ry * D2R);
-    const syaw = Math.sin(yaw + ry * D2R);
-    const cr = Math.cos(rz * D2R);
-    const sr = Math.sin(rz * D2R);
-    // World offset of the local origin after facing yaw.
-    const wx = x + c * ox + s * oz;
-    const wy = y + oy;
-    const wz = z - s * ox + c * oz;
-    // M = T(world) · Ry(facing + ry) · Rz(rz) · S  (column-major)
-    m[0] = cyaw * cr * sx;
-    m[1] = sr * sx;
-    m[2] = syaw * cr * sx;
-    m[3] = 0;
-    m[4] = -cyaw * sr * sy;
-    m[5] = cr * sy;
-    m[6] = -syaw * sr * sy;
-    m[7] = 0;
-    m[8] = -syaw * sz;
-    m[9] = 0;
-    m[10] = cyaw * sz;
-    m[11] = 0;
-    m[12] = wx;
-    m[13] = wy;
-    m[14] = wz;
-    m[15] = 1;
+    const m = buildKitMatrix(x, y, z, yaw, ox, oy, oz, sx, sy, sz, ry, rz);
+    this.model.set(m);
     gl.uniformMatrix4fv(this.prog.uniform('u_model'), false, m);
   }
 
