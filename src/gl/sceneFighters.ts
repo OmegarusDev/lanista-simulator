@@ -258,7 +258,13 @@ export class SceneFighters {
       let swing = 0;
       let lunge = 0;
       if (inActive) {
-        const base = strikeParams(f.armatura as ArmaturaId, f.parts, f.appearanceSeed);
+        // Beasts strike with their body: no swing, just the surge.
+        const base = strikeParams(
+          f.armatura as ArmaturaId,
+          f.parts,
+          f.appearanceSeed,
+          f.kind === 'beast' ? 'beast' : 'gladiator',
+        );
         const frac = Math.min(1, Math.max(0, f.phaseT / f.phaseMax));
         swing = swingAngleRad(base.arc, frac);
         lunge = lungeOffset(base.lunge, frac);
@@ -271,7 +277,9 @@ export class SceneFighters {
         const phaseReach =
           f.actionPhase === 'ACTIVE' ? 1.15 : f.actionPhase === 'WINDUP' ? 0.9 : 1;
         const isWeapon = WEAPON_KINDS.has(p.kind);
-        const ox = p.ox * phaseReach + (isWeapon && inActive ? lunge : 0) + hitch * 4;
+        const isBeast = p.kind === 'beastBody';
+        const ox =
+          p.ox * phaseReach + (inActive && (isWeapon || isBeast) ? lunge : 0) + hitch * 4;
         const oy = p.oy * height + lean * 3;
         const oz = p.oz + tell.lateral * 4 + tell.guardOpen * (p.kind.includes('shield') ? -3 : 0);
         // Render convention mirrors the sim swing: ry = −θ (degrees).

@@ -75,7 +75,12 @@ export function resolveCuts(
     const parts = (
       atk.partsOverride?.length ? atk.partsOverride : loadoutPartIds(ARMATURA_LOADOUTS[atk.armatura])
     ) as string[];
-    const base = strikeParams(atk.armatura, parts, atk.appearanceSeed);
+    const base = strikeParams(
+      atk.armatura,
+      parts,
+      atk.appearanceSeed,
+      atk.kind === 'beast' ? 'beast' : 'gladiator',
+    );
     const strike = { ...base, arc: effectiveAttackArc(d, atk.footwork) };
     const phaseMax = Math.max(1, atk.phaseMax);
     const frac1 = Math.min(1, atk.phaseT / phaseMax);

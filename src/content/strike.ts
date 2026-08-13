@@ -19,24 +19,32 @@ export interface StrikeParams {
  * Strike parameters for a fighter's weapon: the swing arc and the lunge that
  * make the collision reach match the tuned attackRange. Same inputs render
  * and combat use → one number, two consumers.
+ *
+ * Beasts have no blade: their strike IS their body — a snout/claw lunge from
+ * the center with no swing. The visible surge and the collision are the same
+ * object, and the tuned beast range is reached exactly.
  */
 export function strikeParams(
   armatura: ArmaturaId,
   parts: readonly KitPartId[],
   appearanceSeed: number,
+  kind: 'gladiator' | 'beast' = 'gladiator',
 ): StrikeParams {
   const def = ARMATURAE[armatura] ?? ARMATURAE.MURMILLO;
   const look = ARMATURA_LOOK[armatura] ?? ARMATURA_LOOK.MURMILLO;
-  const weaponId = parts.find((id) => KIT_PARTS[id]?.slot === 'weapon');
-  const shape = shapeForPart(weaponId);
-  const bladeLength = shape && shape.slot === 'weapon' ? shape.totalLength : 19;
-  const gripDist = look.mainHandDist;
-  const grip = {
-    x: Math.cos(look.mainHandAngle) * gripDist,
-    z: Math.sin(look.mainHandAngle) * gripDist,
-  };
   const radius = bodyCollisionCapsule(look, appearanceSeed).radius;
-  const arc = def.attackArc;
+  const arc = kind === 'beast' ? 0 : def.attackArc;
+  const grip = kind === 'beast'
+    ? { x: 0, z: 0 }
+    : {
+        x: Math.cos(look.mainHandAngle) * look.mainHandDist,
+        z: Math.sin(look.mainHandAngle) * look.mainHandDist,
+      };
+  const bladeLength = kind === 'beast' ? 10 : (() => {
+    const weaponId = parts.find((id) => KIT_PARTS[id]?.slot === 'weapon');
+    const shape = shapeForPart(weaponId);
+    return shape && shape.slot === 'weapon' ? shape.totalLength : 19;
+  })();
   // The lunge peaks with the blade level (swing starts at mid-phase), so the
   // peak forward reach is exactly grip.x + lunge + bladeLength. The blade is
   // held laterally (grip.z), which shortens the distance at which the tip can
