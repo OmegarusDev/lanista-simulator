@@ -27,7 +27,7 @@ export const HELP_SECTIONS = [
     label: 'Keys',
     lines: [
       'Space — fight · Esc / P — pause (or clear inspect) · Q — leave',
-      '1 / 2 / 4 — speed · R — restart (Practice Yard) · N — reroll (Practice Yard)',
+      '1 / 2 / 4 — speed · R — restart (Skirmish) · N — reroll (Skirmish)',
       'D — combat feel debug · Esc — back on any menu',
     ],
   },

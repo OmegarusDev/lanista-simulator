@@ -268,6 +268,133 @@ button.quiet:hover:not(:disabled),
   flex: 1;
 }
 
+/* —— Ludus hub: slim top bar + tabbed content over the live arena —— */
+
+.hub-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.35rem 0 0.6rem;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: var(--space-sm);
+}
+
+.hub-bar .hub-title {
+  flex: 0 0 auto;
+}
+
+.hub-vitals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.9rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.hub-vitals .vital {
+  font-size: var(--type-title);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--parchment);
+}
+
+.hub-vitals .vital-sub {
+  font-size: var(--type-meta);
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.hub-contract {
+  flex: 0 0 auto;
+}
+
+.hub-tabs {
+  margin-bottom: var(--space-sm);
+}
+
+.hub-tabs button {
+  flex: 1;
+  min-height: 44px;
+}
+
+.hub-body {
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hub-actions .quiet {
+  margin-left: auto;
+}
+
+/* Bout cards on the Munera board */
+.offer-card {
+  border: 1.5px solid var(--bronze);
+  border-radius: var(--radius-md);
+  background: rgba(18, 22, 28, 0.78);
+  padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+  box-shadow: inset 0 1px 0 rgba(200, 180, 140, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.offer-card h3 {
+  margin: 0 0 0.15rem;
+  font-size: var(--type-title);
+  font-weight: 600;
+}
+
+.offer-card .meta {
+  margin: 0 0 0.2rem;
+}
+
+.offer-card .eyebrow {
+  margin: 0.1rem 0;
+}
+
+.offer-card button {
+  align-self: flex-end;
+  min-width: 9rem;
+}
+
+.offer-card.is-locked {
+  opacity: 0.65;
+}
+
+.lineup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.lineup-head h3 {
+  margin: 0 0 0.15rem;
+}
+
+.lineup-head .meta {
+  margin: 0;
+}
+
+.stack-sub {
+  margin: -0.35rem auto 0.85rem;
+  width: min(20rem, 100%);
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--type-meta);
+  letter-spacing: 0.02em;
+}
+
 .body-scroll {
   flex: 1;
   min-height: 0;
@@ -574,6 +701,12 @@ button.quiet:hover:not(:disabled),
 
 .modal-actions button {
   flex: 1 1 8rem;
+}
+
+/* Overlay panels shared with the fight HUD — max height for tall content. */
+.ludus-screen .overlay-panel {
+  max-height: min(88dvh, 40rem);
+  overflow: auto;
 }
 
 button.danger,

@@ -75,7 +75,7 @@ function pickTitle(pick: SlotPick): string {
   return `${ARMATURAE[pick].name} (${ARMATURAE[pick].short})`;
 }
 
-/** Practice Yard — DOM chrome + shared stage preview pipeline. */
+/** Skirmish Yard — instant fights: DOM chrome + shared stage preview pipeline. */
 export class PracticeView {
   readonly root: HTMLElement;
   readonly sheet: HTMLElement;
@@ -323,7 +323,7 @@ export class PracticeView {
         onClick: () => this.emit({ type: 'BACK' }),
       }),
     );
-    titleRow.append(el('h1', { text: 'Practice Yard' }));
+    titleRow.append(el('h1', { text: 'Skirmish' }));
     top.append(titleRow);
 
     const strip = el('div', { className: 'setup-row' });

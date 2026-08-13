@@ -15,13 +15,9 @@ import { emptyStageDrawModel, toFighterDraw, toStageDrawModel, type StageDrawMod
 import { pickFromScreen } from '../gl/pick';
 import { ARENA_WORLD_H, ARENA_WORLD_W } from '../shell/canvas';
 import { spawnSpecFromGladiator } from '../domain/campaign/combatMods';
-import { AftermathView } from '../ui/aftermathView';
 import { FightHud } from '../ui/fightHud';
-import { LineupView } from '../ui/lineupView';
 import { LudusView } from '../ui/ludusView';
-import { OffersView } from '../ui/offersView';
 import { PracticeView } from '../ui/practiceView';
-import { SeasonEndView } from '../ui/seasonEndView';
 import { TitleView } from '../ui/titleView';
 import { FightSession } from './fightSession';
 import { SeasonController } from './seasonController';
@@ -31,15 +27,7 @@ import type { FighterSnapshot, SandboxConfig } from '../domain/combat/types';
 import { ARMATURAE } from '../content/armatura';
 import { isModalOpen } from '../ui/modal';
 
-type Mode =
-  | 'title'
-  | 'sandbox'
-  | 'ludus'
-  | 'offers'
-  | 'lineup'
-  | 'fight'
-  | 'aftermath'
-  | 'seasonEnd';
+type Mode = 'title' | 'sandbox' | 'ludus' | 'fight';
 
 export class App {
   private readonly shell: AppShell;
@@ -51,10 +39,6 @@ export class App {
   private readonly title: TitleView;
   private readonly practice: PracticeView;
   private readonly ludus: LudusView;
-  private readonly offers: OffersView;
-  private readonly lineup: LineupView;
-  private readonly aftermathView: AftermathView;
-  private readonly seasonEnd: SeasonEndView;
   private readonly fightHud: FightHud;
 
   private mode: Mode = 'title';
@@ -79,18 +63,10 @@ export class App {
     this.title = new TitleView(beep);
     this.practice = new PracticeView(this.synth, beep);
     this.ludus = new LudusView(beep);
-    this.offers = new OffersView(beep);
-    this.lineup = new LineupView(beep);
-    this.aftermathView = new AftermathView(beep);
-    this.seasonEnd = new SeasonEndView(beep);
     this.fightHud = new FightHud(beep);
 
     this.title.mount(this.shell.chrome);
     this.ludus.mount(this.shell.chrome);
-    this.offers.mount(this.shell.chrome);
-    this.lineup.mount(this.shell.chrome);
-    this.aftermathView.mount(this.shell.chrome);
-    this.seasonEnd.mount(this.shell.chrome);
     this.practice.mount(this.shell.chrome);
     this.fightHud.mount(this.shell.chrome);
 
@@ -158,11 +134,7 @@ export class App {
     setStageVisible(this.shell, true);
 
     this.title.show(mode === 'title');
-    this.ludus.show(mode === 'ludus', this.season, this.ludusQueries());
-    this.offers.show(mode === 'offers', this.season);
-    this.lineup.show(mode === 'lineup', this.season, this.career.pendingOffer);
-    this.aftermathView.show(mode === 'aftermath', this.season, this.career.pendingAftermath);
-    this.seasonEnd.show(mode === 'seasonEnd', this.season);
+    this.ludus.show(mode === 'ludus', this.season, this.ludusQueries(), this.ludusOverlay());
     this.practice.show(mode === 'sandbox');
     if (mode !== 'fight') this.fightHud.show(false);
 
@@ -172,18 +144,28 @@ export class App {
       if (mode === 'sandbox') {
         frame.camera.frameArena(defaultStageDolly(400, 400));
         this.applyStagePads(72, 150);
-      } else if (mode === 'aftermath') {
-        this.applyStagePads(40, 120);
+      } else if (mode === 'ludus' && this.career.pendingAftermath) {
+        // Aftermath overlay over the hub — keep the fight frame frozen behind.
+        this.applyStagePads(48, 100);
       } else {
-        frame.camera.frameArena(780);
-        this.applyStagePads(mode === 'title' || mode === 'seasonEnd' ? 0 : 48, 100);
+        frame.camera.frameArena(defaultStageDolly(960, 540));
+        this.applyStagePads(mode === 'title' ? 0 : 48, 100);
       }
     } else if (mode === 'fight') {
       const pads = this.fightHud.getStagePads();
       this.applyStagePads(pads.top, pads.bottom);
     }
 
-    if (mode !== 'aftermath') this.frozenAftermath = null;
+    // The frozen post-fight scene stays only while the aftermath overlay is up.
+    if (!(mode === 'ludus' && this.career.pendingAftermath)) this.frozenAftermath = null;
+  }
+
+  /** Overlay state for the Ludus hub: after-bout card, terminal card, or none. */
+  private ludusOverlay(): { aftermath: SeasonState['lastAftermath'] | null; terminal: boolean } {
+    return {
+      aftermath: this.career.pendingAftermath,
+      terminal: this.career.isTerminal(),
+    };
   }
 
   private applyStagePads(top: number, bottom: number): void {
@@ -232,24 +214,8 @@ export class App {
         this.pollLudus();
         if (this.mode === 'ludus') this.paintLudusStage();
         break;
-      case 'offers':
-        this.pollOffers();
-        if (this.mode === 'offers') this.paintAmbient('quiet');
-        break;
-      case 'lineup':
-        this.pollLineup();
-        if (this.mode === 'lineup') this.paintLineupStage();
-        break;
       case 'fight':
         this.paintFight();
-        break;
-      case 'aftermath':
-        this.pollAftermath();
-        if (this.mode === 'aftermath') this.paintAftermathStage();
-        break;
-      case 'seasonEnd':
-        this.pollSeasonEnd();
-        if (this.mode === 'seasonEnd') this.paintAmbient('quiet');
         break;
     }
   }
@@ -330,48 +296,45 @@ export class App {
   }
 
   private paintLudusStage(): void {
-    if (!this.shell.frame || !this.season) {
+    if (!this.shell.frame) {
       this.paintAmbient('quiet');
       return;
     }
     const { cssW, cssH } = resizeStageCanvas(this.shell);
     this.handleAmbientDrag(cssW, cssH);
-    const selId = this.ludus.getSelectedId();
-    const g =
-      (selId != null ? this.season.roster.find((x) => x.id === selId) : null) ??
-      this.season.roster.find((x) => !x.retired) ??
-      null;
-    if (!g) {
-      this.shell.frame.render(emptyStageDrawModel(this.season.seed, 'quiet'));
+    // Post-bout: keep the frozen fight scene behind the aftermath overlay.
+    if (this.frozenAftermath) {
+      this.shell.frame.render(this.frozenAftermath);
       return;
     }
-    const spec = spawnSpecFromGladiator(g, this.season.doctrina);
-    const snap = mannequinSnapshot(g.id, g.armatura, g.name, g.appearanceSeed, spec.partsOverride);
-    const model: StageDrawModel = {
-      seed: this.season.seed,
-      shake: 0,
-      mood: 'preview',
-      fighters: [toFighterDraw(snap, { selected: true, appearanceSeed: g.appearanceSeed })],
-    };
-    this.shell.frame.camera.updateDirector(model.fighters, { selectedId: snap.id });
-    this.shell.frame.render(model);
-  }
-
-  private paintLineupStage(): void {
-    if (!this.shell.frame || !this.season || !this.career.pendingOffer) {
-      this.paintAmbient('quiet');
+    const preview = this.ludus.getStagePreview();
+    if (!preview) {
+      this.shell.frame.render(emptyStageDrawModel(this.season?.seed ?? 1, 'quiet'));
       return;
     }
-    const { cssW, cssH } = resizeStageCanvas(this.shell);
-    this.handleAmbientDrag(cssW, cssH);
-    const ids = this.lineup.getLineupIds();
-    const offer = this.career.pendingOffer;
+    if (preview.kind === 'fighter') {
+      const g = preview.gladiator;
+      const spec = spawnSpecFromGladiator(g, this.season!.doctrina);
+      const snap = mannequinSnapshot(g.id, g.armatura, g.name, g.appearanceSeed, spec.partsOverride);
+      const model: StageDrawModel = {
+        seed: this.season!.seed,
+        shake: 0,
+        mood: 'preview',
+        fighters: [toFighterDraw(snap, { selected: true, appearanceSeed: g.appearanceSeed })],
+      };
+      this.shell.frame.camera.updateDirector(model.fighters, { selectedId: snap.id });
+      this.shell.frame.render(model);
+      return;
+    }
+    // Lineup preview: both teams on the sand.
+    const offer = preview.offer;
+    const n = offer.teamSize;
     const fighters: FighterSnapshot[] = [];
     let id = 1;
-    const n = offer.teamSize;
+    const season = this.season!;
     for (let i = 0; i < n; i++) {
-      const gid = ids[i];
-      const g = gid != null ? this.season.roster.find((x) => x.id === gid) : null;
+      const gid = preview.ids[i];
+      const g = gid != null ? season.roster.find((x) => x.id === gid) : null;
       const legal = Boolean(g);
       const armatura = g?.armatura ?? 'MURMILLO';
       const snap = mannequinSnapshot(
@@ -395,24 +358,8 @@ export class App {
       snap.y = ARENA_WORLD_H * 0.5 + (i - (n - 1) / 2) * 48;
       fighters.push(snap);
     }
-    const model = toStageDrawModel(fighters, { seed: this.season.seed, mood: 'preview' });
+    const model = toStageDrawModel(fighters, { seed: season.seed, mood: 'preview' });
     this.shell.frame.camera.updateDirector(model.fighters);
-    this.shell.frame.render(model);
-  }
-
-  private paintAftermathStage(): void {
-    if (!this.shell.frame) return;
-    const { cssW, cssH } = resizeStageCanvas(this.shell);
-    this.handleAmbientDrag(cssW, cssH);
-    if (!this.frozenAftermath && this.fights.scene) {
-      this.frozenAftermath = this.fights.scene.lastDrawModel();
-    }
-    const model =
-      this.frozenAftermath ??
-      emptyStageDrawModel(
-        this.season?.seed ?? 1,
-        this.career.pendingAftermath?.result === 'WIN' ? 'win' : 'loss',
-      );
     this.shell.frame.render(model);
   }
 
@@ -453,8 +400,7 @@ export class App {
     if (action.type === 'CONTINUE') {
       const loaded = this.career.continueSeason();
       if (loaded) {
-        if (this.career.isTerminal(loaded)) this.setMode('seasonEnd');
-        else this.setMode('ludus');
+        this.setMode('ludus');
       }
     }
   }
@@ -495,12 +441,7 @@ export class App {
   }
 
   private afterLudusMutation(): void {
-    if (this.career.isTerminal()) {
-      clearSeasonSave();
-      this.setMode('seasonEnd');
-    } else {
-      this.ludus.refresh(this.season!, this.ludusQueries());
-    }
+    this.ludus.refresh(this.season!, this.ludusQueries(), this.ludusOverlay());
   }
 
   private pollLudus(): void {
@@ -510,10 +451,21 @@ export class App {
     }
     if (this.career.isTerminal()) {
       clearSeasonSave();
-      this.setMode('seasonEnd');
+      if (!this.ludus.isTerminalShown()) this.afterLudusMutation();
       return;
     }
     if (this.escaped()) {
+      if (this.ludus.isLineupMode()) {
+        this.ludus.backFromLineup();
+        return;
+      }
+      if (this.ludus.isAftermathShown()) {
+        this.career.clearPending();
+        this.career.persist();
+        this.frozenAftermath = null;
+        this.afterLudusMutation();
+        return;
+      }
       this.career.persist();
       this.goTitle();
       return;
@@ -524,8 +476,24 @@ export class App {
       this.enterLab('ludus');
       return;
     }
-    if (action.type === 'MUNERA') {
-      this.setMode('offers');
+    if (action.type === 'FIGHT') {
+      this.career.pickOffer(action.offer);
+      this.career.setLineup(action.lineupIds);
+      this.career.setOrders(action.orders);
+      const config = this.career.buildCareerConfig(action.lineupIds, action.offer);
+      this.enterFight(config, 'career');
+      return;
+    }
+    if (action.type === 'AFTERMATH_CONTINUE') {
+      this.career.clearPending();
+      this.career.persist();
+      this.frozenAftermath = null;
+      this.afterLudusMutation();
+      return;
+    }
+    if (action.type === 'SEASON_END_TITLE') {
+      this.career.settleAndClear();
+      this.goTitle();
       return;
     }
     if (action.type === 'WATCH_SLATE') {
@@ -547,12 +515,7 @@ export class App {
     if (action.type === 'REST') {
       if (!this.career.restDay()) return;
       this.career.pendingAftermath = this.season.lastAftermath;
-      if (this.career.isTerminal()) {
-        clearSeasonSave();
-        this.setMode('seasonEnd');
-      } else if (this.career.pendingAftermath) {
-        this.setMode('aftermath');
-      }
+      this.afterLudusMutation();
       return;
     }
     if (action.type === 'ASSIGN') {
@@ -589,85 +552,6 @@ export class App {
     }
   }
 
-  private pollOffers(): void {
-    if (!this.season) {
-      this.goTitle();
-      return;
-    }
-    if (this.escaped()) {
-      this.setMode('ludus');
-      return;
-    }
-    const action = this.offers.poll();
-    if (action.type === 'BACK') {
-      this.setMode('ludus');
-      return;
-    }
-    if (action.type === 'PICK') {
-      this.career.pickOffer(action.offer);
-      this.lineup.reset(action.offer);
-      this.setMode('lineup');
-    }
-  }
-
-  private pollLineup(): void {
-    if (!this.season || !this.career.pendingOffer) {
-      this.setMode('ludus');
-      return;
-    }
-    if (this.escaped()) {
-      this.setMode('offers');
-      return;
-    }
-    const action = this.lineup.poll();
-    if (action.type === 'BACK') {
-      this.setMode('offers');
-      return;
-    }
-    if (action.type === 'FIGHT') {
-      this.career.setLineup(action.lineupIds);
-      if (action.orders) this.career.setOrders(action.orders);
-      const config = this.career.buildCareerConfig(action.lineupIds, this.career.pendingOffer);
-      this.enterFight(config, 'career');
-    }
-  }
-
-  private pollAftermath(): void {
-    if (!this.season || !this.career.pendingAftermath) {
-      this.setMode('ludus');
-      return;
-    }
-    if (this.escaped()) {
-      this.career.clearPending();
-      this.career.persist();
-      this.setMode('ludus');
-      return;
-    }
-    const action = this.aftermathView.poll();
-    if (action.type === 'CONTINUE') {
-      this.career.clearPending();
-      this.career.persist();
-      if (this.career.isTerminal()) {
-        clearSeasonSave();
-        this.setMode('seasonEnd');
-      } else {
-        this.setMode('ludus');
-      }
-    }
-  }
-
-  private pollSeasonEnd(): void {
-    if (!this.season) {
-      this.goTitle();
-      return;
-    }
-    const action = this.seasonEnd.poll();
-    if (action.type === 'TITLE') {
-      this.career.settleAndClear();
-      this.goTitle();
-    }
-  }
-
   /** Esc backs out one menu level — never while a modal is open. */
   private escaped(): boolean {
     return this.input.wasKeyPressed('Escape') && !isModalOpen();
@@ -689,7 +573,8 @@ export class App {
         boutStats: action.boutStats,
       });
       this.fights.dispose();
-      this.setMode('aftermath');
+      // The aftermath card now lives on the Ludus hub over the frozen fight scene.
+      this.setMode('ludus');
       return;
     }
 

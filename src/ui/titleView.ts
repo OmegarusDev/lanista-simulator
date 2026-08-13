@@ -1,4 +1,4 @@
-import { hasSeasonSave, loadLegacy } from '../shell/save';
+import { hasSeasonSave, loadLegacy, loadSeason } from '../shell/save';
 import { btn, clear, el } from './dom';
 import { openHelp } from './help';
 import { confirmModal, farewellModal } from './modal';
@@ -9,6 +9,10 @@ export type TitleAction =
   | { type: 'NEW_SEASON' }
   | { type: 'CONTINUE' };
 
+/**
+ * The Court — the home screen. One hero action (Quick Match), one career
+ * action, and quiet secondary tools. The arena breathes behind it.
+ */
 export class TitleView {
   readonly root: HTMLElement;
   private pending: TitleAction = { type: 'NONE' };
@@ -46,21 +50,30 @@ export class TitleView {
     brand.append(el('p', { className: 'tagline', text: 'Amphitheatre · Ludus · Fame' }));
 
     const canContinue = hasSeasonSave();
+    const saved = canContinue ? loadSeason() : null;
     const stack = el('div', { className: 'stack' });
-    if (canContinue) {
+
+    stack.append(
+      btn('Quick Match', {
+        className: 'cta',
+        onClick: () => this.emit({ type: 'INSTANT_MATCH' }),
+      }),
+    );
+    stack.append(
+      el('p', { className: 'stack-sub', text: 'Instant skirmish — no stakes, no save.' }),
+    );
+
+    if (canContinue && saved) {
       stack.append(
-        btn('Continue Season', {
-          className: 'cta',
+        btn(`Continue — Day ${saved.day} · ${saved.denarii}d`, {
           onClick: () => this.emit({ type: 'CONTINUE' }),
         }),
       );
-    }
-    stack.append(
-      btn('New Season', {
-        className: canContinue ? undefined : 'cta',
-        onClick: () => {
-          this.onUi();
-          if (canContinue) {
+      stack.append(
+        btn('New Season', {
+          className: 'quiet',
+          onClick: () => {
+            this.onUi();
             confirmModal({
               title: 'New Season',
               body: 'Starting a new season replaces your current save. Your legacy (patronage, alumni) carries over.',
@@ -68,16 +81,16 @@ export class TitleView {
               danger: true,
               onConfirm: () => this.emit({ type: 'NEW_SEASON' }),
             });
-          } else {
-            this.emit({ type: 'NEW_SEASON' });
-          }
-        },
-      }),
-      btn('Practice Yard', {
-        className: 'ghost',
-        onClick: () => this.emit({ type: 'INSTANT_MATCH' }),
-      }),
-    );
+          },
+        }),
+      );
+    } else {
+      stack.append(
+        btn('New Season', {
+          onClick: () => this.emit({ type: 'NEW_SEASON' }),
+        }),
+      );
+    }
 
     const row = el('div', { className: 'title-tools' });
     row.append(
@@ -101,8 +114,8 @@ export class TitleView {
     const foot = el('p', {
       className: 'footer-note',
       text: canContinue
-        ? 'Practice Yard is instant matches — no career save.'
-        : 'Open a season to run the ludus, or spar in the Practice Yard.',
+        ? 'Quick Match is instant fights — your career save stays untouched.'
+        : 'Run the ludus through a season, or spar in the Skirmish Yard.',
     });
     const leg = loadLegacy();
     if (leg.seasonsCompleted > 0 || leg.patronage > 0) {

@@ -29,11 +29,11 @@ npm run build
 
 **Title:** Instant Match (one click) · New Season · Continue (if saved) · How to Play · Exit.  
 **Instant Match:** Lab amphitheatre — 1v1/2v2/3v3, Match/Venatio — no career side effects.  
-**Season:** Ludus hub → Munera board → slot Lineup → Fight → Aftermath → End Day. Heal, rest days, upkeep, virtus tiers. Armamentarium unlocks Armory (kit piece swaps on a live GL mannequin). Day 18 ends the season with a Grand Munus capstone. Destructive actions (New Season over a save, Release, Forfeit) ask for confirmation; `Esc` backs out of any menu.
+**Season:** One Ludus hub — Roster / Munera / Market / School tabs over the live arena. Pick a bout, slot your lineup on the sand, Fight, then the aftermath card returns to the hub → End Day. Heal, rest days, upkeep, virtus tiers. Armamentarium unlocks Armory (kit piece swaps on a live GL mannequin). Day 18 ends the season with a Grand Munus capstone on the hub. Destructive actions (New Season over a save, Release, Forfeit) ask for confirmation; `Esc` backs out of any menu.
 
 ## Controls
 
-**Sandbox / Fight:** Wheel or pinch to dolly; drag to pan the arena plane (clamped to the sand); Shift+drag — or two-finger drag on touch — to orbit yaw/pitch. Click fighters to inspect. After ~8s without input during a fight the camera hands back to the auto-director; **Recenter** in the bottom chrome returns instantly.  
+**Skirmish / Fight:** Wheel or pinch to dolly; drag to pan the arena plane (clamped to the sand); Shift+drag — or two-finger drag on touch — to orbit yaw/pitch. Click fighters to inspect. After ~8s without input during a fight the camera hands back to the auto-director; **Recenter** in the bottom chrome returns instantly.  
 **Fight (lab):** Pause menu — Leave, Restart, Reroll, Mute; bottom chrome has speed, Pause, Recenter.  
 **Fight (career):** Pause menu — Leave (forfeit if early, with confirmation), Mute; Continue on result.  
 Keys: `Space` fight, `Esc`/`P` pause (or clear inspect / back on menus), `Q` leave, `R`/`N` lab restart/reroll, `1`/`2`/`4` speed, `D` feel debug, `+/-` dolly. Full controls are in the in-game **How to Play** panel (title screen or pause menu).
