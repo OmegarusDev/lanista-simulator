@@ -3,6 +3,7 @@ import type { DayAssignment } from '../../content/rpg';
 import type { SeededRNG } from '../rng';
 import { addXp } from './gladiator';
 import { hasFacility } from './facilities';
+import { addInjury, HEAL_DAYS, syncInjuryTier } from './injury';
 import type { SeasonState } from './types';
 
 export function setGladiatorAssignment(
@@ -35,7 +36,12 @@ export function resolveAssignments(state: SeasonState, rng: SeededRNG): string[]
     if (a === 'RECOVER' || a === 'REST') {
       g.fatigue = Math.max(0, g.fatigue - (a === 'REST' ? 2 : 1));
       g.hpRatio = Math.min(1, g.hpRatio + (a === 'REST' ? 0.18 : 0.12));
-      if (a === 'REST' && g.injury === 'LIGHT' && rng.chance(0.35)) g.injury = 'NONE';
+      g.vitality = Math.max(0.15, g.hpRatio); // keep readiness alias in sync
+      if (a === 'REST' && g.injury === 'LIGHT' && rng.chance(0.35)) {
+        // Cure clears the light injuries — the tier cache must not drift.
+        g.injuries = g.injuries.filter((i) => i.permanent || i.severity === 'critical');
+        syncInjuryTier(g);
+      }
       notes.push(`${g.name} ${a === 'REST' ? 'rests' : 'recovers'}.`);
       continue;
     }
@@ -46,7 +52,13 @@ export function resolveAssignments(state: SeasonState, rng: SeededRNG): string[]
       g.fatigue += 1;
       const chance = economy.trainInjuryChance * injMul * (g.fatigue >= 3 ? 1.4 : 1);
       if (rng.chance(chance)) {
-        g.injury = g.injury === 'NONE' ? 'LIGHT' : 'SEVERE';
+        const severity = g.injury === 'NONE' ? 'minor' : 'serious';
+        addInjury(g, {
+          id: `train-${g.id}-${state.day}`,
+          part: 'arm',
+          severity,
+          daysLeft: HEAL_DAYS[severity],
+        });
         notes.push(`${g.name} overtrains — ${g.injury === 'SEVERE' ? 'badly hurt' : 'hurt'}.`);
       } else {
         notes.push(
@@ -63,9 +75,16 @@ export function resolveAssignments(state: SeasonState, rng: SeededRNG): string[]
       g.mastery += 2;
       g.fatigue += 2;
       g.hpRatio = Math.max(0.25, g.hpRatio - 0.08);
+      g.vitality = Math.max(0.15, g.hpRatio); // keep readiness alias in sync
       const chance = economy.sparInjuryChance * injMul * (g.fatigue >= 3 ? 1.5 : 1);
       if (rng.chance(chance)) {
-        g.injury = g.injury === 'NONE' ? 'LIGHT' : g.injury === 'LIGHT' ? 'SEVERE' : 'SEVERE';
+        const severity = g.injury === 'NONE' ? 'minor' : 'serious';
+        addInjury(g, {
+          id: `spar-${g.id}-${state.day}`,
+          part: 'ribs',
+          severity,
+          daysLeft: HEAL_DAYS[severity],
+        });
         notes.push(`${g.name} sparring accident.`);
       } else {
         notes.push(

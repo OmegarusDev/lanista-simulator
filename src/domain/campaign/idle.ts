@@ -26,6 +26,7 @@ export function applyOfflineIdle(state: SeasonState, now = Date.now()): string[]
     g.fatigue = Math.max(0, g.fatigue - hours * economy.idleFatiguePerHour);
     if (g.injury === 'NONE') {
       g.hpRatio = Math.min(1, g.hpRatio + hours * economy.idleHpPerHour);
+      g.vitality = g.hpRatio; // keep readiness alias in sync
     }
     if (g.fatigue < beforeF - 0.01 || g.hpRatio > beforeH + 0.01) touched += 1;
   }

@@ -122,7 +122,9 @@ export class FightScene {
     }
 
     const steps = this.speed;
+    let ran = 0;
     for (let i = 0; i < steps; i++) {
+      ran++;
       const result = this.match.step();
       this.consumeEvents(this.match.getRecentEvents());
       const shout = this.match.consumeCrowdShout();
@@ -147,7 +149,8 @@ export class FightScene {
       this.interestY = null;
     }
 
-    this.glFrame.fx.step(steps);
+    // Step FX exactly as far as the sim ran — no overshoot on the KO frame.
+    this.glFrame.fx.step(ran);
 
     if (this.shake > 0) this.shake *= 0.85;
     if (this.shake < 0.2) this.shake = 0;
@@ -159,14 +162,6 @@ export class FightScene {
         this.hudDirty = true;
       }
     }
-
-    const snaps = this.match.snapshots();
-    this.glFrame.camera.updateDirector(snaps, {
-      selectedId: this.selectedId,
-      interestX: this.interestX ?? undefined,
-      interestY: this.interestY ?? undefined,
-      autoRecover: true,
-    });
 
     return { type: 'NONE' };
   }
@@ -371,6 +366,8 @@ export class FightScene {
       this.debugFeel,
       caption,
       mvp ?? '',
+      Math.round(this.match.teamCrowdFavor(0) * 100),
+      Math.round(this.match.teamCrowdFavor(1) * 100),
       this.story.join('|'),
       snaps
         .map(

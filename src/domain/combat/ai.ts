@@ -745,7 +745,8 @@ export function footworkFromVelocity(
   const vLat = self.vx * lx + self.vy * ly;
   const thresh = combatTuning.footworkVelThresh;
   if (Math.abs(vLat) > thresh * 0.85 && Math.abs(vLat) >= Math.abs(vRad) * 0.7) {
-    return vLat > 0 || lateralBias < 0 ? 'CIRCLE_L' : 'CIRCLE_R';
+    // vLat > 0 ⟺ moving along +lateral ⟺ bias +1 ⟺ CIRCLE_R (see below).
+    return vLat > 0 || lateralBias > 0 ? 'CIRCLE_R' : 'CIRCLE_L';
   }
   if (vRad > thresh) return 'CLOSE';
   if (vRad < -thresh) return 'DISENGAGE';

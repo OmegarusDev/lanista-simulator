@@ -92,7 +92,7 @@ export function resolveCuts(
         assignIntention(tgt, 'PRESS', tick);
         tgt.tempoUntil = Math.max(tgt.tempoUntil, tick + 8);
         setStareTicks(0);
-        continue;
+        break; // single-hit attacks connect once — never multi-hit
       }
 
       const band = measureBandQuality(distance, d);
@@ -162,7 +162,7 @@ export function resolveCuts(
         atk.hitConnected = true;
         applyGuardRhythm(atk, tgt, tick, rng, setStareTicks);
         if (tgt.hp <= 0) pushEvent('KO', atk, tgt, band.bloodMul * 18);
-        continue;
+        break; // single-hit attacks connect once — never multi-hit
       }
 
       tgt.hp = Math.max(0, tgt.hp - weaponDmg);
@@ -190,6 +190,7 @@ export function resolveCuts(
       }
 
       if (tgt.hp <= 0) pushEvent('KO', atk, tgt, band.bloodMul * 20);
+      break; // single-hit attacks connect once — never multi-hit
     }
   }
 }

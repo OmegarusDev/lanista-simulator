@@ -11,9 +11,7 @@ export function pickFighterWorld(
   let best: FighterDraw | null = null;
   let bestD = radius * radius;
   for (const f of fighters) {
-    if (!f.alive && f.kind === 'gladiator') {
-      /* still pick KO for inspect */
-    }
+    // Dead fighters are still pickable — KO fighters can be inspected.
     const dx = f.x - worldX;
     const dy = f.y - worldY;
     const d = dx * dx + dy * dy;

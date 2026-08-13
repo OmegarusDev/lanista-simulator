@@ -78,8 +78,9 @@ export function buildKitMatrix(
   sz: number,
   ry: number,
   rz: number,
+  out?: Float32Array,
 ): Float32Array {
-  const m = new Float32Array(16);
+  const m = out ?? new Float32Array(16);
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   const cyaw = Math.cos(yaw + ry * D2R);
@@ -159,7 +160,10 @@ class GeometryCache {
     }
     if (this.map.size >= GeometryCache.MAX) {
       const first = this.map.keys().next().value;
-      if (first != null) this.map.delete(first);
+      if (first != null) {
+        this.map.get(first)?.dispose();
+        this.map.delete(first);
+      }
     }
     this.map.set(key, m);
     return m;
@@ -200,8 +204,8 @@ export class SceneFighters {
     ry: number,
     rz: number,
   ): void {
-    const m = buildKitMatrix(x, y, z, yaw, ox, oy, oz, sx, sy, sz, ry, rz);
-    this.model.set(m);
+    // Scratch-reuse the model matrix — no per-part allocation on the hot path.
+    const m = buildKitMatrix(x, y, z, yaw, ox, oy, oz, sx, sy, sz, ry, rz, this.model);
     gl.uniformMatrix4fv(this.prog.uniform('u_model'), false, m);
   }
 

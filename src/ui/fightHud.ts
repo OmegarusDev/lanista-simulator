@@ -67,6 +67,7 @@ export class FightHud {
   private padBottom = 128;
 
   private built = false;
+  private structuralKey = '';
   private formatEl!: HTMLElement;
   private lineupEl!: HTMLElement;
   private seedEl!: HTMLElement;
@@ -117,9 +118,14 @@ export class FightHud {
   }
 
   render(opts: FightHudRender): void {
-    if (!this.built) {
+    // Structural identity: team size / roster count / career mode. A lab
+    // 3v3 restart into a 1v1 (or REROLL) must rebuild chips and labels.
+    const structural = `${opts.teamSize}|${opts.snaps.length}|${opts.career}`;
+    if (!this.built || structural !== this.structuralKey) {
+      this.chips = [];
       this.build(opts);
       this.built = true;
+      this.structuralKey = structural;
     }
     this.patch(opts);
   }

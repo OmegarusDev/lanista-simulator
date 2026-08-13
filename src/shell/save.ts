@@ -62,8 +62,8 @@ function migrateGladiator(raw: Partial<Gladiator> & { id: number; name: string; 
     g.injuries.push({
       id: `legacy-${g.id}-sev`,
       part: 'knee',
-      severity: 'serious',
-      daysLeft: 4,
+      severity: 'critical',
+      daysLeft: 7,
     });
   }
   syncInjuryTier(g);
@@ -86,7 +86,10 @@ function migrateSeason(data: Record<string, unknown>): SeasonState | null {
     denarii: typeof data.denarii === 'number' ? data.denarii : 0,
     virtus: typeof data.virtus === 'number' ? data.virtus : 0,
     restDaysLeft: typeof data.restDaysLeft === 'number' ? data.restDaysLeft : 0,
-    nextGladiatorId: typeof data.nextGladiatorId === 'number' ? data.nextGladiatorId : roster.length + 1,
+    nextGladiatorId:
+      typeof data.nextGladiatorId === 'number'
+        ? data.nextGladiatorId
+        : Math.max(0, ...roster.map((g) => g.id)) + 1,
     roster,
     offers: Array.isArray(data.offers) ? (data.offers as SeasonState['offers']) : [],
     slate: Array.isArray(data.slate) ? (data.slate as SeasonState['slate']) : [],

@@ -2,7 +2,7 @@ import type { BodyPart, InjurySeverity } from '../../content/identity';
 import type { SeededRNG } from '../rng';
 import type { BodyInjury, Gladiator, InjuryTier } from './types';
 
-const HEAL_DAYS: Record<InjurySeverity, number> = {
+export const HEAL_DAYS: Record<InjurySeverity, number> = {
   minor: 2,
   serious: 4,
   critical: 7,
@@ -144,8 +144,6 @@ export function tickInjuries(g: Gladiator, healBonus = 0): string[] {
     if (inj.daysLeft <= 0) {
       notes.push(`${g.name}'s ${injuryLabel(inj)} heals.`);
       g.injuries.splice(i, 1);
-    } else if (inj.severity === 'critical' && healBonus <= 0 && Math.random() < 0) {
-      // reserved — worsening uses seeded path in medicus callers
     }
   }
   syncInjuryTier(g);

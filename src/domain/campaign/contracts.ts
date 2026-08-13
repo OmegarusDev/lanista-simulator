@@ -25,7 +25,7 @@ export function tickContracts(state: SeasonState): string[] {
   for (const c of state.contracts) {
     if (c.completed || c.failed) continue;
     c.daysLeft -= 1;
-    if (c.daysLeft < 0) {
+    if (c.daysLeft <= 0) {
       c.failed = true;
       state.virtus = Math.max(0, state.virtus - 2);
       notes.push(`Contract failed: ${c.name}.`);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { combatTuning } from '../../content/combat';
 import { createQuickMatch } from './match';
+import { Fighter, resetFighterIds } from './fighter';
+import { resolveCuts } from './matchCuts';
+import { SeededRNG } from '../rng';
 
 describe('Match', () => {
   it('1v1 eventually terminates', () => {
@@ -49,5 +52,29 @@ describe('Match', () => {
     );
     const result = m.runToEnd();
     expect(['TEAM0', 'TEAM1', 'DRAW']).toContain(result);
+  });
+
+  it('a single swing connects once — never multi-hits every foe in range', () => {
+    resetFighterIds();
+    const atk = new Fighter(0, 'MURMILLO', 'A', 0, 0, 0);
+    const foe1 = new Fighter(1, 'THRAEX', 'B', 30, 0, Math.PI);
+    const foe2 = new Fighter(1, 'THRAEX', 'C', 30, 6, Math.PI);
+    // Both foes are within attackRange 50 and inside the attack cone.
+    atk.phase = 'ACTIVE';
+    atk.action = 'ATTACK';
+    const events: string[] = [];
+    resolveCuts(
+      [atk, foe1, foe2],
+      0,
+      new SeededRNG(7),
+      (_k, _a, t) => {
+        if (t) events.push(`${_k}:${t.id}`);
+      },
+      () => {},
+    );
+    const hits = events.filter((e) => e.startsWith('HIT:') || e.startsWith('GUARD:'));
+    expect(hits.length).toBe(1);
+    const damaged = [foe1, foe2].filter((f) => f.hp < f.maxHp);
+    expect(damaged.length).toBe(1);
   });
 });
