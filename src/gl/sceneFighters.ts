@@ -31,6 +31,35 @@ export function simFacingToYaw(facing: number): number {
 const D2R = Math.PI / 180;
 
 /**
+ * Parse a geometry cache key back into builder arguments (hundredths encoding,
+ * optional one-letter kind prefix for cache namespacing). Pure — shared by the
+ * renderer and the tests, so "no invisible geometry" is a testable invariant.
+ * Returns null for shared primitives.
+ */
+export function parseGeometryParams(geo: KitPartDraw['geo']): number[] | null {
+  const clean = (s: string): number => Number(s.replace(/^[a-z]/, '')) / 100;
+  switch (geo.kind) {
+    case 'box':
+    case 'cyl':
+    case 'sph':
+      return null;
+    case 'frustum':
+      return geo.params.split(':').map(clean);
+    case 'lathe':
+      return geo.params
+        .split(';')
+        .map((p) => p.split(',').map(clean))
+        .flat();
+    case 'bent':
+      return geo.params.split(':').map(clean);
+    case 'torus':
+      return geo.params.split(':').map(clean);
+    default:
+      return null;
+  }
+}
+
+/**
  * Kit part world matrix — the ONLY place local→world for parts is defined.
  * Convention (matches the pre-shape pipeline): local +X maps to
  * (cos, 0, −sin) at yaw, i.e. the rotation is Ry(−yaw) in standard terms.
@@ -95,35 +124,36 @@ class GeometryCache {
   }
 
   resolve(geo: KitPartDraw['geo']): Mesh {
-    if (geo.kind === 'box' || geo.params === '') return this.shared;
-    if (geo.kind === 'cyl') return this.cyl;
-    if (geo.kind === 'sph') return this.sph;
-    let m = this.map.get(geo.params);
+    if (geo.kind === 'box' || geo.kind === 'cyl' || geo.kind === 'sph') {
+      if (geo.kind === 'cyl') return this.cyl;
+      if (geo.kind === 'sph') return this.sph;
+      return this.shared;
+    }
+    const key = `${geo.kind}:${geo.params}`;
+    let m = this.map.get(key);
     if (m) return m;
+    const params = parseGeometryParams(geo);
+    if (!params || params.some((v) => !Number.isFinite(v) || v < 0)) {
+      return this.shared; // never draw degenerate geometry
+    }
     switch (geo.kind) {
-      case 'frustum': {
-        const [sx1, sy, sz1, sx2, sz2] = geo.params.split(':').map((v) => Number(v) / 100);
-        m = createFrustum(this.gl, sx1!, sy!, sz1!, sx2!, sz2!);
+      case 'frustum':
+        m = createFrustum(this.gl, params[0]!, params[1]!, params[2]!, params[3]!, params[4]!);
         break;
-      }
       case 'lathe': {
-        const profile = geo.params.split(';').map((p) => {
-          const [y, r] = p.split(',').map((v) => Number(v) / 100);
-          return [y!, r!] as [number, number];
-        });
+        const profile: [number, number][] = [];
+        for (let i = 0; i < params.length; i += 2) {
+          profile.push([params[i]!, params[i + 1]!]);
+        }
         m = createLathe(this.gl, profile);
         break;
       }
-      case 'bent': {
-        const [len, w, t, c] = geo.params.split(':').map((v) => Number(v) / 100);
-        m = createBentBlade(this.gl, len!, w!, t!, c!);
+      case 'bent':
+        m = createBentBlade(this.gl, params[0]!, params[1]!, params[2]!, params[3]!);
         break;
-      }
-      case 'torus': {
-        const [inner, outer] = geo.params.split(':').map((v) => Number(v) / 100);
-        m = createTorus(this.gl, inner!, outer!);
+      case 'torus':
+        m = createTorus(this.gl, params[0]!, params[1]!);
         break;
-      }
       default:
         m = this.shared;
     }
@@ -131,7 +161,7 @@ class GeometryCache {
       const first = this.map.keys().next().value;
       if (first != null) this.map.delete(first);
     }
-    this.map.set(geo.params, m);
+    this.map.set(key, m);
     return m;
   }
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { resolveParts, toFighterDraw } from './drawModel';
 import { appearanceHash, kitPartsForFighter } from './kitMesh';
+import { parseGeometryParams } from './sceneFighters';
+import { ARMATURA_LIST } from '../content/armatura';
 import type { FighterSnapshot } from '../domain/combat/types';
 
 function stub(over: Partial<FighterSnapshot> = {}): FighterSnapshot {
@@ -100,5 +102,37 @@ describe('kitMesh', () => {
     const rim = m.find((p) => p.kind === 'shieldRim');
     expect(rim).toBeTruthy();
     expect(rim!.rz).toBe(90); // torus rolled into the Y-Z plane
+  });
+
+  it('NO INVISIBLE GEOMETRY: every armatura kit resolves to finite, non-zero shapes', () => {
+    for (const armatura of ARMATURA_LIST) {
+      const parts = kitPartsForFighter(toFighterDraw(stub({ armatura })));
+      expect(parts.length, armatura).toBeGreaterThan(0);
+      for (const p of parts) {
+        const params = parseGeometryParams(p.geo);
+        if (params === null) continue; // shared primitives are always fine
+        for (let i = 0; i < params.length; i++) {
+          const v = params[i]!;
+          const label = `${armatura} ${p.kind} ${p.geo.params}`;
+          expect(Number.isFinite(v), label).toBe(true);
+          // Lathe Y coordinates are positions (may be negative); radii and
+          // all other dims must be non-negative or the builder degenerates.
+          if (p.geo.kind === 'lathe' && i % 2 === 0) continue;
+          expect(v, label).toBeGreaterThanOrEqual(0);
+        }
+      }
+    }
+  });
+
+  it('gladius blade round-trips through the cache key to the shape dims', () => {
+    const m = kitPartsForFighter(toFighterDraw(stub({ armatura: 'MURMILLO' })));
+    const blades = m.filter((p) => p.kind === 'gladius' && p.geo.kind === 'frustum');
+    const [w, len, t, wTip, tTip] = parseGeometryParams(
+      blades.sort((a, b) => parseGeometryParams(b.geo)![1]! - parseGeometryParams(a.geo)![1]!)[0]!.geo,
+    )!;
+    expect(len).toBeGreaterThan(12); // full blade length in hundredths-encoded units
+    expect(w).toBeGreaterThan(t); // blade is wide and thin
+    expect(wTip).toBeLessThan(w); // tapers toward the tip
+    expect(tTip).toBeLessThanOrEqual(t);
   });
 });
