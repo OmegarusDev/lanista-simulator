@@ -14,9 +14,17 @@ export class Input {
    * Only emitted from multi-touch on the attached stage element.
    */
   pinchDelta = 0;
+  /**
+   * Two-finger centroid drag this frame (CSS px, screen coords).
+   * Accumulated alongside pinchDelta — lets a two-finger drag orbit the camera.
+   */
+  orbitDx = 0;
+  orbitDy = 0;
   private readonly keys = new Set<string>();
   private readonly keyPressed = new Set<string>();
   private pinchBaseDist = 0;
+  private prevCentroidX = 0;
+  private prevCentroidY = 0;
   private readonly activeTouches = new Map<number, { x: number; y: number }>();
 
   attach(
@@ -78,6 +86,17 @@ export class Input {
       return Math.hypot(b.x - a.x, b.y - a.y);
     };
 
+    const touchCentroid = (): { x: number; y: number } => {
+      const pts = [...this.activeTouches.values()];
+      let x = 0;
+      let y = 0;
+      for (const p of pts) {
+        x += p.x;
+        y += p.y;
+      }
+      return { x: x / pts.length, y: y / pts.length };
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       if (e.cancelable) e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; i++) {
@@ -86,6 +105,9 @@ export class Input {
       }
       if (this.activeTouches.size >= 2) {
         this.pinchBaseDist = touchDist();
+        const c = touchCentroid();
+        this.prevCentroidX = c.x;
+        this.prevCentroidY = c.y;
         this.pointer.down = false;
         this.pointer.clicked = false;
       }
@@ -97,13 +119,20 @@ export class Input {
         const t = e.changedTouches.item(i)!;
         this.activeTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
       }
-      if (this.activeTouches.size >= 2 && this.pinchBaseDist > 8) {
-        const d = touchDist();
-        if (d > 8) {
-          // log-ish scale: ratio > 1 → zoom in
-          const ratio = d / this.pinchBaseDist;
-          this.pinchDelta += (ratio - 1) * 0.85;
-          this.pinchBaseDist = d;
+      if (this.activeTouches.size >= 2) {
+        const c = touchCentroid();
+        this.orbitDx += c.x - this.prevCentroidX;
+        this.orbitDy += c.y - this.prevCentroidY;
+        this.prevCentroidX = c.x;
+        this.prevCentroidY = c.y;
+        if (this.pinchBaseDist > 8) {
+          const d = touchDist();
+          if (d > 8) {
+            // log-ish scale: ratio > 1 → zoom in
+            const ratio = d / this.pinchBaseDist;
+            this.pinchDelta += (ratio - 1) * 0.85;
+            this.pinchBaseDist = d;
+          }
         }
       }
     };
@@ -152,6 +181,8 @@ export class Input {
     this.pointer.clicked = false;
     this.wheelDelta = 0;
     this.pinchDelta = 0;
+    this.orbitDx = 0;
+    this.orbitDy = 0;
     this.keyPressed.clear();
   }
 

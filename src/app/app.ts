@@ -110,6 +110,12 @@ export class App {
     const onResize = () => {
       if (this.shell.app.classList.contains('has-stage')) {
         resizeStageCanvas(this.shell);
+        // Orientation change: director-owned land cameras reframe to the new aspect.
+        const cam = this.shell.frame?.camera;
+        if (cam && this.mode !== 'fight' && this.mode !== 'sandbox' && cam.mode !== 'manual') {
+          const r = this.shell.stage.getBoundingClientRect();
+          cam.frameArena(defaultStageDolly(r.width || 400, r.height || 400));
+        }
       }
     };
     window.addEventListener('resize', onResize);
@@ -260,7 +266,12 @@ export class App {
     if (!this.shell.frame) return;
     const { cssW, cssH } = resizeStageCanvas(this.shell);
     this.shell.frame.camera.updateDirector([]);
-    this.shell.frame.camera.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta);
+    this.shell.frame.camera.applyZoomInput(
+      this.input.wheelDelta,
+      this.input.pinchDelta,
+      this.input.orbitDx,
+      this.input.orbitDy,
+    );
     this.handleAmbientDrag(cssW, cssH);
     const seed = this.season?.seed ?? this.ambientSeed;
     this.shell.frame.render(emptyStageDrawModel(seed, mood));
@@ -270,7 +281,7 @@ export class App {
     if (!this.shell.frame) return;
     const { cssW, cssH } = resizeStageCanvas(this.shell);
     const cam = this.shell.frame.camera;
-    cam.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta);
+    cam.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta, this.input.orbitDx, this.input.orbitDy);
     if (this.input.wasKeyPressed('Equal') || this.input.wasKeyPressed('NumpadAdd')) {
       cam.nudgeDolly(0.08);
     }
@@ -408,7 +419,12 @@ export class App {
   private handleAmbientDrag(cssW: number, cssH: number): void {
     const cam = this.shell.frame?.camera;
     if (!cam) return;
-    cam.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta);
+    cam.applyZoomInput(
+      this.input.wheelDelta,
+      this.input.pinchDelta,
+      this.input.orbitDx,
+      this.input.orbitDy,
+    );
     if (this.input.isPinching) {
       if (cam.isDragging()) cam.endDrag();
       this.previewPtrWasDown = this.input.pointer.down;

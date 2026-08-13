@@ -56,6 +56,8 @@ export class FightScene {
   private hudTick = 0;
   private hudKey = '';
   private framedOnce = false;
+  private lastCssW = 0;
+  private lastCssH = 0;
   private story: string[] = [];
   private firstBlood = false;
 
@@ -161,17 +163,25 @@ export class FightScene {
       selectedId: this.selectedId,
       interestX: this.interestX ?? undefined,
       interestY: this.interestY ?? undefined,
+      autoRecover: true,
     });
 
     return { type: 'NONE' };
   }
 
   paint(cssW: number, cssH: number, input: Input): FightAction {
-    if (!this.framedOnce && cssW > 1 && cssH > 1) {
-      this.framedOnce = true;
+    if (cssW > 1 && cssH > 1 && (cssW !== this.lastCssW || cssH !== this.lastCssH)) {
+      this.lastCssW = cssW;
+      this.lastCssH = cssH;
       this.glFrame.camera.resize(cssW, cssH);
-      this.glFrame.camera.frameArena(defaultStageDolly(cssW, cssH));
-      this.hudDirty = true;
+      if (!this.framedOnce) {
+        this.framedOnce = true;
+        this.glFrame.camera.frameArena(defaultStageDolly(cssW, cssH));
+        this.hudDirty = true;
+      } else if (this.glFrame.camera.mode !== 'manual') {
+        // Orientation change while director-owned: reframe to the new aspect.
+        this.glFrame.camera.frameArena(defaultStageDolly(cssW, cssH));
+      }
     }
 
     const snapsAll = this.match.snapshots();
@@ -180,6 +190,7 @@ export class FightScene {
       selectedId: this.selectedId,
       interestX: this.interestX ?? undefined,
       interestY: this.interestY ?? undefined,
+      autoRecover: true,
     });
     const model = toStageDrawModel(snapsAll, {
       seed: this.config.seed,
@@ -425,6 +436,12 @@ export class FightScene {
         this.synth.play('ui');
         this.hudDirty = true;
         return { type: 'NONE' };
+      case 'RECENTER':
+        this.glFrame.camera.recenter();
+        this.selectedId = null;
+        this.synth.play('ui');
+        this.hudDirty = true;
+        return { type: 'NONE' };
       case 'RESUME':
         this.paused = false;
         this.hudDirty = true;
@@ -493,7 +510,7 @@ export class FightScene {
     cssH: number,
   ): void {
     const cam = this.glFrame.camera;
-    cam.applyZoomInput(input.wheelDelta, input.pinchDelta);
+    cam.applyZoomInput(input.wheelDelta, input.pinchDelta, input.orbitDx, input.orbitDy);
     if (input.wasKeyPressed('Equal') || input.wasKeyPressed('NumpadAdd')) {
       cam.nudgeDolly(0.08);
     }

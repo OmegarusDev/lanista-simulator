@@ -22,10 +22,26 @@ import {
 export type CamMode = 'director' | 'manual' | 'focus';
 
 export const CAMERA_DOLLY_MIN = 380;
-export const CAMERA_DOLLY_MAX = 1180;
+export const CAMERA_DOLLY_MAX = 1500;
 export const CAMERA_PITCH_MIN = 0.42; // rad from horizontal (~24°)
 export const CAMERA_PITCH_MAX = 1.22; // ~70°
 export const CAMERA_YAW_RANGE = 0.55;
+/** Base vertical FOV (rad) — landscape matches today's framing exactly. */
+const CAMERA_VFOV = (42 * Math.PI) / 180;
+/**
+ * Horizontal FOV floor — narrow/portrait screens never lose the arena sides.
+ * A fixed vertical FOV collapses the horizontal FOV to ~20° on tall phones,
+ * which hid 70% of the arena; the floor widens the vertical FOV instead.
+ */
+const CAMERA_HFOV_MIN = (40 * Math.PI) / 180;
+const CAMERA_NEAR = 8;
+const CAMERA_FAR = 4000;
+/** Arena look-at margin — panning can never leave the sand. */
+const PAN_MARGIN = 40;
+/** Idle ticks (~8s at 60fps) before a manual camera hands back to the director. */
+export const CAMERA_RECOVER_TICKS = 480;
+/** Ticks a fresh user input claims the camera before the director retunes. */
+const USER_HOLD_TICKS = 180;
 
 const CENTER_X = ARENA_WORLD_W * 0.5;
 const CENTER_Z = ARENA_WORLD_H * 0.5;
@@ -59,8 +75,12 @@ export class StageCamera {
 
   focusId: number | null = null;
   private focusHold = 0;
-  private userDollyHold = 0;
-  private userOrbitHold = 0;
+  private userHold = 0;
+  private recoverTicks = CAMERA_RECOVER_TICKS;
+
+  /** Effective projection half-FOVs (aspect-aware — hfov never below floor). */
+  private hfovHalf = Math.tan(CAMERA_VFOV / 2) * (16 / 9);
+  private vfovHalf = CAMERA_VFOV / 2;
 
   private shakeAmp = 0;
   private shakeSeed = 1;
@@ -103,8 +123,8 @@ export class StageCamera {
     this.panZ = 0;
     this.focusId = null;
     this.focusHold = 0;
-    this.userDollyHold = 0;
-    this.userOrbitHold = 0;
+    this.userHold = 0;
+    this.recoverTicks = CAMERA_RECOVER_TICKS;
     this.shakeAmp = 0;
     this.dragging = false;
     this.dragMoved = false;
@@ -125,6 +145,8 @@ export class StageCamera {
     this.smoothZ = CENTER_Z;
     this.panX = 0;
     this.panZ = 0;
+    this.userHold = 0;
+    this.recoverTicks = CAMERA_RECOVER_TICKS;
     const d = clamp(dolly ?? defaultStageDolly(960, 540), CAMERA_DOLLY_MIN, CAMERA_DOLLY_MAX);
     this.dolly = d;
     this.smoothDolly = d;
@@ -144,21 +166,28 @@ export class StageCamera {
   /** Resize updates projection only — never stomps user dolly/orbit. */
   resize(cssW: number, cssH: number): void {
     this.aspect = Math.max(0.2, cssW / Math.max(1, cssH));
-    mat4Perspective(this.proj, (42 * Math.PI) / 180, this.aspect, 8, 4000);
+    const hfovHalf = Math.max(
+      Math.tan(CAMERA_HFOV_MIN / 2),
+      Math.tan(CAMERA_VFOV / 2) * this.aspect,
+    );
+    this.hfovHalf = hfovHalf;
+    this.vfovHalf = Math.atan(hfovHalf / this.aspect);
+    mat4Perspective(this.proj, this.vfovHalf * 2, this.aspect, CAMERA_NEAR, CAMERA_FAR);
     this.projReady = true;
     this.rebuildMatrices();
   }
 
   dollyBy(delta: number): void {
     this.dolly = clamp(this.dolly + delta, CAMERA_DOLLY_MIN, CAMERA_DOLLY_MAX);
-    this.userDollyHold = 180;
+    this.userHold = USER_HOLD_TICKS;
     if (this.mode === 'director') this.mode = 'manual';
   }
 
-  /** Wheel/pinch → dolly (positive delta = zoom in / closer). */
-  applyZoomInput(wheelDelta: number, pinchDelta: number): void {
+  /** Wheel/pinch → dolly, two-finger centroid drag → orbit (positive delta = zoom in). */
+  applyZoomInput(wheelDelta: number, pinchDelta: number, orbitDx = 0, orbitDy = 0): void {
     if (wheelDelta) this.dollyBy(wheelDelta * 0.55);
     if (pinchDelta) this.dollyBy(-pinchDelta * 180);
+    if (orbitDx || orbitDy) this.orbit(orbitDx * 0.0045, orbitDy * 0.003);
   }
 
   nudgeDolly(frac: number): void {
@@ -168,13 +197,15 @@ export class StageCamera {
   orbit(dyaw: number, dpitch: number): void {
     this.yaw = clamp(this.yaw + dyaw, -CAMERA_YAW_RANGE, CAMERA_YAW_RANGE);
     this.pitch = clamp(this.pitch + dpitch, CAMERA_PITCH_MIN, CAMERA_PITCH_MAX);
-    this.userOrbitHold = 180;
+    this.userHold = USER_HOLD_TICKS;
     if (this.mode === 'director') this.mode = 'manual';
   }
 
   panOnPlane(dx: number, dz: number): void {
-    this.panX += dx;
-    this.panZ += dz;
+    const lookX = clamp(this.targetX + this.panX + dx, PAN_MARGIN, ARENA_WORLD_W - PAN_MARGIN);
+    const lookZ = clamp(this.targetZ + this.panZ + dz, PAN_MARGIN, ARENA_WORLD_H - PAN_MARGIN);
+    this.panX = lookX - this.targetX;
+    this.panZ = lookZ - this.targetZ;
     if (this.mode === 'director') this.mode = 'manual';
   }
 
@@ -229,7 +260,7 @@ export class StageCamera {
   clearFocus(): void {
     this.focusId = null;
     this.focusHold = 0;
-    this.mode = this.userDollyHold > 0 || this.userOrbitHold > 0 ? 'manual' : 'director';
+    this.mode = this.userHold > 0 ? 'manual' : 'director';
   }
 
   beginDrag(sx: number, sy: number, orbit = false): void {
@@ -251,7 +282,7 @@ export class StageCamera {
     if (this.orbitDrag) {
       this.yaw = clamp(this.dragYaw0 + dx * 0.004, -CAMERA_YAW_RANGE, CAMERA_YAW_RANGE);
       this.pitch = clamp(this.pitch + dy * 0.003, CAMERA_PITCH_MIN, CAMERA_PITCH_MAX);
-      this.userOrbitHold = 180;
+      this.userHold = USER_HOLD_TICKS;
       if (this.mode === 'director') this.mode = 'manual';
     } else {
       const scale = this.smoothDolly * 0.0018;
@@ -259,8 +290,18 @@ export class StageCamera {
       const syaw = Math.sin(this.smoothYaw);
       const wx = (-dx * cy - dy * syaw) * scale;
       const wz = (dx * syaw - dy * cy) * scale;
-      this.panX = this.dragPan0X + wx;
-      this.panZ = this.dragPan0Z + wz;
+      const lookX = clamp(
+        this.targetX + this.dragPan0X + wx,
+        PAN_MARGIN,
+        ARENA_WORLD_W - PAN_MARGIN,
+      );
+      const lookZ = clamp(
+        this.targetZ + this.dragPan0Z + wz,
+        PAN_MARGIN,
+        ARENA_WORLD_H - PAN_MARGIN,
+      );
+      this.panX = lookX - this.targetX;
+      this.panZ = lookZ - this.targetZ;
       if (this.mode === 'director') this.mode = 'manual';
     }
   }
@@ -278,14 +319,30 @@ export class StageCamera {
 
   updateDirector(
     fighters: readonly { id: number; x: number; y: number; alive?: boolean }[],
-    opts?: { selectedId?: number | null; interestX?: number; interestY?: number },
+    opts?: {
+      selectedId?: number | null;
+      interestX?: number;
+      interestY?: number;
+      /** Hand a manual camera back to the director after ~8s idle (fight scenes). */
+      autoRecover?: boolean;
+    },
   ): void {
-    if (this.userDollyHold > 0) this.userDollyHold--;
-    if (this.userOrbitHold > 0) this.userOrbitHold--;
+    if (this.userHold > 0) {
+      this.userHold--;
+      this.recoverTicks = CAMERA_RECOVER_TICKS;
+    } else if (this.mode === 'manual') {
+      if (opts?.autoRecover) {
+        this.recoverTicks--;
+        if (this.recoverTicks <= 0) {
+          this.mode = 'director';
+          this.recoverTicks = CAMERA_RECOVER_TICKS;
+        }
+      }
+    }
     if (this.focusHold > 0) {
       this.focusHold--;
       if (this.focusHold <= 0 && this.mode === 'focus') {
-        this.mode = this.userDollyHold > 0 || this.userOrbitHold > 0 ? 'manual' : 'director';
+        this.mode = this.userHold > 0 ? 'manual' : 'director';
         this.focusId = null;
       }
     }
@@ -325,17 +382,45 @@ export class StageCamera {
       this.targetZ = CENTER_Z;
     }
 
-    if (this.userDollyHold <= 0) {
-      const span = spanOf(alive);
-      const want = clamp(520 + span * 0.55, CAMERA_DOLLY_MIN, CAMERA_DOLLY_MAX);
+    if (this.userHold <= 0) {
+      const want = this.desiredDollyFor(alive);
       this.dolly += (want - this.dolly) * 0.04;
     }
   }
 
+  /**
+   * Director framing for the alive set: fit the fight's horizontal span and its
+   * depth (foreshortened by pitch) to the effective FOV, whichever needs more
+   * dolly. Aspect-aware, so portrait fights frame wide instead of clipping.
+   */
+  private desiredDollyFor(
+    alive: readonly { id: number; x: number; y: number; alive?: boolean }[],
+  ): number {
+    const span = spanOf(alive);
+    const halfW = 300 + span * 0.55;
+    const halfD = 160 + span * 0.35;
+    const dollyW = halfW / this.hfovHalf;
+    const dollyD = (halfD * Math.sin(this.smoothPitch)) / Math.tan(this.vfovHalf);
+    return clamp(Math.max(dollyW, dollyD), CAMERA_DOLLY_MIN, CAMERA_DOLLY_MAX);
+  }
+
+  /** Hand back to the director immediately (Recenter button / rotation reframe). */
+  recenter(): void {
+    this.mode = 'director';
+    this.focusId = null;
+    this.focusHold = 0;
+    this.panX = 0;
+    this.panZ = 0;
+    this.userHold = 0;
+    this.recoverTicks = CAMERA_RECOVER_TICKS;
+  }
+
   tickSmooth(): void {
     const k = 0.14;
-    this.smoothX += (this.targetX + this.panX - this.smoothX) * k;
-    this.smoothZ += (this.targetZ + this.panZ - this.smoothZ) * k;
+    const lookX = clamp(this.targetX + this.panX, PAN_MARGIN, ARENA_WORLD_W - PAN_MARGIN);
+    const lookZ = clamp(this.targetZ + this.panZ, PAN_MARGIN, ARENA_WORLD_H - PAN_MARGIN);
+    this.smoothX += (lookX - this.smoothX) * k;
+    this.smoothZ += (lookZ - this.smoothZ) * k;
     this.smoothDolly += (this.dolly - this.smoothDolly) * k;
     this.smoothPitch += (this.pitch - this.smoothPitch) * k;
     this.smoothYaw += (this.yaw - this.smoothYaw) * k;
@@ -439,10 +524,10 @@ function spanOf(fighters: readonly { x: number; y: number }[]): number {
   return Math.hypot(maxX - minX, maxZ - minZ);
 }
 
-/** Default dolly framing for a viewport aspect. */
+/** Default dolly framing for a viewport aspect — portrait pulls back. */
 export function defaultStageDolly(cssW: number, cssH: number): number {
   const aspect = cssW / Math.max(1, cssH);
-  if (aspect < 0.75) return 820;
+  if (aspect < 0.75) return 1050;
   if (aspect > 1.8) return 680;
   return 720;
 }

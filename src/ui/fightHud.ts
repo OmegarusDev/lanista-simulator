@@ -13,6 +13,7 @@ export type FightHudAction =
   | { type: 'SPEED'; speed: number }
   | { type: 'SELECT'; id: number | null }
   | { type: 'FOCUS_TEAM'; team: 0 | 1 }
+  | { type: 'RECENTER' }
   | { type: 'RESUME' }
   | { type: 'MUTE' }
   | { type: 'RESTART' }
@@ -183,6 +184,12 @@ export class FightHud {
         className: 'pause-btn',
         active: opts.paused,
         onClick: () => this.emit({ type: 'PAUSE_TOGGLE' }),
+      }),
+    );
+    controls.append(
+      btn('Recenter', {
+        className: 'quiet',
+        onClick: () => this.emit({ type: 'RECENTER' }),
       }),
     );
     bottom.append(controls);
