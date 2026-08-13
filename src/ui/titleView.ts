@@ -7,7 +7,8 @@ export type TitleAction =
   | { type: 'NONE' }
   | { type: 'INSTANT_MATCH' }
   | { type: 'NEW_SEASON' }
-  | { type: 'CONTINUE' };
+  | { type: 'CONTINUE' }
+  | { type: 'SOUND' };
 
 /**
  * The Court — the home screen. One hero action (Quick Match), one career
@@ -16,9 +17,16 @@ export type TitleAction =
 export class TitleView {
   readonly root: HTMLElement;
   private pending: TitleAction = { type: 'NONE' };
+  private muted = false;
 
   constructor(private readonly onUi: () => void) {
     this.root = el('div', { className: 'screen title-screen' });
+  }
+
+  /** Reflect the app's mute state on the Sound button. */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    if (!this.root.classList.contains('is-hidden')) this.render();
   }
 
   mount(host: HTMLElement): void {
@@ -94,6 +102,13 @@ export class TitleView {
 
     const row = el('div', { className: 'title-tools' });
     row.append(
+      btn(this.muted ? 'Sound: Off' : 'Sound: On', {
+        className: 'quiet',
+        onClick: () => {
+          this.onUi();
+          this.emit({ type: 'SOUND' });
+        },
+      }),
       btn('How to Play', {
         className: 'quiet',
         onClick: () => {

@@ -172,4 +172,25 @@ describe('StageCamera', () => {
     expect(cam.panX).toBe(0);
     expect(cam.panZ).toBe(0);
   });
+
+  it('focal zoom keeps the pinch point fixed on screen', () => {
+    const cam = new StageCamera();
+    cam.resize(960, 540);
+    cam.frameArena();
+    const sx = 640;
+    const sy = 320;
+    const before = cam.worldFromScreen(sx, sy, 960, 540)!;
+    cam.zoomAt(sx, sy, 960, 540, -120);
+    const after = cam.worldFromScreen(sx, sy, 960, 540)!;
+    expect(after.x).toBeCloseTo(before.x, 0);
+    expect(after.y).toBeCloseTo(before.y, 0);
+    // Corner zoom still clamps the LOOK-AT (screen center ray) to the arena —
+    // the focal pan can never carry the camera off the sand.
+    cam.zoomAt(5, 5, 960, 540, 2000);
+    const lookAt = cam.worldFromScreen(480, 270, 960, 540)!;
+    expect(lookAt.x).toBeGreaterThanOrEqual(40);
+    expect(lookAt.x).toBeLessThanOrEqual(ARENA_WORLD_W - 40);
+    expect(lookAt.y).toBeGreaterThanOrEqual(40);
+    expect(lookAt.y).toBeLessThanOrEqual(ARENA_WORLD_H - 40);
+  });
 });

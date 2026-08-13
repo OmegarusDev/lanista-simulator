@@ -348,6 +348,10 @@ export class FightScene {
       ticker: this.story,
       mvp,
       crowdLean,
+      entertainment: this.match.fighters.reduce(
+        (sum, f) => sum + this.match.entertainment.score(f.id),
+        0,
+      ),
     });
   }
 
@@ -514,7 +518,17 @@ export class FightScene {
     cssH: number,
   ): void {
     const cam = this.glFrame.camera;
-    cam.applyZoomInput(input.wheelDelta, input.pinchDelta, input.orbitDx, input.orbitDy);
+    const focal = input.pinchCentroid ?? { x: input.pointer.x, y: input.pointer.y };
+    cam.applyZoomInput(
+      input.wheelDelta,
+      input.pinchDelta,
+      input.orbitDx,
+      input.orbitDy,
+      focal.x,
+      focal.y,
+      cssW,
+      cssH,
+    );
     if (input.wasKeyPressed('Equal') || input.wasKeyPressed('NumpadAdd')) {
       cam.nudgeDolly(0.08);
     }

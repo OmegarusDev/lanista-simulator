@@ -46,6 +46,8 @@ export interface FightHudRender {
   debugFeel: boolean;
   ticker?: string[];
   mvp?: string | null;
+  /** Total entertainment earned in the bout (shown on the lab end card). */
+  entertainment?: number;
   /** Strong crowd lean ('blue' | 'red') tints the caption. */
   crowdLean?: 'blue' | 'red' | null;
 }
@@ -301,7 +303,10 @@ export class FightHud {
     const wantOverlay = opts.paused && !opts.finished ? 'pause' : opts.finished ? 'end' : null;
     if (wantOverlay && this.overlayEl?.dataset.kind !== wantOverlay) {
       this.overlayEl?.remove();
-      this.overlayEl = wantOverlay === 'pause' ? this.pauseOverlay(opts.career, opts.muted) : this.endOverlay(opts.career, opts.resultLabel, opts.mvp);
+      this.overlayEl =
+        wantOverlay === 'pause'
+          ? this.pauseOverlay(opts.career, opts.muted)
+          : this.endOverlay(opts.career, opts.resultLabel, opts.mvp, opts.entertainment);
       this.overlayEl.dataset.kind = wantOverlay;
       this.overlaySlot.append(this.overlayEl);
     } else if (!wantOverlay && this.overlayEl) {
@@ -384,13 +389,26 @@ export class FightHud {
     return ov;
   }
 
-  private endOverlay(career: boolean, resultLabel: string, mvp?: string | null): HTMLElement {
+  private endOverlay(
+    career: boolean,
+    resultLabel: string,
+    mvp?: string | null,
+    entertainment?: number,
+  ): HTMLElement {
     const ov = el('div', { className: 'overlay' });
     const panel = el('div', { className: 'overlay-panel' });
     panel.append(el('h2', { text: 'Bout over' }));
     panel.append(el('div', { className: 'banner', text: resultLabel }));
     if (mvp) {
       panel.append(el('div', { className: 'banner-sub', text: mvp }));
+    }
+    if (!career && entertainment != null) {
+      panel.append(
+        el('p', {
+          className: 'ledger',
+          text: `Entertainment · ${entertainment} points`,
+        }),
+      );
     }
     const stack = el('div', { className: 'stack' });
     if (career) {

@@ -232,22 +232,55 @@ export class App {
     if (!this.shell.frame) return;
     const { cssW, cssH } = resizeStageCanvas(this.shell);
     this.shell.frame.camera.updateDirector([]);
+    const focal = this.input.pinchCentroid ?? { x: this.input.pointer.x, y: this.input.pointer.y };
     this.shell.frame.camera.applyZoomInput(
       this.input.wheelDelta,
       this.input.pinchDelta,
       this.input.orbitDx,
       this.input.orbitDy,
+      focal.x,
+      focal.y,
+      cssW,
+      cssH,
     );
     this.handleAmbientDrag(cssW, cssH);
     const seed = this.season?.seed ?? this.ambientSeed;
-    this.shell.frame.render(emptyStageDrawModel(seed, mood));
+    const model =
+      this.mode === 'title' ? this.titleStageModel(seed) : emptyStageDrawModel(seed, mood);
+    this.shell.frame.render(model);
+  }
+
+  /** The Court breathes: two fighters squaring up on the sand behind the title. */
+  private titleStageModel(seed: number): StageDrawModel {
+    const a = mannequinSnapshot(1, 'MURMILLO', 'Blue', seed & 0xffff);
+    a.x = ARENA_WORLD_W * 0.38;
+    a.y = ARENA_WORLD_H * 0.5;
+    a.facing = 0.4;
+    a.intention = 'PRESS';
+    const b = mannequinSnapshot(2, 'THRAEX', 'Red', (seed >> 16) & 0xffff);
+    b.team = 1;
+    b.x = ARENA_WORLD_W * 0.62;
+    b.y = ARENA_WORLD_H * 0.5;
+    b.facing = 0.4 + Math.PI;
+    b.intention = 'PRESS';
+    return toStageDrawModel([a, b], { seed, mood: 'rest' });
   }
 
   private paintPracticeStage(): void {
     if (!this.shell.frame) return;
     const { cssW, cssH } = resizeStageCanvas(this.shell);
     const cam = this.shell.frame.camera;
-    cam.applyZoomInput(this.input.wheelDelta, this.input.pinchDelta, this.input.orbitDx, this.input.orbitDy);
+    const focal = this.input.pinchCentroid ?? { x: this.input.pointer.x, y: this.input.pointer.y };
+    cam.applyZoomInput(
+      this.input.wheelDelta,
+      this.input.pinchDelta,
+      this.input.orbitDx,
+      this.input.orbitDy,
+      focal.x,
+      focal.y,
+      cssW,
+      cssH,
+    );
     if (this.input.wasKeyPressed('Equal') || this.input.wasKeyPressed('NumpadAdd')) {
       cam.nudgeDolly(0.08);
     }
@@ -366,11 +399,16 @@ export class App {
   private handleAmbientDrag(cssW: number, cssH: number): void {
     const cam = this.shell.frame?.camera;
     if (!cam) return;
+    const focal = this.input.pinchCentroid ?? { x: this.input.pointer.x, y: this.input.pointer.y };
     cam.applyZoomInput(
       this.input.wheelDelta,
       this.input.pinchDelta,
       this.input.orbitDx,
       this.input.orbitDy,
+      focal.x,
+      focal.y,
+      cssW,
+      cssH,
     );
     if (this.input.isPinching) {
       if (cam.isDragging()) cam.endDrag();
@@ -390,6 +428,12 @@ export class App {
     const action = this.title.poll();
     if (action.type === 'INSTANT_MATCH') {
       this.enterLab('title');
+      return;
+    }
+    if (action.type === 'SOUND') {
+      this.synth.toggleMute();
+      this.title.setMuted(this.synth.isMuted);
+      this.synth.play('ui');
       return;
     }
     if (action.type === 'NEW_SEASON') {
