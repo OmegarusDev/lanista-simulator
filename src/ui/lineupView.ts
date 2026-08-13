@@ -236,6 +236,13 @@ export class LineupView {
       btn('Enter Arena', {
         className: 'cta',
         disabled: !ready,
+        title: !ready
+          ? this.slots.some((id) => id == null)
+            ? 'Fill every slot to enter.'
+            : state.denarii < offer.entryFee
+              ? `Entry fee ${offer.entryFee}d — not enough denarii.`
+              : 'This bout is locked.'
+          : undefined,
         onClick: () =>
           this.emit({
             type: 'FIGHT',

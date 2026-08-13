@@ -1,5 +1,7 @@
-import { hasSeasonSave } from '../shell/save';
+import { hasSeasonSave, loadLegacy } from '../shell/save';
 import { btn, clear, el } from './dom';
+import { openHelp } from './help';
+import { confirmModal, farewellModal } from './modal';
 
 export type TitleAction =
   | { type: 'NONE' }
@@ -56,7 +58,20 @@ export class TitleView {
     stack.append(
       btn('New Season', {
         className: canContinue ? undefined : 'cta',
-        onClick: () => this.emit({ type: 'NEW_SEASON' }),
+        onClick: () => {
+          this.onUi();
+          if (canContinue) {
+            confirmModal({
+              title: 'New Season',
+              body: 'Starting a new season replaces your current save. Your legacy (patronage, alumni) carries over.',
+              confirmLabel: 'Start New',
+              danger: true,
+              onConfirm: () => this.emit({ type: 'NEW_SEASON' }),
+            });
+          } else {
+            this.emit({ type: 'NEW_SEASON' });
+          }
+        },
       }),
       btn('Practice Yard', {
         className: 'ghost',
@@ -64,13 +79,46 @@ export class TitleView {
       }),
     );
 
+    const row = el('div', { className: 'title-tools' });
+    row.append(
+      btn('How to Play', {
+        className: 'quiet',
+        onClick: () => {
+          this.onUi();
+          openHelp();
+        },
+      }),
+      btn('Exit', {
+        className: 'quiet',
+        onClick: () => {
+          this.onUi();
+          farewellModal(() => this.render());
+        },
+      }),
+    );
+    stack.append(row);
+
     const foot = el('p', {
       className: 'footer-note',
       text: canContinue
         ? 'Practice Yard is instant matches — no career save.'
         : 'Open a season to run the ludus, or spar in the Practice Yard.',
     });
+    const leg = loadLegacy();
+    if (leg.seasonsCompleted > 0 || leg.patronage > 0) {
+      foot.append(
+        el('span', {
+          className: 'footer-extra',
+          text: `  ·  Legacy: ${leg.seasonsCompleted} seasons · patronage ${leg.patronage} · ${leg.alumni.length} alumni`,
+        }),
+      );
+    }
 
     this.root.append(brand, stack, foot);
+  }
+
+  /** Re-surface legacy after returning from a season. */
+  refreshLegacy(): void {
+    if (!this.root.classList.contains('is-hidden')) this.render();
   }
 }

@@ -29,6 +29,7 @@ export function btn(
     className?: string;
     disabled?: boolean;
     active?: boolean;
+    title?: string;
     onClick?: () => void;
   },
 ): HTMLButtonElement {
@@ -38,6 +39,7 @@ export function btn(
   });
   if (opts?.disabled) b.disabled = true;
   if (opts?.active) b.classList.add('is-active');
+  if (opts?.title) b.title = opts.title;
   if (opts?.onClick) b.addEventListener('click', (e) => {
     e.preventDefault();
     opts.onClick!();

@@ -83,9 +83,17 @@ export class OffersView {
       }
       row.append(copy);
       const canAfford = state.denarii >= o.entryFee;
+      const locked = !o.eligible;
+      const label = locked ? 'Locked' : canAfford ? 'Accept' : 'Fee';
+      const reason = locked
+        ? `Needs a fit fighter: ${formatSlotGates(o.playerSlots)}.`
+        : canAfford
+          ? undefined
+          : `Entry fee ${o.entryFee}d — not enough denarii.`;
       row.append(
-        btn(o.eligible ? (canAfford ? 'Accept' : 'Fee') : 'Locked', {
-          disabled: !o.eligible || !canAfford,
+        btn(label, {
+          disabled: locked || !canAfford,
+          title: reason,
           onClick: () => this.emit({ type: 'PICK', offer: o }),
         }),
       );

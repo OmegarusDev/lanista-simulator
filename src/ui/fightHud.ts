@@ -2,6 +2,8 @@ import { ARMATURAE } from '../content/armatura';
 import { BEASTS } from '../content/beasts';
 import type { FighterSnapshot } from '../domain/combat/types';
 import { btn, clear, el, segment } from './dom';
+import { openHelp } from './help';
+import { confirmModal } from './modal';
 
 const SPEEDS = [1, 2, 4] as const;
 
@@ -80,6 +82,8 @@ export class FightHud {
       debugLines?: string[];
     };
     debugFeel: boolean;
+    ticker?: string[];
+    mvp?: string | null;
   }): void {
     clear(this.root);
 
@@ -105,6 +109,14 @@ export class FightHud {
     top.append(meter);
     top.append(el('div', { className: 'crowd-caption', text: opts.crowdCaption }));
     this.root.append(top);
+
+    if (opts.ticker?.length) {
+      const ticker = el('div', { className: 'fight-ticker' });
+      for (const line of opts.ticker.slice(-2)) {
+        ticker.append(el('span', { className: 'ticker-line', text: line }));
+      }
+      this.root.append(ticker);
+    }
 
     if (opts.inspect) {
       const dock = el('div', {
@@ -183,7 +195,7 @@ export class FightHud {
       this.root.append(this.pauseOverlay(opts.career, opts.muted));
     }
     if (opts.finished) {
-      this.root.append(this.endOverlay(opts.career, opts.resultLabel));
+      this.root.append(this.endOverlay(opts.career, opts.resultLabel, opts.mvp));
     }
   }
 
@@ -218,14 +230,35 @@ export class FightHud {
     stack.append(
       btn(muted ? 'Unmute' : 'Mute', { onClick: () => this.emit({ type: 'MUTE' }) }),
     );
+    stack.append(
+      btn('How to Play', {
+        onClick: () => {
+          this.onUi();
+          openHelp();
+        },
+      }),
+    );
     if (!career) {
       stack.append(btn('Restart', { onClick: () => this.emit({ type: 'RESTART' }) }));
       stack.append(btn('Reroll', { onClick: () => this.emit({ type: 'REROLL' }) }));
     }
     stack.append(
-      btn('Leave', {
+      btn(career ? 'Forfeit & Leave' : 'Leave', {
         className: 'quiet',
-        onClick: () => this.emit({ type: 'LEAVE' }),
+        onClick: () => {
+          this.onUi();
+          if (career) {
+            confirmModal({
+              title: 'Forfeit',
+              body: 'Abandon this bout? Your fighters take the loss and any entry fee is lost.',
+              confirmLabel: 'Forfeit',
+              danger: true,
+              onConfirm: () => this.emit({ type: 'LEAVE' }),
+            });
+          } else {
+            this.emit({ type: 'LEAVE' });
+          }
+        },
       }),
     );
     panel.append(stack);
@@ -233,11 +266,14 @@ export class FightHud {
     return ov;
   }
 
-  private endOverlay(career: boolean, resultLabel: string): HTMLElement {
+  private endOverlay(career: boolean, resultLabel: string, mvp?: string | null): HTMLElement {
     const ov = el('div', { className: 'overlay' });
     const panel = el('div', { className: 'overlay-panel' });
     panel.append(el('h2', { text: 'Bout over' }));
     panel.append(el('div', { className: 'banner', text: resultLabel }));
+    if (mvp) {
+      panel.append(el('div', { className: 'banner-sub', text: mvp }));
+    }
     const stack = el('div', { className: 'stack' });
     if (career) {
       stack.append(

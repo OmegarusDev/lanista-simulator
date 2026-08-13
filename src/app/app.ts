@@ -29,6 +29,7 @@ import type { FightAction } from './scenes/fight';
 import type { SeasonState } from '../domain/campaign/types';
 import type { FighterSnapshot, SandboxConfig } from '../domain/combat/types';
 import { ARMATURAE } from '../content/armatura';
+import { isModalOpen } from '../ui/modal';
 
 type Mode =
   | 'title'
@@ -448,14 +449,22 @@ export class App {
       this.enterFight(key.config, 'lab');
       return;
     }
+    if (this.escaped()) {
+      this.leavePractice();
+      return;
+    }
     const action = this.practice.poll();
     if (action.type === 'BACK') {
-      this.setMode(this.labReturn === 'ludus' && this.season ? 'ludus' : 'title');
+      this.leavePractice();
       return;
     }
     if (action.type === 'START') {
       this.enterFight(action.config, 'lab');
     }
+  }
+
+  private leavePractice(): void {
+    this.setMode(this.labReturn === 'ludus' && this.season ? 'ludus' : 'title');
   }
 
   private ludusQueries() {
@@ -486,6 +495,11 @@ export class App {
     if (this.career.isTerminal()) {
       clearSeasonSave();
       this.setMode('seasonEnd');
+      return;
+    }
+    if (this.escaped()) {
+      this.career.persist();
+      this.goTitle();
       return;
     }
 
@@ -564,6 +578,10 @@ export class App {
       this.goTitle();
       return;
     }
+    if (this.escaped()) {
+      this.setMode('ludus');
+      return;
+    }
     const action = this.offers.poll();
     if (action.type === 'BACK') {
       this.setMode('ludus');
@@ -581,6 +599,10 @@ export class App {
       this.setMode('ludus');
       return;
     }
+    if (this.escaped()) {
+      this.setMode('offers');
+      return;
+    }
     const action = this.lineup.poll();
     if (action.type === 'BACK') {
       this.setMode('offers');
@@ -596,6 +618,12 @@ export class App {
 
   private pollAftermath(): void {
     if (!this.season || !this.career.pendingAftermath) {
+      this.setMode('ludus');
+      return;
+    }
+    if (this.escaped()) {
+      this.career.clearPending();
+      this.career.persist();
       this.setMode('ludus');
       return;
     }
@@ -622,6 +650,11 @@ export class App {
       this.career.settleAndClear();
       this.goTitle();
     }
+  }
+
+  /** Esc backs out one menu level — never while a modal is open. */
+  private escaped(): boolean {
+    return this.input.wasKeyPressed('Escape') && !isModalOpen();
   }
 
   private applyFightAction(action: FightAction): void {

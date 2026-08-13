@@ -20,6 +20,8 @@ import {
 } from '../content/rpg';
 import type { BodyInjury, SeasonState } from '../domain/campaign/types';
 import { btn, clear, el } from './dom';
+import { confirmModal } from './modal';
+import { toast } from './toast';
 
 /** Read helpers supplied by SeasonController — keeps campaign imports out of the view. */
 export type LudusQueries = {
@@ -180,12 +182,23 @@ export class LudusView {
         btn('Munera Board', {
           className: 'cta',
           disabled: !dayOpen,
+          title: dayOpen
+            ? 'Take a bout from today’s board'
+            : state.status !== 'ACTIVE'
+              ? 'The ludus cannot fight right now.'
+              : undefined,
           onClick: () => this.emit({ type: 'MUNERA' }),
         }),
       );
       foot.append(
         btn('Rest Day', {
           disabled: !dayOpen || state.restDaysLeft <= 0,
+          title:
+            state.restDaysLeft <= 0
+              ? 'No rest days left this season.'
+              : !dayOpen
+                ? 'The day is already resolved.'
+                : undefined,
           onClick: () => this.emit({ type: 'REST' }),
         }),
       );
@@ -294,6 +307,7 @@ export class LudusView {
         btn(a.label, {
           active: sel.assignment === a.id,
           disabled: state.dayResolved,
+          title: state.dayResolved ? 'Assignments lock once the day is resolved.' : undefined,
           onClick: () => this.emit({ type: 'ASSIGN', id: sel.id, assignment: a.id }),
         }),
       );
@@ -309,14 +323,32 @@ export class LudusView {
       care.append(
         btn(c.label, {
           disabled: state.denarii < q.medicusCost(c.tier) || state.status !== 'ACTIVE',
-          onClick: () => this.emit({ type: 'MEDICUS', id: sel.id, tier: c.tier }),
+          title:
+            state.denarii < q.medicusCost(c.tier)
+              ? 'Not enough denarii.'
+              : state.status !== 'ACTIVE'
+                ? 'The ludus cannot act right now.'
+                : undefined,
+          onClick: () => {
+            toast(`The ${c.tier.toLowerCase()} attends to ${sel.name}.`, 'good');
+            this.emit({ type: 'MEDICUS', id: sel.id, tier: c.tier });
+          },
         }),
       );
     }
     care.append(
       btn('Release', {
         className: 'quiet',
-        onClick: () => this.emit({ type: 'RELEASE', id: sel.id }),
+        onClick: () => {
+          this.onUi();
+          confirmModal({
+            title: 'Release',
+            body: `Release ${sel.name} from the ludus? They leave the familia for good.`,
+            confirmLabel: 'Release',
+            danger: true,
+            onConfirm: () => this.emit({ type: 'RELEASE', id: sel.id }),
+          });
+        },
       }),
     );
     detail.append(care);
@@ -351,7 +383,14 @@ export class LudusView {
           disabled:
             state.denarii < m.price ||
             state.roster.filter((g) => !g.retired).length >= q.rosterCap(),
-          onClick: () => this.emit({ type: 'BUY_RECRUIT', offerId: m.id }),
+          title:
+            state.denarii < m.price
+              ? 'Not enough denarii.'
+              : 'The ludus is at full capacity.',
+          onClick: () => {
+            toast(`${m.name} joins the familia.`, 'good');
+            this.emit({ type: 'BUY_RECRUIT', offerId: m.id });
+          },
         }),
       );
       body.append(row);
@@ -402,7 +441,16 @@ export class LudusView {
         row.append(
           btn('Build', {
             disabled: state.denarii < def.cost || state.virtus < def.virtusReq,
-            onClick: () => this.emit({ type: 'BUY_FACILITY', kind: id }),
+            title:
+              state.denarii < def.cost
+                ? 'Not enough denarii.'
+                : state.virtus < def.virtusReq
+                  ? `Requires ${def.virtusReq} virtus.`
+                  : undefined,
+            onClick: () => {
+              toast(`${def.name} raised.`, 'good');
+              this.emit({ type: 'BUY_FACILITY', kind: id });
+            },
           }),
         );
       }
@@ -414,7 +462,11 @@ export class LudusView {
       body.append(
         btn(`Upgrade ${sel.name}'s kit grade`, {
           disabled: sel.gearGrade >= 2,
-          onClick: () => this.emit({ type: 'UPGRADE_GEAR', id: sel.id }),
+          title: sel.gearGrade >= 2 ? 'Already at the finest grade.' : undefined,
+          onClick: () => {
+            toast(`${sel.name}'s kit is upgraded.`, 'good');
+            this.emit({ type: 'UPGRADE_GEAR', id: sel.id });
+          },
         }),
       );
       body.append(this.renderArmory(sel.id, sel.armatura, sel.partsOverride));
@@ -464,6 +516,8 @@ export class LudusView {
       const cur = current.find((id) => KIT_PARTS[id]?.slot === slot) ?? '';
       select.value = cur;
       select.addEventListener('change', () => {
+        const part = KIT_PARTS[select.value];
+        toast(`Swapped ${slot} — ${part ? part.name : 'none'} equipped.`);
         this.emit({
           type: 'EQUIP_PART',
           id: gladiatorId,

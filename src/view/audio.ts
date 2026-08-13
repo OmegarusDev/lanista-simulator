@@ -1,7 +1,9 @@
-/** Tiny Web Audio synth — no asset files. */
+/** Tiny Web Audio synth — no asset files. Mute persists across sessions. */
+const MUTE_KEY = 'lanista.muted';
+
 export class Synth {
   private ctx: AudioContext | null = null;
-  private muted = false;
+  private muted = loadMuted();
 
   ensure(): void {
     if (!this.ctx) {
@@ -12,6 +14,7 @@ export class Synth {
 
   toggleMute(): boolean {
     this.muted = !this.muted;
+    saveMuted(this.muted);
     return this.muted;
   }
 
@@ -93,5 +96,21 @@ export class Synth {
         osc.stop(t + 0.06);
         break;
     }
+  }
+}
+
+function loadMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveMuted(muted: boolean): void {
+  try {
+    localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+  } catch {
+    /* ignore */
   }
 }

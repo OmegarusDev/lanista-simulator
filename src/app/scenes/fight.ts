@@ -54,7 +54,10 @@ export class FightScene {
   private ptrWasDown = false;
   private hudDirty = true;
   private hudTick = 0;
+  private hudKey = '';
   private framedOnce = false;
+  private story: string[] = [];
+  private firstBlood = false;
 
   constructor(
     config: SandboxConfig,
@@ -235,6 +238,23 @@ export class FightScene {
     const caption =
       this.crowdShout && this.crowdShoutLife > 0 ? this.crowdShout.text : lean;
 
+    let mvp: string | null = null;
+    if (this.finished) {
+      let bestId = -1;
+      let bestScore = 0;
+      for (const f of this.match.fighters) {
+        const score = this.match.entertainment.score(f.id);
+        if (score > bestScore) {
+          bestScore = score;
+          bestId = f.id;
+        }
+      }
+      if (bestId >= 0 && bestScore > 0) {
+        const f = this.match.fighters.find((x) => x.id === bestId);
+        if (f) mvp = `${f.name} wins the crowd`;
+      }
+    }
+
     const resultLabel =
       this.match.result === 'DRAW'
         ? 'Draw'
@@ -293,6 +313,10 @@ export class FightScene {
       }
     }
 
+    const key = this.hudRenderKey(snaps, caption, mvp);
+    if (key === this.hudKey) return;
+    this.hudKey = key;
+
     this.hud.render({
       teamSize: this.config.teamSize,
       seed: this.config.seed,
@@ -309,7 +333,34 @@ export class FightScene {
       crowdCaption: caption,
       inspect,
       debugFeel: this.debugFeel,
+      ticker: this.story,
+      mvp,
     });
+  }
+
+  /** Rebuild HUD only when displayed data actually changed — keeps buttons stable mid-fight. */
+  private hudRenderKey(
+    snaps: FighterSnapshot[],
+    caption: string,
+    mvp: string | null,
+  ): string {
+    return [
+      this.selectedId,
+      this.paused,
+      this.finished,
+      this.speed,
+      this.synth.isMuted,
+      this.debugFeel,
+      caption,
+      mvp ?? '',
+      this.story.join('|'),
+      snaps
+        .map(
+          (f) =>
+            `${f.id}:${Math.round(f.hp)}:${Math.round(f.stamina)}:${Math.round(f.poise)}:${f.alive}:${f.action}:${f.phase}:${f.intention}:${f.poiseTier}:${f.guarding}:${f.stunned}:${f.poiseBroken}`,
+        )
+        .join(';'),
+    ].join('|');
   }
 
   private handleKeys(input: Input): FightAction {
@@ -518,6 +569,46 @@ export class FightScene {
         },
       }),
     );
+    this.collectStory(events);
+  }
+
+  /** Turn notable combat events into the crowd's story ticker. */
+  private collectStory(events: CombatEvent[]): void {
+    if (events.length === 0) return;
+    const names = new Map<number, string>();
+    for (const f of this.match.fighters) names.set(f.id, f.name);
+    const byId = (id?: number): string => (id != null ? (names.get(id) ?? 'Someone') : 'Someone');
+
+    for (const ev of events) {
+      switch (ev.kind) {
+        case 'HIT': {
+          const target = this.match.fighters.find((f) => f.id === ev.targetId);
+          const heavy = target && ev.amount != null && ev.amount > target.maxHp * 0.22;
+          if (!this.firstBlood) {
+            this.firstBlood = true;
+            this.story.push(`${byId(ev.actorId)} draws first blood!`);
+          } else if (heavy) {
+            this.story.push(`${byId(ev.actorId)} lands a punishing blow on ${byId(ev.targetId)}!`);
+          }
+          break;
+        }
+        case 'POISE_BREAK':
+          this.story.push(`${byId(ev.targetId)} guard is shattered!`);
+          break;
+        case 'TIP_CATCH':
+          this.story.push(`${byId(ev.actorId)} snares a tip-strike!`);
+          break;
+        case 'STUMBLE':
+          this.story.push(`${byId(ev.actorId)} stumbles on the sand!`);
+          break;
+        case 'KO':
+          this.story.push(`${byId(ev.targetId)} is down — the crowd roars!`);
+          break;
+        default:
+          break;
+      }
+    }
+    if (this.story.length > 3) this.story.splice(0, this.story.length - 3);
   }
 }
 

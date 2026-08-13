@@ -1,6 +1,10 @@
 import { economy } from '../../content/economy';
 import type { EventRole } from '../../content/identity';
-import { MUNERA_TEMPLATES, type MuneraKind, type MuneraTier } from '../../content/munera';
+import {
+  MUNERA_TEMPLATES,
+  type MuneraKind,
+  type MuneraTier,
+} from '../../content/munera';
 import { GRADE_ORDER, LOCATION_FLAVOR, RIVAL_NAMES, type GladiatorGrade } from '../../content/rpg';
 import type { SeededRNG } from '../rng';
 import { canFieldTemplate } from './eligibility';
@@ -73,7 +77,7 @@ export function rollDailyOffers(state: SeasonState, rng: SeededRNG): MuneraOffer
     state.rivalsBeaten.length === 0 &&
     state.relationships.some((e) => e.kind === 'rival' && e.intensity > 0.3);
 
-  return picked.slice(0, 5).map((t, i) => {
+  const daily = picked.slice(0, 5).map((t, i) => {
     let rival = t.tier >= 2 && rng.chance(0.45) ? rng.pick([...RIVAL_NAMES]) : null;
     if (forceRevenge && i === 0) rival = rng.pick([...RIVAL_NAMES]);
     const location = rng.pick([...LOCATION_FLAVOR]);
@@ -124,4 +128,52 @@ export function rollDailyOffers(state: SeasonState, rng: SeededRNG): MuneraOffer
       eventRole,
     };
   });
+
+  if (state.day >= economy.seasonDays && state.status === 'ACTIVE') {
+    return [grandMunusOffer(state, rng), ...daily].slice(0, 5);
+  }
+  return daily;
+}
+
+/** Final-day capstone — the season's crown bout, fieldable with what you own. */
+function grandMunusOffer(state: SeasonState, rng: SeededRNG): MuneraOffer {
+  const hasGrade = (grade: GladiatorGrade): boolean =>
+    state.roster.some(
+      (g) =>
+        !g.retired &&
+        g.injury !== 'SEVERE' &&
+        GRADE_ORDER.indexOf(g.grade) >= GRADE_ORDER.indexOf(grade),
+    );
+  const eligible = MUNERA_TEMPLATES.filter((t) => canFieldTemplate(state, t));
+  const pick =
+    eligible.find(
+      (t) => t.tier >= 2 && t.teamSize <= 2 && (t.tier < 3 || hasGrade('ORDINARIUS')),
+    ) ??
+    eligible[0] ??
+    MUNERA_TEMPLATES.find((t) => t.tier === 1) ??
+    MUNERA_TEMPLATES[0]!;
+  const rival = rng.pick([...RIVAL_NAMES]);
+  const location = rng.pick([...LOCATION_FLAVOR]);
+  return {
+    instanceId: `d${state.day}-grand-munus`,
+    templateId: pick.id,
+    name: `Grand Munus — vs ${rival}`,
+    blurb: `The season's crown: ${pick.blurb} A champion's purse, the editor's eye, and the crowd's verdict. · ${location}.`,
+    kind: pick.kind,
+    tier: Math.max(pick.tier, 2) as MuneraTier,
+    teamSize: pick.teamSize,
+    purse: pick.purse + 40,
+    entryFee: pick.entryFee + 10,
+    virtusWin: pick.virtusWin + 2,
+    virtusLose: pick.virtusLose,
+    playerSlots: pick.playerSlots.map((s) => ({ anyOf: [...s.anyOf], label: s.label })),
+    opponents: [...pick.opponents],
+    eligible: true,
+    location,
+    editor: 'Editor of the games',
+    rivalName: rival,
+    contractId: null,
+    minGrade: pick.tier >= 3 && hasGrade('ORDINARIUS') ? 'ORDINARIUS' : undefined,
+    eventRole: 'championship',
+  };
 }

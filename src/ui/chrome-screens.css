@@ -77,6 +77,20 @@
   letter-spacing: 0.03em;
 }
 
+.footer-extra {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--bronze-hot);
+  font-size: var(--type-meta);
+}
+
+.title-tools {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
 /* Carved stone controls */
 button,
 .btn {
@@ -489,4 +503,132 @@ button.quiet:hover:not(:disabled),
 .center-card .cta {
   margin-top: var(--space-lg);
   width: 100%;
+}
+
+/* —— Modal layer: confirm / help / farewell —— */
+
+.modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--space-lg);
+  background: rgba(6, 8, 12, 0.66);
+  backdrop-filter: blur(2px);
+}
+
+.modal-layer.is-hidden {
+  display: none;
+}
+
+.modal-panel {
+  width: min(30rem, 100%);
+  max-height: min(80vh, 34rem);
+  overflow: auto;
+  padding: var(--space-lg);
+  border: 1.5px solid var(--bronze);
+  border-radius: var(--radius-lg);
+  background:
+    var(--tex-parchment, none),
+    rgba(18, 22, 28, 0.96);
+  background-blend-mode: soft-light, normal;
+  box-shadow:
+    inset 0 0 0 1px rgba(184, 149, 74, 0.18),
+    0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+.modal-title {
+  margin-bottom: var(--space-sm);
+  font-size: var(--type-display);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--parchment);
+}
+
+.modal-body {
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.45;
+}
+
+.modal-line {
+  margin: 0.35rem 0;
+}
+
+.modal-section {
+  margin: var(--space-md) 0 0.2rem;
+  color: var(--bronze-hot);
+  font-size: var(--type-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+}
+
+.modal-actions button {
+  flex: 1 1 8rem;
+}
+
+button.danger,
+.btn.danger {
+  background: linear-gradient(180deg, #7a2e24, #4e1d16);
+  border-color: #b0543f;
+  color: #f0d9c8;
+}
+
+button.danger:hover:not(:disabled),
+.btn.danger:hover:not(:disabled) {
+  background: linear-gradient(180deg, #8f3a2c, #5c241a);
+  border-color: #cf6a50;
+}
+
+/* —— Toast notices —— */
+
+.toast-layer {
+  position: fixed;
+  left: var(--space-md);
+  bottom: calc(var(--space-md) + var(--safe-bottom));
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(24rem, calc(100vw - 2 * var(--space-md)));
+  pointer-events: none;
+}
+
+.toast {
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--bronze);
+  border-radius: var(--radius-sm);
+  background: rgba(14, 18, 24, 0.92);
+  color: var(--parchment);
+  font-size: var(--type-meta);
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.toast.is-good {
+  border-left-color: var(--hp);
+}
+
+.toast.is-bad {
+  border-left-color: var(--foe);
+}
+
+.toast.is-out {
+  opacity: 0;
+  transform: translateY(6px);
 }
