@@ -377,19 +377,113 @@
 
 @media (max-width: 480px) {
   .hud-rail {
-    padding: 0.45rem 0.65rem;
+    padding: 0.4rem 0.65rem;
   }
 
-  .roster-chip .name {
+  .hud-top-row {
+    min-height: 1.3rem;
+  }
+
+  .favor-meter {
+    width: min(9rem, 32vw);
+    height: 4px;
+    margin: 0.2rem auto 0.1rem;
+  }
+
+  .crowd-caption {
+    min-height: 1rem;
     font-size: 11px;
   }
 
+  /* Compact chips: name + armatura tag on one line over a slim hp bar. */
+  .roster-band {
+    padding: 0.25rem 0.65rem 0.3rem;
+  }
+
+  .roster-labels {
+    margin-bottom: 0.15rem;
+  }
+
   .roster-labels button {
-    min-height: 44px;
+    min-height: 28px;
+    padding: 0.1rem 0.3rem;
+    font-size: 10px;
+  }
+
+  .roster-chip {
+    min-height: 42px;
+    padding: 0.2rem 0.35rem;
+  }
+
+  .roster-chip .name {
+    display: inline-block;
+    max-width: 62%;
+    font-size: 12px;
+    vertical-align: baseline;
+  }
+
+  .roster-chip .tag {
+    display: inline;
+    margin-left: 0.35rem;
+    font-size: 10px;
+  }
+
+  .roster-chip .hp-bar {
+    margin-top: 0.2rem;
+    height: 3px;
+  }
+
+  .controls-row {
+    padding: 0.3rem 0.65rem 0.45rem;
+  }
+
+  .controls-row .seg button,
+  .controls-row .pause-btn {
+    min-height: 40px;
+  }
+
+  .controls-row .pause-btn {
+    min-width: 4.5rem;
   }
 
   .inspect-dock {
     width: min(13.5rem, calc(100% - 1rem));
     max-height: min(16rem, 40%);
+  }
+}
+
+/* Landscape phones / short windows: squeeze the rails further so the sand wins. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hud-rail {
+    padding: 0.3rem 0.55rem;
+  }
+
+  .favor-meter {
+    display: none;
+  }
+
+  .roster-band {
+    padding: 0.15rem 0.55rem 0.2rem;
+  }
+
+  .roster-labels {
+    margin-bottom: 0.1rem;
+  }
+
+  .roster-labels button {
+    min-height: 24px;
+  }
+
+  .roster-chip {
+    min-height: 38px;
+  }
+
+  .controls-row {
+    padding: 0.25rem 0.55rem 0.35rem;
+  }
+
+  .controls-row .seg button,
+  .controls-row .pause-btn {
+    min-height: 38px;
   }
 }
