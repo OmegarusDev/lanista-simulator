@@ -513,3 +513,47 @@ export function shapeForPart(id: KitPartId | null | undefined): PartShape | null
   if (!id) return null;
   return PART_SHAPES[id] ?? null;
 }
+
+// ————————————————— Body / strike geometry (render === collision) —————————————————
+
+/**
+ * Appearance-bulk factor — THE shared body-size function. The renderer scales
+ * the torso with it and the combat collision capsule derives from it, so a
+ * look change re-sizes mesh and hitbox together, automatically.
+ */
+export function bodyBulk(seed: number): number {
+  return 1 + ((seed % 17) / 17 - 0.5) * 0.12;
+}
+
+/** Beast bulk (same hash the beast mesh uses). */
+export function beastBulk(beastId: string, seed: number): number {
+  return 1 + (((beastId.length + seed) % 13) / 13 - 0.5) * 0.18;
+}
+
+/** The fighter's collision capsule = the torso mesh, same formulas. */
+export function bodyCollisionCapsule(
+  look: ArmaturaLook,
+  seed: number,
+): { radius: number; height: number; centerY: number } {
+  const bulk = bodyBulk(seed);
+  const bodyR = ((look.bodyRx + look.bodyRy) * 0.5) * 1.55 * bulk;
+  return { radius: bodyR / 2, height: 22 * bulk, centerY: 11 * bulk };
+}
+
+/**
+ * Swing curve — a real cut: the blade stays level while the body lunges
+ * (first half of the phase), then swings at full extension and returns.
+ * Sim-space sign: positive θ rotates the blade clockwise from facing.
+ * The renderer applies the mirrored rotation (ry = −θ·180/π) by convention,
+ * so the drawn sweep and the collision sweep are the same object.
+ */
+export function swingAngleRad(arc: number, frac: number): number {
+  const f = Math.min(1, Math.max(0, frac));
+  return Math.sin(Math.PI * Math.max(0, (f - 0.5) * 2)) * arc;
+}
+
+/** Forward lunge advance (local units): rises 0 → peak by mid-phase, holds. */
+export function lungeOffset(units: number, frac: number): number {
+  const f = Math.min(1, Math.max(0, frac));
+  return units * Math.sin(Math.min(1, f * 2) * (Math.PI / 2));
+}

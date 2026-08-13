@@ -18,6 +18,9 @@ import { PALETTE_RGB } from './paletteRgb';
 import { createProgram, type GlProgram } from './shader';
 import { SOLID_FS, SOLID_VS } from './shaders';
 import { tellPose } from './tells';
+import { strikeParams } from '../content/strike';
+import { lungeOffset, swingAngleRad } from '../content/shapes';
+import type { ArmaturaId } from '../content/armatura';
 
 /**
  * Sim facing → world Yaw (rotation about +Y).
@@ -248,6 +251,18 @@ export class SceneFighters {
       }
 
       const parts = kitPartsForFighter(f);
+      // The weapon swing IS the collision sweep: same strike params, same
+      // curve, same phase fraction. What you see is what hits.
+      const WEAPON_KINDS = new Set(['gladius', 'sica', 'trident', 'spear', 'dual', 'scissor']);
+      const inActive = f.actionPhase === 'ACTIVE' && f.phaseMax > 0;
+      let swing = 0;
+      let lunge = 0;
+      if (inActive) {
+        const base = strikeParams(f.armatura as ArmaturaId, f.parts, f.appearanceSeed);
+        const frac = Math.min(1, Math.max(0, f.phaseT / f.phaseMax));
+        swing = swingAngleRad(base.arc, frac);
+        lunge = lungeOffset(base.lunge, frac);
+      }
       for (const p of parts) {
         const ar = Math.min(1, p.albedo[0] + flash * 0.5);
         const ag = Math.min(1, p.albedo[1] + flash * 0.4);
@@ -255,9 +270,12 @@ export class SceneFighters {
         gl.uniform3f(this.prog.uniform('u_albedo'), ar, ag, ab);
         const phaseReach =
           f.actionPhase === 'ACTIVE' ? 1.15 : f.actionPhase === 'WINDUP' ? 0.9 : 1;
-        const ox = p.ox * phaseReach + hitch * 4;
+        const isWeapon = WEAPON_KINDS.has(p.kind);
+        const ox = p.ox * phaseReach + (isWeapon && inActive ? lunge : 0) + hitch * 4;
         const oy = p.oy * height + lean * 3;
         const oz = p.oz + tell.lateral * 4 + tell.guardOpen * (p.kind.includes('shield') ? -3 : 0);
+        // Render convention mirrors the sim swing: ry = −θ (degrees).
+        const ry = isWeapon && inActive ? -swing * (180 / Math.PI) : p.ry;
         this.writeModel(
           gl,
           f.x,
@@ -270,7 +288,7 @@ export class SceneFighters {
           p.sx,
           p.sy * height,
           p.sz,
-          p.ry,
+          ry,
           p.rz,
         );
         drawMesh(gl, this.geo.resolve(p.geo));

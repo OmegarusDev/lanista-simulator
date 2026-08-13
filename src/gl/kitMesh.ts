@@ -11,6 +11,8 @@ import {
 } from '../content/appearance';
 import type { ArmaturaId } from '../content/armatura';
 import {
+  bodyBulk,
+  beastBulk,
   shapeForPart,
   type PartShape,
   type HelmShape,
@@ -154,7 +156,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
   if (f.kind === 'beast') {
     // Beast silhouettes — bulk + snout/shoulder read by beastId hash
     const seed = (f.beastId ?? 'beast').length + f.appearanceSeed;
-    const bulk = 1 + ((seed % 13) / 13 - 0.5) * 0.18;
+    const bulk = beastBulk(f.beastId ?? 'beast', f.appearanceSeed);
     const snout = 6 + (seed % 5);
     return cacheKit(key, [
       {
@@ -192,7 +194,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
 
   const look = ARMATURA_LOOK[f.armatura as ArmaturaId] ?? ARMATURA_LOOK.MURMILLO;
   const flesh = hueShift(hexRgb(look.bodyFill), f.appearanceSeed);
-  const bulk = 1 + ((f.appearanceSeed % 17) / 17 - 0.5) * 0.12;
+  const bulk = bodyBulk(f.appearanceSeed);
   const bodyR = ((look.bodyRx + look.bodyRy) * 0.5) * 1.55 * bulk;
 
   const out: KitPartDraw[] = [

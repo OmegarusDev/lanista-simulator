@@ -45,6 +45,8 @@ export interface FighterDraw {
   selected: boolean;
   flash: number;
   name: string;
+  /** Footwork state — the render swings the weapon the same arc collision does. */
+  footwork: string;
 }
 
 export interface DustHint {
@@ -131,6 +133,7 @@ export function toFighterDraw(
     selected: opts.selected === true,
     flash: f.flash,
     name: f.name,
+    footwork: f.footwork,
   };
 }
 

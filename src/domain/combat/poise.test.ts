@@ -165,7 +165,11 @@ describe('Poise', () => {
     atk.phaseT = 0;
     atk.hitConnected = false;
 
-    m.step();
+    // The swept blade needs a couple of ACTIVE ticks to develop its lunge
+    // before the first contact (phaseT ≈ 2 reaches full extension).
+    for (let i = 0; i < 3 && !atk.hitConnected; i++) {
+      m.step();
+    }
     expect(m.events.some((e) => e.kind === 'POISE_BREAK')).toBe(true);
     expect(tgt.poiseBroken).toBe(true);
     expect(tgt.intention).toBe('YIELD');

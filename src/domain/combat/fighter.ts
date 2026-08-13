@@ -2,6 +2,8 @@ import { ARMATURAE, type ArmaturaDef, type ArmaturaId } from '../../content/arma
 import { BEASTS, type BeastId } from '../../content/beasts';
 import { combatTuning } from '../../content/combat';
 import { assembleKitFromParts, type KitPartId } from '../../content/kitPieces';
+import { ARMATURA_LOOK } from '../../content/appearance';
+import { beastBulk, bodyCollisionCapsule } from '../../content/shapes';
 import type {
   ActionKind,
   CombatantKind,
@@ -48,6 +50,8 @@ export class Fighter {
   footwork: Footwork = 'HOLD';
   /** Sticky orbit preference: -1 left, +1 right (anti-mirror). */
   orbitSide: -1 | 1 = 1;
+  /** Collision circle radius — derived from the body mesh, never hand-tuned. */
+  collisionRadius: number;
 
   hp: number;
   maxHp: number;
@@ -133,6 +137,11 @@ export class Fighter {
     this.maxPoise = Math.round(d.maxPoise * combatTuning.poisePoolScale);
     this.poise = this.maxPoise;
     this.desiredDist = (d.measureMin + d.measureMax) * 0.5;
+    // Collision = the body mesh, automatically (same formulas as the renderer).
+    this.collisionRadius = bodyCollisionCapsule(
+      ARMATURA_LOOK[armatura] ?? ARMATURA_LOOK.MURMILLO,
+      0,
+    ).radius;
   }
 
   stockKit(): ArmaturaDef {
@@ -161,6 +170,15 @@ export class Fighter {
     }
     if (spec.appearanceSeed != null) {
       this.appearanceSeed = spec.appearanceSeed >>> 0;
+    }
+    // Re-derive the collision capsule from the applied identity (seed, beast).
+    if (this.kind === 'beast' && this.beastId) {
+      this.collisionRadius = 11 * beastBulk(this.beastId, this.appearanceSeed);
+    } else {
+      this.collisionRadius = bodyCollisionCapsule(
+        ARMATURA_LOOK[this.armatura] ?? ARMATURA_LOOK.MURMILLO,
+        this.appearanceSeed,
+      ).radius;
     }
     const stock = this.stockKit();
     // Armory parts → combat pools (not look-only)
