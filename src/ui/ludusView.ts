@@ -205,20 +205,23 @@ export class LudusView {
     const q = this.q();
     clear(this.root);
 
-    this.renderHubBar(state, q);
-    this.renderTabs();
+    // One floating board over the live arena — the sand stays visible around it.
+    const panel = el('div', { className: 'hub-panel' });
+    panel.append(this.buildHubBar(state, q));
+    panel.append(this.buildTabs());
     const body = el('div', { className: 'hub-body' });
     if (this.lineup) this.renderLineup(body, state);
     else if (this.tab === 'roster') this.renderRoster(body, state);
     else if (this.tab === 'munera') this.renderMunera(body, state);
     else if (this.tab === 'market') this.renderMarket(body, state);
     else this.renderSchool(body, state);
-    this.root.append(body);
-    if (!this.lineup) this.renderHubActions(state);
+    panel.append(body);
+    if (!this.lineup) panel.append(this.buildHubActions(state));
+    this.root.append(panel);
     this.renderOverlays();
   }
 
-  private renderHubBar(state: SeasonState, q: LudusQueries): void {
+  private buildHubBar(state: SeasonState, q: LudusQueries): HTMLElement {
     const bar = el('div', { className: 'hub-bar' });
     bar.append(
       btn('←', {
@@ -248,10 +251,10 @@ export class LudusView {
         }),
       );
     }
-    this.root.append(bar);
+    return bar;
   }
 
-  private renderTabs(): void {
+  private buildTabs(): HTMLElement {
     const tabs = el('div', { className: 'tabs hub-tabs' });
     (
       [
@@ -272,10 +275,10 @@ export class LudusView {
         }),
       );
     });
-    this.root.append(tabs);
+    return tabs;
   }
 
-  private renderHubActions(state: SeasonState): void {
+  private buildHubActions(state: SeasonState): HTMLElement {
     const foot = el('div', { className: 'footer-actions hub-actions' });
     const dayOpen = !state.dayResolved && state.status === 'ACTIVE';
     const dayDone = state.dayResolved && state.status === 'ACTIVE';
@@ -306,7 +309,7 @@ export class LudusView {
         onClick: () => this.emit({ type: 'INSTANT_MATCH' }),
       }),
     );
-    this.root.append(foot);
+    return foot;
   }
 
   private renderOverlays(): void {

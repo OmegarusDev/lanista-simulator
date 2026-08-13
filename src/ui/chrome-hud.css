@@ -109,6 +109,24 @@
   letter-spacing: 0.03em;
 }
 
+.crowd-caption.is-lean-blue {
+  color: var(--ally);
+}
+
+.crowd-caption.is-lean-red {
+  color: var(--foe);
+}
+
+.roster-chip.is-fallen {
+  opacity: 0.45;
+}
+
+.roster-chip.is-fallen .name {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(220, 200, 160, 0.7);
+}
+
 /* Play-by-play ticker — story of the bout, floats above the bottom rail. */
 .fight-ticker {
   position: absolute;
@@ -364,6 +382,10 @@
 
   .roster-chip .name {
     font-size: 11px;
+  }
+
+  .roster-labels button {
+    min-height: 44px;
   }
 
   .inspect-dock {

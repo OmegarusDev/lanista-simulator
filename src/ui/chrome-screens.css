@@ -109,6 +109,17 @@ button,
   cursor: pointer;
   touch-action: manipulation;
   box-shadow: inset 0 1px 0 rgba(220, 200, 160, 0.12);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.05s ease;
+}
+
+button:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--bronze-hot);
+  outline-offset: 2px;
 }
 
 button:hover:not(:disabled),
@@ -268,15 +279,35 @@ button.quiet:hover:not(:disabled),
   flex: 1;
 }
 
-/* —— Ludus hub: slim top bar + tabbed content over the live arena —— */
+/* —— Ludus hub: one floating board over the live arena —— */
+
+.ludus-screen {
+  background: transparent;
+}
+
+.hub-panel {
+  flex: 1;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: rgba(13, 17, 23, 0.76);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
 
 .hub-bar {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: 0.35rem 0 0.6rem;
+  padding: 0.6rem 0.9rem;
   border-bottom: 1px solid var(--hairline);
-  margin-bottom: var(--space-sm);
 }
 
 .hub-bar .hub-title {
@@ -310,7 +341,8 @@ button.quiet:hover:not(:disabled),
 }
 
 .hub-tabs {
-  margin-bottom: var(--space-sm);
+  margin: 0;
+  padding: 0.55rem 0.9rem 0.35rem;
 }
 
 .hub-tabs button {
@@ -319,17 +351,32 @@ button.quiet:hover:not(:disabled),
 }
 
 .hub-body {
-  width: 100%;
-  max-width: 44rem;
-  margin: 0 auto;
   flex: 1;
   min-height: 0;
+  padding: 0.9rem 0.9rem var(--space-md);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
 
+.hub-actions {
+  margin: 0;
+  padding: var(--space-md);
+  border-top: 1px solid var(--hairline);
+  background: rgba(12, 16, 20, 0.35);
+}
+
 .hub-actions .quiet {
   margin-left: auto;
+}
+
+@media (max-width: 560px) {
+  .ludus-screen {
+    padding: var(--space-sm);
+  }
+
+  .hub-panel {
+    border-radius: var(--radius-md);
+  }
 }
 
 /* Bout cards on the Munera board */
@@ -362,6 +409,32 @@ button.quiet:hover:not(:disabled),
 .offer-card button {
   align-self: flex-end;
   min-width: 9rem;
+}
+
+/* Thin scrollbars — keep the carved feel, kill the chunky bars. */
+.hub-body,
+.body-scroll,
+.modal-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(184, 149, 74, 0.35) transparent;
+}
+
+.hub-body::-webkit-scrollbar,
+.body-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.hub-body::-webkit-scrollbar-thumb,
+.body-scroll::-webkit-scrollbar-thumb {
+  background: rgba(184, 149, 74, 0.3);
+  border-radius: 4px;
+}
+
+@media (max-width: 480px) {
+  .offer-card button {
+    width: 100%;
+    align-self: stretch;
+  }
 }
 
 .offer-card.is-locked {

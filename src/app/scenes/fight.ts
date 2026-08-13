@@ -235,6 +235,7 @@ export class FightScene {
   private refreshHud(snaps: FighterSnapshot[]): void {
     const alive = this.match.fighters.filter((f) => f.alive);
     let lean = 'Crowd is restless';
+    let crowdLean: 'blue' | 'red' | null = null;
     if (alive.length > 0) {
       let best = alive[0]!;
       let bestFavor = this.match.crowdFavorFor(best.id);
@@ -246,7 +247,10 @@ export class FightScene {
           bestFavor = favor;
         }
       }
-      if (bestFavor >= 0.62) lean = `Crowd favors ${best.name}`;
+      if (bestFavor >= 0.62) {
+        lean = `Crowd favors ${best.name}`;
+        crowdLean = best.team === 0 ? 'blue' : 'red';
+      }
     }
     const caption =
       this.crowdShout && this.crowdShoutLife > 0 ? this.crowdShout.text : lean;
@@ -348,6 +352,7 @@ export class FightScene {
       debugFeel: this.debugFeel,
       ticker: this.story,
       mvp,
+      crowdLean,
     });
   }
 

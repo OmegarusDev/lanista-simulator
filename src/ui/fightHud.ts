@@ -46,6 +46,8 @@ export interface FightHudRender {
   debugFeel: boolean;
   ticker?: string[];
   mvp?: string | null;
+  /** Strong crowd lean ('blue' | 'red') tints the caption. */
+  crowdLean?: 'blue' | 'red' | null;
 }
 
 function fighterTag(f: FighterSnapshot): string {
@@ -231,6 +233,8 @@ export class FightHud {
     this.favorBlueEl.style.width = `${bluePct}%`;
     this.favorRedEl.style.width = `${100 - bluePct}%`;
     this.captionEl.textContent = opts.crowdCaption;
+    this.captionEl.classList.toggle('is-lean-blue', opts.crowdLean === 'blue');
+    this.captionEl.classList.toggle('is-lean-red', opts.crowdLean === 'red');
 
     const blue = opts.snaps.filter((f) => f.team === 0).sort((a, b) => a.id - b.id);
     const red = opts.snaps.filter((f) => f.team === 1).sort((a, b) => a.id - b.id);
@@ -244,6 +248,7 @@ export class FightHud {
         `width:${Math.round((f.hp / f.maxHp) * 100)}%`,
       );
       chip.root.classList.toggle('is-selected', f.id === opts.selectedId);
+      chip.root.classList.toggle('is-fallen', !f.alive);
       chip.root.classList.toggle('is-muted', !f.alive);
     }
 
