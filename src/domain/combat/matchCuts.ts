@@ -81,7 +81,10 @@ export function resolveCuts(
       atk.appearanceSeed,
       atk.kind === 'beast' ? 'beast' : 'gladiator',
     );
-    const strike = { ...base, arc: effectiveAttackArc(d, atk.footwork) };
+    // The effective arc (circling bonus) for gladiators; beasts never swing —
+    // their body-strike is a straight surge, matching what the render shows.
+    const strike =
+      atk.kind === 'beast' ? base : { ...base, arc: effectiveAttackArc(d, atk.footwork) };
     const phaseMax = Math.max(1, atk.phaseMax);
     const frac1 = Math.min(1, atk.phaseT / phaseMax);
     const frac0 = Math.max(0, (atk.phaseT - 1) / phaseMax);

@@ -1,4 +1,4 @@
-import { ARMATURAE, type ArmaturaDef, type ArmaturaId } from '../../content/armatura';
+import { ARMATURAE, effectiveAttackArc, type ArmaturaDef, type ArmaturaId } from '../../content/armatura';
 import { BEASTS, type BeastId } from '../../content/beasts';
 import { combatTuning } from '../../content/combat';
 import { assembleKitFromParts, type KitPartId } from '../../content/kitPieces';
@@ -526,6 +526,10 @@ export class Fighter {
       flash: this.flash,
       partsOverride: this.partsOverride ?? undefined,
       appearanceSeed: this.appearanceSeed || this.id * 9973,
+      // One number for BOTH consumers: the sim sweeps it and the renderer
+      // swings it. Object == visual == collision.
+      strikeArc:
+        this.kind === 'beast' ? 0 : effectiveAttackArc(this.def(), this.footwork),
     };
   }
 }

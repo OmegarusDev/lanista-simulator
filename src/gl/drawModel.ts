@@ -47,6 +47,8 @@ export interface FighterDraw {
   name: string;
   /** Footwork state — the render swings the weapon the same arc collision does. */
   footwork: string;
+  /** Effective swing arc from the sim (circling bonus included). */
+  strikeArc?: number;
 }
 
 export interface DustHint {
@@ -134,6 +136,7 @@ export function toFighterDraw(
     flash: f.flash,
     name: f.name,
     footwork: f.footwork,
+    strikeArc: f.strikeArc,
   };
 }
 

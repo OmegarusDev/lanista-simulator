@@ -55,6 +55,8 @@ export interface FighterSnapshot {
   phaseT: number;
   phaseMax: number;
   footwork: Footwork;
+  /** Effective swing arc (includes circling bonus) — render === collision. */
+  strikeArc?: number;
   intention: Intention;
   desiredDist: number;
   poiseTier: PoiseTier;

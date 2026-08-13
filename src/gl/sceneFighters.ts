@@ -266,7 +266,8 @@ export class SceneFighters {
           f.kind === 'beast' ? 'beast' : 'gladiator',
         );
         const frac = Math.min(1, Math.max(0, f.phaseT / f.phaseMax));
-        swing = swingAngleRad(base.arc, frac);
+        // The sim's effective arc (circling bonus included) is the ONE number.
+        swing = swingAngleRad(f.strikeArc ?? base.arc, frac);
         lunge = lungeOffset(base.lunge, frac);
       }
       for (const p of parts) {
