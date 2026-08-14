@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   aimAngles,
+  fallPose,
   poseHuman,
   poseQuadruped,
   twoBoneIK,
@@ -91,6 +92,23 @@ describe('poseHuman', () => {
     const x0 = pose.legs[0]!.end.x;
     const x1 = pose.legs[1]!.end.x;
     expect(x0).not.toBeCloseTo(x1, 6); // legs scissor in opposition
+  });
+
+  it('the stance stays narrow so the high camera reads a standing figure', () => {
+    const rest = poseHuman({ bulk: 1, stepPhase: 0, speed: 0, guard: 0, mainGrip: grip, offGrip: offGrip });
+    expect(Math.abs(rest.legs[0]!.end.x)).toBeLessThan(2);
+    expect(Math.abs(rest.legs[0]!.upper.from.z)).toBeLessThan(3);
+  });
+
+  it('fallPose lays the body flat on the sand at ankle height', () => {
+    const rest = poseHuman({ bulk: 1, stepPhase: 0, speed: 0, guard: 0, mainGrip: grip, offGrip: offGrip });
+    const fallen = fallPose(rest);
+    // Head and shoulders lie at ankle height now, forward of the hips.
+    expect(fallen.head.y).toBeLessThan(3);
+    expect(fallen.head.x).toBeGreaterThan(8);
+    expect(fallen.torso.to.y).toBeLessThan(3);
+    // Feet stay on the ground line.
+    expect(Math.max(...fallen.legs.map((l) => l.end.y))).toBeLessThan(1.6);
   });
 });
 

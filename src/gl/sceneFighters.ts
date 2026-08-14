@@ -5,6 +5,7 @@ import { kitPartsForFighter, type KitPartDraw } from './kitMesh';
 import {
   aimAngles,
   beastDims,
+  fallPose,
   poseHuman,
   poseQuadruped,
   type Bone,
@@ -44,6 +45,23 @@ export function simFacingToYaw(facing: number): number {
 }
 
 const D2R = Math.PI / 180;
+
+/** Held parts a fallen fighter drops — they would hover above the body. */
+const DEAD_DROPPED = new Set([
+  'helm',
+  'crest',
+  'shield',
+  'roundShield',
+  'shieldRim',
+  'shieldBoss',
+  'gladius',
+  'sica',
+  'trident',
+  'spear',
+  'dual',
+  'scissor',
+  'net',
+]);
 
 /** Parts that surge with the beast's lunge (body parts, not planted legs). */
 const BEAST_SURGE = new Set([
@@ -228,7 +246,7 @@ function anatomyTransform(
   const legOf = (s: -1 | 1) => h.legs.find((l) => l.side === s)!;
   switch (p.kind) {
     case 'hips':
-      return sphereResult(sq(h.hips), 4.6 * ctx.bulk);
+      return sphereResult(sq(h.hips), 5 * ctx.bulk);
     case 'body':
       return boneResult({ from: sq(h.torso.from), to: sq(h.torso.to), thick: h.torso.thick });
     case 'neck':
@@ -499,7 +517,7 @@ export class SceneFighters {
   /** Per-fighter locomotion state — shuffle step + smoothed movement lean. */
   private readonly stepState = new Map<
     number,
-    { step: number; lean: number; prevX: number; prevY: number }
+    { step: number; lean: number; prevX: number; prevY: number; t: number }
   >();
 
   constructor(private readonly ctx: GlContext) {
@@ -546,7 +564,7 @@ export class SceneFighters {
       const lean = tell.lean * 0.12;
       const hitch = f.actionPhase === 'WINDUP' && tell.hitch > 0 ? tell.hitch * 0.15 : 0;
       const height = tell.height * (f.alive ? 1 : 0.35);
-      const baseY = f.alive ? 0 : -4;
+      const baseY = !f.alive && f.kind === 'beast' ? -4 : 0;
 
       // Selection hoop — a flat team marker on the sand, never a solid shell
       // that clips the body.
@@ -616,9 +634,10 @@ export class SceneFighters {
       const style = fightStyleOf(f.armatura as ArmaturaId);
       let st = this.stepState.get(f.id);
       if (!st) {
-        st = { step: 0, lean: 0, prevX: f.x, prevY: f.y };
+        st = { step: 0, lean: 0, prevX: f.x, prevY: f.y, t: 0 };
         this.stepState.set(f.id, st);
       }
+      st.t++;
       const dxm = f.x - st.prevX;
       const dym = f.y - st.prevY;
       st.prevX = f.x;
@@ -644,7 +663,9 @@ export class SceneFighters {
         height,
         lean: moveLean,
         guarding: f.guarding || tell.guardOpen > 0.3 ? 1 : 0,
-        bob: Math.sin(st.step * 2) * 0.35 * moveK,
+        bob:
+          Math.sin(st.step * 2) * 0.35 * moveK +
+          Math.sin(st.t * 0.05) * 0.14 * (1 - Math.min(1, moveK * 5)),
       };
       let pose: HumanPose | QuadrupedPose;
       if (isBeastKind) {
@@ -671,8 +692,10 @@ export class SceneFighters {
           },
         });
       }
+      if (!f.alive) pose = fallPose(pose as HumanPose);
 
       for (const p of parts) {
+        if (!f.alive && DEAD_DROPPED.has(p.kind)) continue; // the fallen let go
         // Team livery: every blue unit is a shade of blue, every red unit a
         // shade of red — identity by shape, allegiance by color. Shields are
         // fully painted; cloth/leather carry a strong tint, metal a light one.
