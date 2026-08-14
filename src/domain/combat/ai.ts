@@ -215,6 +215,18 @@ export function computeDesiredDist(
     target = Math.max(target, midNow + (d.measureMax - midNow) * panic * 0.7);
   }
 
+  // Outranged: a shorter weapon cannot win the range game — it must force
+  // its way inside the longer reach, or it is chipped from safety forever.
+  const outranged =
+    enemy != null &&
+    enemy.alive &&
+    enemy.def().attackRange > d.attackRange + 10 &&
+    tier !== 'BROKEN' &&
+    !self.poiseBroken;
+  if (outranged) {
+    target = Math.min(target, d.measureMin + (mid - d.measureMin) * 0.25);
+  }
+
   const cap = self.poiseBroken || tier === 'BROKEN' ? d.measureMax * 1.45 : d.measureMax * 1.25;
   return Math.max(d.measureMin * 0.75, Math.min(cap, target));
 }
@@ -247,6 +259,15 @@ export function cutUrge(self: Fighter, tick: number, enemy: Fighter): number {
   }
   // Enemy INVITE raises our urge
   if (enemy.activeIntention(tick) === 'INVITE') urge = Math.min(0.92, urge + 0.35);
+  // Outranged and the foe commits: the lunge brings them INTO reach — this is
+  // the counter window, not a retreat window.
+  if (
+    self.def().attackRange + 10 < enemy.def().attackRange &&
+    enemy.action === 'ATTACK' &&
+    (enemy.phase === 'WINDUP' || enemy.phase === 'ACTIVE' || enemy.phase === 'RECOVER')
+  ) {
+    urge = Math.min(0.95, urge + 0.3);
+  }
   // Soft/critical foe invites cuts; broken only while the punish window is open
   const et = enemy.poiseTier;
   if (et === 'SOFT') urge = Math.min(0.9, urge + 0.12);
@@ -286,7 +307,9 @@ export function decideFootwork(
   tick: number,
 ): FootworkDecision {
   const idle: FootworkDecision = {
-    desiredDist: self.desiredDist || (self.def().measureMin + self.def().measureMax) * 0.5,
+    // Never preserve a stale measure target — a net-tangled fighter must
+    // not hold a broken-YIELD position hostage.
+    desiredDist: (self.def().measureMin + self.def().measureMax) * 0.5,
     lateralBias: 0,
     footwork: 'HOLD',
     faceMode: 'ENEMY',
@@ -330,7 +353,17 @@ export function decideFootwork(
   let lateralBias: -1 | 0 | 1 = 0;
   let faceMode: FootworkDecision['faceMode'] = 'ENEMY';
 
-  if (intent === 'ANGLE') {
+  // Outranged fighters drive straight in — circling only lets the pole
+  // keep the distance where it wins.
+  const outranged =
+    enemy.def().attackRange > d.attackRange + 10 &&
+    !selfBroken &&
+    intent !== 'YIELD' &&
+    intent !== 'INVITE';
+  if (outranged) {
+    lateralBias = 0;
+    faceMode = 'ENEMY';
+  } else if (intent === 'ANGLE') {
     lateralBias = side;
     faceMode = 'ENEMY';
   } else if (intent === 'INVITE' || intent === 'RESET') {
@@ -373,6 +406,11 @@ export function decideFootwork(
 
   if (lowStam && desiredDist < (d.measureMin + d.measureMax) * 0.5) {
     desiredDist = Math.max(desiredDist, (d.measureMin + d.measureMax) * 0.55);
+  }
+  // The outranged press survives the gas-tax: a gassed fighter against a
+  // kiter must still force the gap — parking at range is just dying slowly.
+  if (outranged) {
+    desiredDist = Math.min(desiredDist, d.measureMin + (d.measureMin + (d.measureMax - d.measureMin) * 0.5 - d.measureMin) * 0.25);
   }
 
   // Derive label from spring error for UI / attack-arc bonus
@@ -574,7 +612,12 @@ export function decideCommit(
 
   const canGuardThreat = inCone(self.facing, toEnemy, guardArc);
   const guardReady = fightStyleOf(self.armatura).guardReady;
-  const seesWindup = enemy.action === 'ATTACK' && enemy.phase === 'WINDUP' && canGuardThreat;
+  const outrangedGuard =
+    enemy.def().attackRange > d.attackRange + 10 && !selfBroken;
+  // Outranged fighters cannot win behind the shield — they only raise it at
+  // the last moment (ACTIVE), never preemptively, or the kite pins them.
+  const seesWindup =
+    enemy.action === 'ATTACK' && enemy.phase === 'WINDUP' && canGuardThreat && !outrangedGuard;
   const guard =
     self.canGuard &&
     !selfBroken &&
@@ -614,15 +657,21 @@ export function decideCommit(
     self.attackCd <= 0 &&
     self.canAfford(d.attackStamina);
 
+  const outrangedFoe = enemy.def().attackRange > d.attackRange + 10 && !selfBroken;
+  // An outranged fighter counters INTO the foe's windup — the kiter's lunge
+  // is the one moment it comes within reach, and waiting for the recover
+  // means it has already retreated out of range.
+  const counterWindup =
+    outrangedFoe && enemy.action === 'ATTACK' && enemy.phase === 'WINDUP' && perceivesEnemyCut(self, enemy);
   const canCut =
     !selfBroken &&
     inCutRange &&
     lineOn &&
     self.attackCd <= 0 &&
     self.canAfford(d.attackStamina) &&
-    !enemyCuttingMe &&
+    (!enemyCuttingMe || counterWindup) &&
     !(enemyGuardingLine && personalityChance(rng, 0.55, pCrowd, 0.7)) &&
-    !lowStam &&
+    (!lowStam || outrangedFoe) && // gassed but outranged → desperation strikes
     bearingErr < atkArc * 0.9 &&
     intent !== 'RESET' &&
     intent !== 'YIELD';

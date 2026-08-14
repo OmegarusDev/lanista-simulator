@@ -1,9 +1,10 @@
 import { ARMATURAE, effectiveAttackArc, type ArmaturaDef, type ArmaturaId } from '../../content/armatura';
 import { BEASTS, type BeastId } from '../../content/beasts';
 import { combatTuning } from '../../content/combat';
-import { assembleKitFromParts, type KitPartId } from '../../content/kitPieces';
+import { ARMATURA_LOADOUTS, assembleKitFromParts, loadoutPartIds, type KitPartId } from '../../content/kitPieces';
 import { ARMATURA_LOOK } from '../../content/appearance';
 import { beastBulk, bodyCollisionCapsule } from '../../content/shapes';
+import { armorRating, pierceRating } from '../../content/strike';
 import { personalityOf, type Personality } from './personality';
 import type {
   ActionKind,
@@ -59,6 +60,10 @@ export class Fighter {
   crowdFavor01 = 0.5;
   /** True after being hit/blocked/poise-broken until the fighter lands one. */
   lostExchange = false;
+  /** Physical armour coverage 0..1 — damage mitigation from the kit. */
+  armor = 0;
+  /** Physical pierce 0..1 — how well this weapon defeats armour. */
+  pierce = 1;
 
   hp: number;
   maxHp: number;
@@ -184,11 +189,19 @@ export class Fighter {
     // Re-derive the collision capsule from the applied identity (seed, beast).
     if (this.kind === 'beast' && this.beastId) {
       this.collisionRadius = 11 * beastBulk(this.beastId, this.appearanceSeed);
+      this.armor = 0.15; // hide
+      this.pierce = 0.6; // claws and teeth
     } else {
       this.collisionRadius = bodyCollisionCapsule(
         ARMATURA_LOOK[this.armatura] ?? ARMATURA_LOOK.MURMILLO,
         this.appearanceSeed,
       ).radius;
+      const kitParts: KitPartId[] =
+        this.partsOverride?.length
+          ? (this.partsOverride as KitPartId[])
+          : loadoutPartIds(ARMATURA_LOADOUTS[this.armatura]);
+      this.armor = armorRating(kitParts);
+      this.pierce = pierceRating(kitParts);
     }
     const stock = this.stockKit();
     // Armory parts → combat pools (not look-only)

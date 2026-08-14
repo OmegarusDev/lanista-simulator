@@ -87,6 +87,7 @@ in vec3 v_nrm;
 uniform vec3 u_albedo;
 uniform vec3 u_lightDir;
 uniform float u_desat;
+uniform float u_alpha;
 out vec4 outColor;
 void main(){
   vec3 n = normalize(v_nrm);
@@ -94,7 +95,7 @@ void main(){
   vec3 c = u_albedo * (0.35 + 0.65 * ndl);
   float g = dot(c, vec3(0.299, 0.587, 0.114));
   c = mix(c, vec3(g), u_desat);
-  outColor = vec4(c, 1.0);
+  outColor = vec4(c, u_alpha);
 }`;
 
 export const FX_VS = `#version 300 es

@@ -73,3 +73,46 @@ export function strikeParams(
     bladeRadius,
   };
 }
+
+/**
+ * Physical armour model — the "armour rating" of a kit and the "pierce" of a
+ * weapon, both derived from the SAME shapes that render and hit.
+ *
+ * Damage is mitigated by armour that the weapon fails to pierce:
+ *   mitigation = armour · (1 − pierce)
+ * Heavy kits shrug off slashing sica; thrusting blades (gladius, spear,
+ * trident) punch through; light kits bleed. The matchups EMERGE from the
+ * geometry — no per-pair tuning.
+ */
+export function armorRating(parts: readonly KitPartId[]): number {
+  let a = 0;
+  for (const id of parts) {
+    const shape = shapeForPart(id);
+    if (!shape) continue;
+    if (shape.slot === 'greaves') {
+      a += shape.coverage * 0.4;
+    } else if (shape.slot === 'helm') {
+      if (shape.form === 'smooth') a += 0.22;
+      else if (shape.form === 'crested') a += 0.18;
+      else if (shape.form === 'open') a += 0.1;
+    } else if (shape.slot === 'shield') {
+      if (shape.form === 'scutum') a += 0.22;
+      else if (shape.form === 'parmula' || shape.form === 'aspis') a += 0.12;
+    }
+    if (KIT_PARTS[id]?.tags.includes('breastplate')) a += 0.18;
+  }
+  return Math.min(0.85, a);
+}
+
+export function pierceRating(parts: readonly KitPartId[]): number {
+  const weaponId = parts.find((id) => KIT_PARTS[id]?.slot === 'weapon');
+  const shape = shapeForPart(weaponId);
+  if (shape && shape.slot === 'weapon') {
+    // Thick, massy blades concentrate force; thin slashers find the gaps.
+    // Material matters: soft bronze tines (the trident) bend against iron
+    // armour — the reason the armoured secutor countered the net-fighter.
+    const materialMul = shape.material === 'bronze' ? 0.72 : 1;
+    return Math.min(1, (0.28 + shape.bladeThickness * 0.35 + shape.mass * 0.08) * materialMul);
+  }
+  return 0.6; // beasts — claws and teeth
+}

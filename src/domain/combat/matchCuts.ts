@@ -121,9 +121,15 @@ export function resolveCuts(
     const t = combatTuning;
     const crowdMul =
       tick > t.crowdFuryTick ? t.crowdFuryMul : tick > t.crowdRestlessTick ? t.crowdRestlessMul : 1;
-    const weaponDmg =
+    let weaponDmg =
       atk.def().strength * d.damageMul * t.damageScale * band.hpMul * crowdMul;
     const poiseDmg = weaponDmg * d.poiseMul * combatTuning.poiseDamageScale * band.poiseMul;
+
+    // Physical armour: the target's coverage stops whatever the weapon cannot
+    // pierce. Heavy kits shrug off slashing; thrusting blades punch through —
+    // the matchups emerge from the shapes.
+    const mitigation = Math.min(0.85, tgt.armor) * Math.min(1, Math.max(0, 1 - atk.pierce));
+    if (mitigation > 0) weaponDmg *= 1 - mitigation;
 
     const toAtk = angleTo(tgt.x, tgt.y, atk.x, atk.y);
     const inGuard =

@@ -34,7 +34,7 @@ export const combatTuning = {
 
   /** HP / damage — slightly deadlier, still multi-exchange */
   healthScale: 0.86,
-  damageScale: 1.28,
+  damageScale: 1.55,
   /** Attack phase / cooldown length (lower = snappier) */
   phaseScale: 0.88,
 
@@ -175,6 +175,17 @@ export const combatTuning = {
   nerveAbortScale: 0.35,
   /** Crowd momentum: riding a roar (favor 1.0) adds this to confidence. */
   nerveCrowdConfidence: 0.22,
+  /** Closing rush: outranged fighters press in at this speed multiplier. */
+  closeRushMul: 2.0,
+  /** Outranged press — the closing spring strength and accel cap multiplier. */
+  closeSpringMul: 3.0,
+  closeAccelMul: 2.5,
+  /** Backpedalling is slower than advancing — a kiter cannot sprint away forever. */
+  retreatMoveMul: 0.78,
+  retreatSpeedFloor: 0.15,
+  /** Hard per-tick closing step for the outranged rush (units/tick). */
+  closeStepPerTick: 0.55,
+
   nerveThreatFinishScale: 0.45,
 
   /**
@@ -195,8 +206,10 @@ export const combatTuning = {
    * tipRatio of attackRange = tip band start; clinch uses bodyRadius * clinchOrbitMul.
    */
   measureBandTipRatio: 0.82,
-  measureBandTipHpMul: 1,
-  measureBandTipPoiseMul: 1,
+  /** Range taps carry less force than full-extension strikes — the kiting
+      polearm bleeds the foe slowly instead of killing from safety. */
+  measureBandTipHpMul: 0.78,
+  measureBandTipPoiseMul: 0.85,
   measureBandTipBloodMul: 0.55,
   measureBandMidHpMul: 1,
   measureBandMidPoiseMul: 1,

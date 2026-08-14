@@ -62,7 +62,23 @@ export function applyMotion(f: Fighter, fighters: Fighter[], maps: MotionMaps, t
   } else if (f.phase === 'IDLE' || f.guarding) {
     if (f.guarding) speed *= combatTuning.guardMoveMul;
     if (enemy) {
-      applyMeasureSpring(f, enemy, dt, speed, maps, tick);
+      // Closing rush: a shorter weapon drives in harder to force the gap —
+      // otherwise a faster, longer-ranged foe can kite forever. The rush is
+      // adrenaline — it restores the pre-gas speed, because an exhausted
+      // fighter that cannot close simply dies at range.
+      if (enemy.def().attackRange > d.attackRange + 10) {
+        speed = d.moveSpeed * woundShockMoveMul(f, tick) * combatTuning.closeRushMul;
+        applyMeasureSpring(f, enemy, dt, speed, maps, tick);
+        // A HARD closing step — the rush is a sprint, not a jog: the shorter
+        // weapon gains ground every tick, and the kiter's retreat cannot
+        // hold a constant advance.
+        const fx = (enemy.x - f.x) / (Math.hypot(enemy.x - f.x, enemy.y - f.y) || 1);
+        const fy = (enemy.y - f.y) / (Math.hypot(enemy.x - f.x, enemy.y - f.y) || 1);
+        f.x += fx * combatTuning.closeStepPerTick;
+        f.y += fy * combatTuning.closeStepPerTick;
+      } else {
+        applyMeasureSpring(f, enemy, dt, speed, maps, tick);
+      }
       const lat = maps.lateralBias.get(f.id) ?? f.lateralBias;
       f.footwork = footworkFromVelocity(f, enemy, lat);
     } else {
@@ -123,9 +139,15 @@ export function applyMeasureSpring(
   const err = distance - dStar;
   const vRad = f.vx * fx + f.vy * fy;
   const vLat = f.vx * lx + f.vy * ly;
-
+  // Backpedalling bleeds speed — the kiting fighter cannot out-run the press
+  // forever, so the shorter weapon can force the gap it needs.
+  if (vRad < -combatTuning.retreatSpeedFloor) maxSpeed *= combatTuning.retreatMoveMul;
   let aRad = err * combatTuning.measureSpring - vRad * combatTuning.measureDamp;
-  const cap = combatTuning.measureAccelCap;
+  // Outranged press: a shorter weapon lunges IN with real intent — stronger
+  // spring AND a higher cap, or the faster kiter simply outruns the approach.
+  const outranged = enemy.def().attackRange > f.def().attackRange + 10;
+  if (outranged) aRad *= combatTuning.closeSpringMul;
+  const cap = combatTuning.measureAccelCap * (outranged ? combatTuning.closeAccelMul : 1);
   if (aRad > cap) aRad = cap;
   if (aRad < -cap) aRad = -cap;
 

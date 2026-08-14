@@ -232,25 +232,47 @@ export class SceneFighters {
 
       const yaw = simFacingToYaw(f.facing);
       const flash = Math.max(0, Math.min(1, f.flash / 10));
+      const teamTint = f.team === 0 ? PALETTE_RGB.ally : PALETTE_RGB.foe;
 
       const lean = tell.lean * 0.12;
       const hitch = f.actionPhase === 'WINDUP' && tell.hitch > 0 ? tell.hitch * 0.15 : 0;
       const height = tell.height * (f.alive ? 1 : 0.35);
       const baseY = f.alive ? 0 : -4;
 
-      // Team rim — slightly larger body tint pass; flash boosts rim on impact
-      if (f.selected || tell.rim > 0.5 || flash > 0.15) {
-        const rim = f.team === 0 ? PALETTE_RGB.ally : PALETTE_RGB.foe;
-        const fr = rim[0]! + flash * 0.55;
-        const fg = rim[1]! + flash * 0.45;
-        const fb = rim[2]! + flash * 0.25;
-        gl.uniform3f(this.prog.uniform('u_albedo'), fr, fg, fb);
-        this.writeModel(gl, f.x, baseY, f.y, yaw, 0, 0, 0, 18 * (1.08 + flash * 0.06), 24 * height * 1.05, 14 * (1.08 + flash * 0.06), 0, 0);
+      // Selection hoop — a flat team marker on the sand, never a solid shell
+      // that clips the body.
+      if (f.selected) {
+        gl.uniform1f(this.prog.uniform('u_alpha'), 0.9);
+        gl.uniform3f(this.prog.uniform('u_albedo'), teamTint[0], teamTint[1], teamTint[2]);
+        this.writeModel(gl, f.x, baseY + 1.4, f.y, yaw, 0, 0, 0, 21, 1.1, 21, 0, 0);
         drawMesh(gl, this.geo.resolve({ kind: 'cyl', params: '' }));
+      }
+
+      // Hit aura — a translucent additive shell around the body. It glows
+      // THROUGH the fighter (no depth write), so it can never clip the mesh —
+      // an effect, not a shape, and it stays correct no matter how the body
+      // is rebuilt.
+      if (tell.rim > 0.5 || flash > 0.15) {
+        gl.uniform1f(this.prog.uniform('u_alpha'), 0.3 + flash * 0.35);
+        const aura = Math.min(1, 0.45 + flash * 0.5);
+        gl.uniform3f(
+          this.prog.uniform('u_albedo'),
+          teamTint[0] * aura + flash * 0.55,
+          teamTint[1] * aura + flash * 0.45,
+          teamTint[2] * aura + flash * 0.25,
+        );
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+        gl.depthMask(false);
+        this.writeModel(gl, f.x, baseY, f.y, yaw, 0, 0, 0, 20 * (1.06 + flash * 0.05), 25 * height * 1.06, 16 * (1.06 + flash * 0.05), 0, 0);
+        drawMesh(gl, this.geo.resolve({ kind: 'cyl', params: '' }));
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
       }
 
       // Poise-break ring cue — thin bright hoop at feet
       if (f.poiseBroken && f.alive) {
+        gl.uniform1f(this.prog.uniform('u_alpha'), 1);
         gl.uniform3f(this.prog.uniform('u_albedo'), 0.85, 0.75, 0.45);
         this.writeModel(gl, f.x, baseY + 1.5, f.y, yaw, 0, 0, 0, 22, 1.2, 22, 0, 0);
         drawMesh(gl, this.geo.resolve({ kind: 'cyl', params: '' }));
@@ -263,6 +285,7 @@ export class SceneFighters {
       const inActive = f.actionPhase === 'ACTIVE' && f.phaseMax > 0;
       let swing = 0;
       let lunge = 0;
+      let lungeUnits = 0;
       let frac = 0;
       if (inActive) {
         // Beasts strike with their body: no swing, just the surge.
@@ -276,6 +299,7 @@ export class SceneFighters {
         // The sim's effective arc (circling bonus included) is the ONE number.
         swing = swingAngleRad(f.strikeArc ?? base.arc, frac);
         lunge = lungeOffset(base.lunge, frac);
+        lungeUnits = base.lunge;
       }
 
       // Locomotion: shuffle step + smoothed movement lean — the fighters
@@ -299,26 +323,41 @@ export class SceneFighters {
       const moveLean = st.lean;
 
       for (const p of parts) {
-        const ar = Math.min(1, p.albedo[0] + flash * 0.5);
-        const ag = Math.min(1, p.albedo[1] + flash * 0.4);
-        const ab = Math.min(1, p.albedo[2] + flash * 0.2);
+        // Team livery: every blue unit is a shade of blue, every red unit a
+        // shade of red — identity by shape, allegiance by color. Shields are
+        // fully painted; cloth/leather carry a strong tint, metal a light one.
+        const tint =
+          p.teamPaint ? 0.85
+          : p.material === 'cloth' ? 0.5
+          : p.material === 'leather' ? 0.4
+          : p.material === 'metal' ? 0.28
+          : 0.12;
+        const ar = Math.min(1, p.albedo[0] * (1 - tint) + teamTint[0] * tint + flash * 0.5);
+        const ag = Math.min(1, p.albedo[1] * (1 - tint) + teamTint[1] * tint + flash * 0.4);
+        const ab = Math.min(1, p.albedo[2] * (1 - tint) + teamTint[2] * tint + flash * 0.2);
+        gl.uniform1f(this.prog.uniform('u_alpha'), 1);
         gl.uniform3f(this.prog.uniform('u_albedo'), ar, ag, ab);
         const phaseReach =
           f.actionPhase === 'ACTIVE' ? 1.15 : f.actionPhase === 'WINDUP' ? 0.9 : 1;
         const isWeapon = WEAPON_KINDS.has(p.kind);
         const isBeast = p.kind === 'beastBody';
         const isBody = p.kind === 'body';
-        // Independent hands: the off-hand weapon strikes on the return stroke,
-        // so the two daggers work in alternation, never in unison.
+        // Independent hands: the off-hand weapon strikes on the return stroke —
+        // its OWN lunge and swing, so the two daggers work in alternation.
         let partSwing = p.ry;
+        let partLunge = lunge;
         if (isWeapon && inActive) {
           const off = p.hand === 'off';
-          const offFrac = (frac + 0.5) % 1;
-          const offAngle = off ? swingAngleRad(f.strikeArc ?? 0, offFrac) : swing;
-          partSwing = -offAngle * (180 / Math.PI);
+          if (off) {
+            const offFrac = (frac + 0.5) % 1;
+            partSwing = -swingAngleRad(f.strikeArc ?? 0, offFrac) * (180 / Math.PI);
+            partLunge = lungeOffset(lungeUnits, offFrac);
+          } else {
+            partSwing = -swing * (180 / Math.PI);
+          }
         }
         const ox =
-          p.ox * phaseReach + (inActive && (isWeapon || isBeast) ? lunge : 0) + hitch * 4;
+          p.ox * phaseReach + (inActive && (isWeapon || isBeast) ? partLunge : 0) + hitch * 4;
         const oy = p.oy * height + lean * 3 + (isBody ? shuffle : shuffle * 0.4) + moveLean * 14 * height;
         const oz = p.oz + tell.lateral * 4 + tell.guardOpen * (p.kind.includes('shield') ? -3 : 0);
         // Guarded off-hand raises to meet the threat: shields lift and tilt
