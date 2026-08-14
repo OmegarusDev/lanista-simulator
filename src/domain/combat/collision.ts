@@ -144,7 +144,13 @@ export function sweepHit(
   let best: { foe: Fighter; t: number; u: number; seg: Segment2 } | null = null;
   for (const foe of foes) {
     if (!foe.alive || foe.team === atk.team) continue;
-    const circle: Circle2 = { x: foe.x, z: foe.y, r: foe.collisionRadius };
+    // The blade is a CAPSULE, not a zero-width line — its cutting edge has
+    // real extent, so a grazing pass connects the way a real edge would.
+    const circle: Circle2 = {
+      x: foe.x,
+      z: foe.y,
+      r: foe.collisionRadius + strike.bladeRadius,
+    };
     const t = sweptSegmentCircleContact(blade0, blade1, circle);
     if (t === null) continue;
     const seg = lerpSeg(blade0, blade1, t);

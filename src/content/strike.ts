@@ -13,6 +13,8 @@ export interface StrikeParams {
   lunge: number;
   grip: { x: number; z: number };
   bladeLength: number;
+  /** The blade's effective cutting edge — the sweep is a capsule, not a line. */
+  bladeRadius: number;
 }
 
 /**
@@ -34,6 +36,14 @@ export function strikeParams(
   const look = ARMATURA_LOOK[armatura] ?? ARMATURA_LOOK.MURMILLO;
   const radius = bodyCollisionCapsule(look, appearanceSeed).radius;
   const arc = kind === 'beast' ? 0 : def.attackArc;
+  const bladeRadius = kind === 'beast' ? 6 : (() => {
+    const weaponId = parts.find((id) => KIT_PARTS[id]?.slot === 'weapon');
+    const shape = shapeForPart(weaponId);
+    if (shape && shape.slot === 'weapon') {
+      return Math.max(3, Math.min(5.5, shape.bladeWidth * 0.75));
+    }
+    return 3.5;
+  })();
   const grip = kind === 'beast'
     ? { x: 0, z: 0 }
     : {
@@ -60,5 +70,6 @@ export function strikeParams(
     lunge,
     grip,
     bladeLength,
+    bladeRadius,
   };
 }

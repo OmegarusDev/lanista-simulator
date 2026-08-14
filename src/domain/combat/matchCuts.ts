@@ -116,7 +116,13 @@ export function resolveCuts(
         continue;
       }
 
-    const weaponDmg = atk.def().strength * d.damageMul * combatTuning.damageScale * band.hpMul;
+    // The crowd grows impatient: a long bout's hits land harder as the stands
+    // call for blood — diegetic pacing, and a natural end to marathon bouts.
+    const t = combatTuning;
+    const crowdMul =
+      tick > t.crowdFuryTick ? t.crowdFuryMul : tick > t.crowdRestlessTick ? t.crowdRestlessMul : 1;
+    const weaponDmg =
+      atk.def().strength * d.damageMul * t.damageScale * band.hpMul * crowdMul;
     const poiseDmg = weaponDmg * d.poiseMul * combatTuning.poiseDamageScale * band.poiseMul;
 
     const toAtk = angleTo(tgt.x, tgt.y, atk.x, atk.y);
