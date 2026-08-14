@@ -45,6 +45,8 @@ export interface KitPartDraw {
   material: 'metal' | 'leather' | 'cloth' | 'flesh' | 'wood' | 'bone';
   /** Face takes the fighter's team color (shields). */
   teamPaint?: boolean;
+  /** Which hand holds this part — independent animation (dual blades). */
+  hand?: 'main' | 'off';
 }
 
 export type PartMeshKind =
@@ -293,6 +295,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
       accent: null,
       material: materialOf(f),
       teamPaint: true,
+      hand: 'off',
     });
     if (f.boss) {
       out.push({
@@ -309,6 +312,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
         albedo: metal(look),
         accent: null,
         material: 'metal',
+        hand: 'off',
       });
     }
     // Rim ring in the shield's plane (Y-Z): torus built in XZ, rolled 90°,
@@ -341,6 +345,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
   ): void => {
     const baseOx = grip.x;
     const baseOz = side * grip.z;
+    const hand: 'main' | 'off' = side === 1 ? 'main' : 'off';
     const taper = 0.3;
     out.push({
       kind,
@@ -359,6 +364,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
       albedo: leather(look),
       accent: null,
       material: 'leather',
+      hand,
     });
     out.push({
       kind,
@@ -377,6 +383,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
       albedo: metal(look),
       accent: null,
       material: 'metal',
+      hand,
     });
     out.push({
       kind,
@@ -395,6 +402,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
       albedo: metal(look),
       accent: null,
       material: 'metal',
+      hand,
     });
   };
 
@@ -546,6 +554,7 @@ export function kitPartsForFighter(f: FighterDraw): KitPartDraw[] {
           albedo: leather(look),
           accent: null,
           material: 'leather',
+          hand: 'off',
         });
         break;
       }

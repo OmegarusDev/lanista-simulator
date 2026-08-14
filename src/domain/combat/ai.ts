@@ -1,4 +1,5 @@
 import { effectiveAttackArc } from '../../content/armatura';
+import { fightStyleOf } from '../../content/appearance';
 import { combatTuning } from '../../content/combat';
 import type { SeededRNG } from '../rng';
 import { angleDelta, angleTo, dist, inCone } from './geometry';
@@ -341,8 +342,10 @@ export function decideFootwork(
   } else if (intent === 'FEINT' && self.feintStage === 'IN') {
     lateralBias = 0;
   } else {
-    // Neutral: circle when offline or kit likes angles
-    if (bearingErr > atkArc * 1.35 || (d.circleArcBonus > 0.15 && personalityChance(rng, 0.2, p, 0.7))) {
+    // Neutral: circle when offline or the class's style loves angles —
+    // SECUTOR drives straight, THRAEX dances wide.
+    const orbit = fightStyleOf(self.armatura).orbit;
+    if (bearingErr > atkArc * 1.35 || personalityChance(rng, 0.12 + orbit * 0.28, p, 0.7)) {
       lateralBias = side;
     }
   }
@@ -570,11 +573,14 @@ export function decideCommit(
   const punishOpen = foeBroken && self.brokenPunishContacts < punishWindow;
 
   const canGuardThreat = inCone(self.facing, toEnemy, guardArc);
+  const guardReady = fightStyleOf(self.armatura).guardReady;
+  const seesWindup = enemy.action === 'ATTACK' && enemy.phase === 'WINDUP' && canGuardThreat;
   const guard =
     self.canGuard &&
     !selfBroken &&
     ((enemyCuttingMe && canGuardThreat) ||
-      (self.poiseTier !== 'SOLID' && enemyCuttingMe && guardArc > 0.35)) &&
+      (self.poiseTier !== 'SOLID' && enemyCuttingMe && guardArc > 0.35) ||
+      (seesWindup && guardReady > 0.7 && personalityChance(rng, (guardReady - 0.7) * 3, p, 0.8))) &&
     guardArc > 0.25 &&
     self.stamina > 6 &&
     !lowStam;
@@ -666,9 +672,10 @@ export function decideCommit(
     // Micro-hesitation — reads as thought, not aimbot; caution raises hesitation,
     // and the personality envelope decides who hesitates and who commits.
     const nerve = boutNerve(self, enemy);
+    const committal = fightStyleOf(self.armatura).committal;
     const hesitate = personalityChance(
       rng,
-      combatTuning.cutHesitation * (1.15 - d.pursueBias * 0.5) * (1 + nerve.caution * 0.6),
+      combatTuning.cutHesitation * (1.15 - d.pursueBias * 0.5) * (1 + nerve.caution * 0.6) * (1.3 - committal * 0.35),
       pCrowd,
       0.8,
     );

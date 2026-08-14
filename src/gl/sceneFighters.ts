@@ -20,6 +20,7 @@ import { SOLID_FS, SOLID_VS } from './shaders';
 import { tellPose } from './tells';
 import { strikeParams } from '../content/strike';
 import { lungeOffset, swingAngleRad } from '../content/shapes';
+import { fightStyleOf } from '../content/appearance';
 import type { ArmaturaId } from '../content/armatura';
 
 /**
@@ -186,6 +187,11 @@ export class SceneFighters {
   private geo: GeometryCache;
   private model = mat4Identity();
   private disposed = false;
+  /** Per-fighter locomotion state — shuffle step + smoothed movement lean. */
+  private readonly stepState = new Map<
+    number,
+    { step: number; lean: number; prevX: number; prevY: number }
+  >();
 
   constructor(private readonly ctx: GlContext) {
     this.prog = createProgram(ctx.gl, SOLID_VS, SOLID_FS);
@@ -257,6 +263,7 @@ export class SceneFighters {
       const inActive = f.actionPhase === 'ACTIVE' && f.phaseMax > 0;
       let swing = 0;
       let lunge = 0;
+      let frac = 0;
       if (inActive) {
         // Beasts strike with their body: no swing, just the surge.
         const base = strikeParams(
@@ -265,11 +272,32 @@ export class SceneFighters {
           f.appearanceSeed,
           f.kind === 'beast' ? 'beast' : 'gladiator',
         );
-        const frac = Math.min(1, Math.max(0, f.phaseT / f.phaseMax));
+        frac = Math.min(1, Math.max(0, f.phaseT / f.phaseMax));
         // The sim's effective arc (circling bonus included) is the ONE number.
         swing = swingAngleRad(f.strikeArc ?? base.arc, frac);
         lunge = lungeOffset(base.lunge, frac);
       }
+
+      // Locomotion: shuffle step + smoothed movement lean — the fighters
+      // shuffle and sway instead of gliding.
+      const style = fightStyleOf(f.armatura as ArmaturaId);
+      let st = this.stepState.get(f.id);
+      if (!st) {
+        st = { step: 0, lean: 0, prevX: f.x, prevY: f.y };
+        this.stepState.set(f.id, st);
+      }
+      const dxm = f.x - st.prevX;
+      const dym = f.y - st.prevY;
+      st.prevX = f.x;
+      st.prevY = f.y;
+      const speed = Math.hypot(dxm, dym);
+      st.step += speed * 0.055;
+      if (speed < 0.4) st.step *= 0.92; // settle into a rest stance
+      const moveK = Math.min(1, speed * 0.22);
+      const shuffle = Math.sin(st.step) * style.shuffle * 1.5 * moveK;
+      st.lean += (speed * 0.012 - st.lean) * 0.25;
+      const moveLean = st.lean;
+
       for (const p of parts) {
         const ar = Math.min(1, p.albedo[0] + flash * 0.5);
         const ag = Math.min(1, p.albedo[1] + flash * 0.4);
@@ -279,12 +307,27 @@ export class SceneFighters {
           f.actionPhase === 'ACTIVE' ? 1.15 : f.actionPhase === 'WINDUP' ? 0.9 : 1;
         const isWeapon = WEAPON_KINDS.has(p.kind);
         const isBeast = p.kind === 'beastBody';
+        const isBody = p.kind === 'body';
+        // Independent hands: the off-hand weapon strikes on the return stroke,
+        // so the two daggers work in alternation, never in unison.
+        let partSwing = p.ry;
+        if (isWeapon && inActive) {
+          const off = p.hand === 'off';
+          const offFrac = (frac + 0.5) % 1;
+          const offAngle = off ? swingAngleRad(f.strikeArc ?? 0, offFrac) : swing;
+          partSwing = -offAngle * (180 / Math.PI);
+        }
         const ox =
           p.ox * phaseReach + (inActive && (isWeapon || isBeast) ? lunge : 0) + hitch * 4;
-        const oy = p.oy * height + lean * 3;
+        const oy = p.oy * height + lean * 3 + (isBody ? shuffle : shuffle * 0.4) + moveLean * 14 * height;
         const oz = p.oz + tell.lateral * 4 + tell.guardOpen * (p.kind.includes('shield') ? -3 : 0);
-        // Render convention mirrors the sim swing: ry = −θ (degrees).
-        const ry = isWeapon && inActive ? -swing * (180 / Math.PI) : p.ry;
+        // Guarded off-hand raises to meet the threat: shields lift and tilt
+        // up around their rim (the rim itself stays planted).
+        const isOffShield =
+          p.hand === 'off' && (p.kind === 'shield' || p.kind === 'roundShield' || p.kind === 'shieldBoss');
+        const guardRaise = f.guarding || tell.guardOpen > 0.3 ? 1 : 0;
+        const ry = isOffShield ? 0 : partSwing;
+        const rz = isOffShield ? p.rz + guardRaise * -16 : p.rz;
         this.writeModel(
           gl,
           f.x,
@@ -292,13 +335,13 @@ export class SceneFighters {
           f.y,
           yaw,
           ox,
-          oy,
+          isOffShield ? oy + guardRaise * 3 : oy,
           oz,
           p.sx,
           p.sy * height,
           p.sz,
           ry,
-          p.rz,
+          rz,
         );
         drawMesh(gl, this.geo.resolve(p.geo));
       }

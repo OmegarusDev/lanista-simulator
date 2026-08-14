@@ -251,6 +251,38 @@ export const ARMATURA_LOOK: Record<ArmaturaId, ArmaturaLook> = {
   },
 };
 
+/**
+ * Class fight styles — the behavioural + visual identity per armatura.
+ * These NUDGE the AI (orbit tendency, cut commitment, guard readiness) and
+ * drive the body language (shuffle energy); the temperament/trait personality
+ * layer still owns the decision noise on top.
+ */
+export interface FightStyle {
+  /** 0..1 — readiness to circle. THRAEX circles, SECUTOR drives straight. */
+  orbit: number;
+  /** 0..1 — visual step energy. DIMACHAERUS never stops moving. */
+  shuffle: number;
+  /** 0..1 — cut commitment; 1 = throws fast, 0 = hesitates. */
+  committal: number;
+  /** 0..1 — readiness to present the guard. PROVOCATOR lives behind his. */
+  guardReady: number;
+}
+
+export const FIGHT_STYLES: Record<ArmaturaId, FightStyle> = {
+  MURMILLO: { orbit: 0.3, shuffle: 0.5, committal: 0.95, guardReady: 0.8 },
+  THRAEX: { orbit: 0.9, shuffle: 0.9, committal: 0.8, guardReady: 0.4 },
+  RETIARIUS: { orbit: 0.6, shuffle: 0.7, committal: 0.6, guardReady: 0.2 },
+  SECUTOR: { orbit: 0.1, shuffle: 0.4, committal: 1.0, guardReady: 0.9 },
+  HOPLOMACHUS: { orbit: 0.5, shuffle: 0.4, committal: 0.7, guardReady: 0.6 },
+  PROVOCATOR: { orbit: 0.2, shuffle: 0.5, committal: 0.9, guardReady: 1.0 },
+  DIMACHAERUS: { orbit: 0.8, shuffle: 1.0, committal: 0.85, guardReady: 0.3 },
+  SCISSOR: { orbit: 0.3, shuffle: 0.6, committal: 1.0, guardReady: 0.5 },
+};
+
+export function fightStyleOf(armatura: ArmaturaId): FightStyle {
+  return FIGHT_STYLES[armatura] ?? FIGHT_STYLES.MURMILLO;
+}
+
 export function massScale(mass: number): number {
   return 0.82 + mass * 0.22;
 }

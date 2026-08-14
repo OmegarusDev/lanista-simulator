@@ -136,8 +136,26 @@ describe('kitMesh', () => {
     expect(tTip).toBeLessThanOrEqual(t);
   });
 
-  it('NO FLOATING WEAPONS: every weapon starts at its hand (no gap)', () => {
-    const HAND_ANGLES = { MURMILLO: 0.72, THRAEX: 0.78, SECUTOR: 0.72, HOPLOMACHUS: 0.55, PROVOCATOR: 0.7, DIMACHAERUS: 0.85, RETIARIUS: 0.7, SCISSOR: 0.75 } as const;
+  it('independent hands: the dual-blade fighter has a main AND an off hand', () => {
+    const d = kitPartsForFighter(toFighterDraw(stub({ armatura: 'DIMACHAERUS', id: 9 })));
+    const mains = d.filter((p) => p.hand === 'main' && p.kind === 'dual');
+    const offs = d.filter((p) => p.hand === 'off' && p.kind === 'dual');
+    expect(mains.length).toBeGreaterThan(0);
+    expect(offs.length).toBeGreaterThan(0);
+    // Off-hand blades mirror across the grip axis.
+    const mainZ = Math.abs(mains[0]!.oz);
+    const offZ = Math.abs(offs[0]!.oz);
+    expect(offZ).toBeCloseTo(mainZ, 4);
+    expect(offs[0]!.oz).not.toBeCloseTo(mains[0]!.oz, 4);
+    // Shields and the net are off-hand too.
+    const m = kitPartsForFighter(toFighterDraw(stub({ armatura: 'MURMILLO' })));
+    const shield = m.find((p) => p.kind === 'shield' || p.kind === 'roundShield');
+    expect(shield!.hand).toBe('off');
+    const r = kitPartsForFighter(toFighterDraw(stub({ armatura: 'RETIARIUS', id: 11 })));
+    expect(r.find((p) => p.kind === 'net')!.hand).toBe('off');
+  });
+
+  it('NO FLOATING WEAPONS: every weapon starts at its hand (no gap)', () => {    const HAND_ANGLES = { MURMILLO: 0.72, THRAEX: 0.78, SECUTOR: 0.72, HOPLOMACHUS: 0.55, PROVOCATOR: 0.7, DIMACHAERUS: 0.85, RETIARIUS: 0.7, SCISSOR: 0.75 } as const;
     const WEAPON_KINDS = new Set(['gladius', 'sica', 'trident', 'spear', 'dual', 'scissor']);
     // Extent along +X after the rz=−90 roll: frustums carry length in their
     // sy param; bent blades in their length param.
