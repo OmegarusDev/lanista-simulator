@@ -64,7 +64,7 @@ export class StageCamera {
   smoothDolly = 720;
 
   /** Pitch from horizontal (radians); yaw around world Y. */
-  pitch = 0.92;
+  pitch = 0.72;
   yaw = 0;
   smoothPitch = 0.92;
   smoothYaw = 0;
@@ -115,7 +115,7 @@ export class StageCamera {
     this.smoothZ = CENTER_Z;
     this.dolly = clamp(dolly, CAMERA_DOLLY_MIN, CAMERA_DOLLY_MAX);
     this.smoothDolly = this.dolly;
-    this.pitch = 0.92;
+    this.pitch = 0.72;
     this.yaw = 0;
     this.smoothPitch = this.pitch;
     this.smoothYaw = 0;
@@ -410,7 +410,10 @@ export class StageCamera {
    * and zooms keep the user's framing.
    */
   frameStage(): void {
-    if (this.mode === 'director') this.dolly = Math.min(this.dolly, 350);
+    if (this.mode === 'director') {
+      this.dolly = Math.min(this.dolly, 350);
+      this.pitch = 0.62;
+    }
   }
 
   /** Hand back to the director immediately (Recenter button / rotation reframe). */

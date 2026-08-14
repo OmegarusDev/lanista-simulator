@@ -69,6 +69,10 @@ export function placePreviewInWorld(
   const cy = combatTuning.arenaCY;
   const rx = combatTuning.arenaRX;
   const ry = combatTuning.arenaRY;
+  // The staging presents the fighters to the camera (south, sim +y): they
+  // stand at a three-quarter angle toward each other so their height reads —
+  // a side-on scutum fighter otherwise flattens into a wide band.
+  const FACE_CAM = Math.PI / 2;
   const out: FighterSnapshot[] = [];
   let i0 = 0;
   let i1 = 0;
@@ -82,7 +86,7 @@ export function placePreviewInWorld(
       ...f,
       x: baseX,
       y,
-      facing: f.team === 0 ? 0 : Math.PI,
+      facing: f.team === 0 ? FACE_CAM - 0.45 : FACE_CAM + 0.45,
     });
   }
   return out;
