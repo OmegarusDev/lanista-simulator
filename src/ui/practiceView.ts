@@ -281,7 +281,7 @@ export class PracticeView {
     );
     titleRow.append(el('h1', { text: 'Skirmish' }));
     titleRow.append(
-      button('🎲', {
+      button('⚄', {
         variant: 'ghost',
         title: 'Reroll everything',
         onClick: () => {
@@ -427,7 +427,7 @@ export class PracticeView {
       el('span', { className: 'meta', text: `Now: ${pickTitle(current)}` }),
     );
     currentLine.append(
-      button('🎲', {
+      button('⚄', {
         variant: 'quiet',
         title: 'Roll a random unit for this slot',
         onClick: () => this.rollSlot(this.editSide, this.editSlot),

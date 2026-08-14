@@ -61,17 +61,6 @@
   font-weight: 700;
 }
 
-.practice-top .setup-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  align-items: stretch;
-}
-
-.practice-top .setup-row .seg {
-  flex: 1 1 10rem;
-}
-
 /* Roster band — the same language as the fight HUD: team caps, chip-style
    fighter buttons, swipeable on narrow screens. */
 .practice-band {
@@ -188,75 +177,6 @@
   letter-spacing: 0.06em;
 }
 
-.sheet .subhead {
-  text-align: center;
-  color: var(--muted);
-  margin: 0 0 0.85rem;
-  font-size: var(--type-meta);
-  letter-spacing: 0.04em;
-}
-
-.sheet .setup-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-}
-
-.sheet .setup-row .seg {
-  flex: 1 1 10rem;
-}
-
-.preset-block {
-  margin: 0 0 var(--space-md);
-}
-
-.preset-block .section-label {
-  margin-bottom: 0.4rem;
-}
-
-.preset-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
-  gap: 4px;
-}
-
-.preset-grid button {
-  min-height: 40px;
-  font-size: var(--type-eyebrow);
-  line-height: 1.15;
-  background: transparent;
-  border-color: var(--hairline);
-  box-shadow: none;
-}
-
-.custom-sides {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-md);
-  flex: 1;
-}
-
-@media (max-width: 640px) {
-  .custom-sides {
-    grid-template-columns: 1fr;
-  }
-}
-
-.side-panel {
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  padding: var(--space-sm);
-  background: rgba(12, 16, 20, 0.4);
-}
-
-.side-panel h3 {
-  margin: 0 0 0.4rem;
-  font-family: var(--font-display);
-  font-size: var(--type-label);
-  letter-spacing: 0.04em;
-}
-
 .pick-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -318,7 +238,6 @@
   pointer-events: none;
   letter-spacing: 0.04em;
 }
-
 
 /* ————— Sandbox squad chrome ————— */
 
