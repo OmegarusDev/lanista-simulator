@@ -18,6 +18,14 @@
   pointer-events: auto;
 }
 
+/* Layout slots (dock + overlay hosts) must NOT participate in the rail
+   flex column — absolute, zero-hit so space-between pins rails top/bottom. */
+.hud-slot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .hud-rail {
   background:
     var(--tex-stone, none),
@@ -171,33 +179,30 @@
   letter-spacing: 0.04em;
 }
 
+/* Bottom bar — one compact row: team caps · roster chips · controls. */
 .roster-band {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
   padding: 0.3rem 0.85rem 0.35rem;
 }
 
-.roster-labels {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.25rem;
-}
-
-.roster-labels button {
-  min-height: 36px;
-  padding: 0.25rem 0.55rem;
+.team-cap {
+  flex: 0 0 auto;
+  align-self: center;
+  min-height: 34px;
+  padding: 0.2rem 0.5rem;
   font-size: var(--type-eyebrow);
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   background: transparent;
   border-color: transparent;
   box-shadow: none;
-  color: var(--muted);
 }
 
-.roster-labels button:hover:not(:disabled) {
-  background: rgba(184, 149, 74, 0.1);
-  border-color: transparent;
-  color: var(--parchment);
-}
+.team-cap.blue { color: var(--ally); }
+.team-cap.red { color: var(--foe); }
 
 .roster-row {
   display: flex;
@@ -237,6 +242,15 @@
   box-shadow: inset 0 1px 0 rgba(200, 180, 140, 0.08);
 }
 
+/* Team coding lives on the chips themselves — no label row needed. */
+.roster-chip.is-blue {
+  border-left: 3px solid var(--ally);
+}
+
+.roster-chip.is-red {
+  border-right: 3px solid var(--foe);
+}
+
 .roster-chip.is-selected {
   box-shadow: inset 3px 0 0 var(--ally);
   border-color: var(--bronze-hot);
@@ -244,6 +258,7 @@
 
 .roster-chip.is-foe.is-selected {
   box-shadow: inset 3px 0 0 var(--foe);
+  border-color: var(--bronze-hot);
 }
 
 .roster-chip.is-muted {
@@ -263,21 +278,21 @@
   font-weight: 600;
 }
 
-.controls-row {
+.controls-cluster {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  padding: 0.4rem 0.85rem 0.6rem;
-  border-top: 1px solid rgba(184, 149, 74, 0.16);
+  gap: 6px;
+  padding-left: 4px;
+  border-left: 1px solid rgba(184, 149, 74, 0.16);
 }
 
-.controls-row .seg {
-  flex: 1;
+.controls-cluster .speed-btn {
+  min-width: 3.2rem;
 }
 
-.controls-row .pause-btn {
-  flex: 0 0 auto;
-  min-width: 5.5rem;
+.controls-cluster .pause-btn {
+  min-width: 4.6rem;
 }
 
 .inspect-dock {
@@ -407,23 +422,18 @@
     font-size: 11px;
   }
 
-  /* Compact chips: name + armatura tag on one line over a slim hp bar. */
+  /* Compact single-row bar: chips swipe, controls hug the right. */
   .roster-band {
-    padding: 0.25rem 0.65rem 0.3rem;
+    gap: 4px;
+    padding: 0.25rem 0.55rem 0.3rem;
   }
 
-  .roster-labels {
-    margin-bottom: 0.15rem;
-  }
-
-  .roster-labels button {
+  .team-cap {
     min-height: 28px;
     padding: 0.1rem 0.3rem;
     font-size: 10px;
   }
 
-  /* Portrait roster becomes a swipeable strip — chips keep real size, no
-     mis-taps between neighbours. */
   .roster-row {
     gap: 4px;
   }
@@ -466,17 +476,21 @@
     height: 3px;
   }
 
-  .controls-row {
-    padding: 0.3rem 0.65rem 0.45rem;
+  .controls-cluster {
+    gap: 4px;
   }
 
-  .controls-row .seg button,
-  .controls-row .pause-btn {
+  .controls-cluster .speed-btn,
+  .controls-cluster .pause-btn {
     min-height: 40px;
   }
 
-  .controls-row .pause-btn {
-    min-width: 4.5rem;
+  .controls-cluster .speed-btn {
+    min-width: 2.8rem;
+  }
+
+  .controls-cluster .pause-btn {
+    min-width: 3.8rem;
   }
 
   .inspect-dock {
@@ -499,11 +513,7 @@
     padding: 0.15rem 0.55rem 0.2rem;
   }
 
-  .roster-labels {
-    margin-bottom: 0.1rem;
-  }
-
-  .roster-labels button {
+  .team-cap {
     min-height: 24px;
   }
 
@@ -511,12 +521,8 @@
     min-height: 38px;
   }
 
-  .controls-row {
-    padding: 0.25rem 0.55rem 0.35rem;
-  }
-
-  .controls-row .seg button,
-  .controls-row .pause-btn {
+  .controls-cluster .speed-btn,
+  .controls-cluster .pause-btn {
     min-height: 38px;
   }
 }

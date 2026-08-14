@@ -1,7 +1,7 @@
 import { ARMATURAE } from '../content/armatura';
 import { BEASTS } from '../content/beasts';
 import type { FighterSnapshot } from '../domain/combat/types';
-import { btn, clear, el, segment } from './dom';
+import { btn, clear, el } from './dom';
 import { openHelp } from './help';
 import { confirmModal } from './modal';
 
@@ -85,7 +85,7 @@ export class FightHud {
   private dockValueEls: HTMLElement[] = [];
   private dockStateEl: HTMLElement | null = null;
   private chips: { root: HTMLButtonElement; bar: HTMLElement }[] = [];
-  private segBtns: HTMLButtonElement[] = [];
+  private speedBtn!: HTMLButtonElement;
   private pauseBtn!: HTMLButtonElement;
   private recenterBtn!: HTMLButtonElement;
   private overlaySlot!: HTMLElement;
@@ -162,71 +162,75 @@ export class FightHud {
     this.tickerEl = el('div', { className: 'fight-ticker' });
     this.root.append(this.tickerEl);
 
-    this.dockSlot = el('div');
+    this.dockSlot = el('div', { className: 'hud-slot' });
     this.root.append(this.dockSlot);
 
     this.debugEl = el('div', { className: 'debug-badge', text: 'FEEL' });
     this.debugEl.classList.add('is-hidden');
     this.root.append(this.debugEl);
 
+    // Bottom bar: one compact row — team caps, roster chips, controls.
     const bottom = el('div', { className: 'hud-rail hud-bottom' });
     const roster = el('div', { className: 'roster-band' });
-    const labels = el('div', { className: 'roster-labels' });
-    labels.append(
+    roster.append(
       btn('Blue', {
-        className: 'quiet',
+        className: 'team-cap blue',
         onClick: () => this.emit({ type: 'FOCUS_TEAM', team: 0 }),
       }),
     );
-    labels.append(
-      btn('Red', {
-        className: 'quiet',
-        onClick: () => this.emit({ type: 'FOCUS_TEAM', team: 1 }),
-      }),
-    );
-    roster.append(labels);
 
     const blue = opts.snaps.filter((f) => f.team === 0).sort((a, b) => a.id - b.id);
     const red = opts.snaps.filter((f) => f.team === 1).sort((a, b) => a.id - b.id);
     const rowR = el('div', { className: 'roster-row' });
     const sideB = el('div', { className: 'side' });
-    for (const f of blue) sideB.append(this.buildChip(f));
+    for (const f of blue) sideB.append(this.buildChip(f, false));
     const sideR = el('div', { className: 'side red' });
-    for (const f of red) sideR.append(this.buildChip(f));
+    for (const f of red) sideR.append(this.buildChip(f, true));
     rowR.append(sideB, el('div', { className: 'divider' }), sideR);
     roster.append(rowR);
-    bottom.append(roster);
+    roster.append(
+      btn('Red', {
+        className: 'team-cap red',
+        onClick: () => this.emit({ type: 'FOCUS_TEAM', team: 1 }),
+      }),
+    );
 
-    const controls = el('div', { className: 'controls-row' });
-    const speedIdx = SPEEDS.indexOf(opts.speed as (typeof SPEEDS)[number]);
-    const seg = segment(['1×', '2×', '4×'], speedIdx >= 0 ? speedIdx : 0, (i) => {
-      this.emit({ type: 'SPEED', speed: SPEEDS[i]! });
+    const cluster = el('div', { className: 'controls-cluster' });
+    this.speedBtn = btn('1×', {
+      className: 'speed-btn',
+      title: 'Speed — tap to cycle, or press 1/2/4',
+      onClick: () => {
+        const idx = SPEEDS.indexOf(opts.speed as (typeof SPEEDS)[number]);
+        this.emit({ type: 'SPEED', speed: SPEEDS[(idx + 1) % SPEEDS.length]! });
+      },
     });
-    this.segBtns = Array.from(seg.querySelectorAll('button'));
-    controls.append(seg);
+    cluster.append(this.speedBtn);
     this.pauseBtn = btn('Pause', {
       className: 'pause-btn',
       active: opts.paused,
       onClick: () => this.emit({ type: 'PAUSE_TOGGLE' }),
     });
-    controls.append(this.pauseBtn);
+    cluster.append(this.pauseBtn);
     this.recenterBtn = btn('Recenter', {
       className: 'quiet',
       onClick: () => this.emit({ type: 'RECENTER' }),
     });
-    controls.append(this.recenterBtn);
-    bottom.append(controls);
+    cluster.append(this.recenterBtn);
+    roster.append(cluster);
+    bottom.append(roster);
     this.root.append(bottom);
 
-    this.overlaySlot = el('div');
+    this.overlaySlot = el('div', { className: 'hud-slot' });
     this.root.append(this.overlaySlot);
 
     this.padTop = 64;
-    this.padBottom = 128;
+    this.padBottom = 84;
   }
 
-  private buildChip(f: FighterSnapshot): HTMLButtonElement {
-    const b = el('button', { className: 'roster-chip' });
+  private buildChip(f: FighterSnapshot, foe: boolean): HTMLButtonElement {
+    const b = el('button', {
+      className: `roster-chip${foe ? ' is-red' : ' is-blue'}`,
+    });
     b.append(el('span', { className: 'name', text: f.name }));
     b.append(el('span', { className: 'tag', text: fighterTag(f) }));
     const bar = el('div', { className: 'hp-bar' });
@@ -262,9 +266,7 @@ export class FightHud {
       chip.root.classList.toggle('is-muted', !f.alive);
     }
 
-    this.segBtns.forEach((b, i) => {
-      b.classList.toggle('is-active', SPEEDS[i] === opts.speed);
-    });
+    this.speedBtn.textContent = `${opts.speed}×`;
     this.pauseBtn.classList.toggle('is-active', opts.paused);
     // Recenter only matters when the camera is manually held.
     this.recenterBtn.classList.toggle('is-hidden', !opts.cameraManual);
