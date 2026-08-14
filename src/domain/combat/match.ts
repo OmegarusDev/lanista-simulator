@@ -211,6 +211,12 @@ export class Match {
     const shout = this.entertainment.onEvents(this.recentEvents, this.tick, this.rng);
     if (shout) this.latestShout = shout;
     this.entertainment.tickPassive(this.fighters.filter((f) => f.alive).map((f) => f.id));
+    // Momentum: each fighter feels the crowd behind their team.
+    const favor0 = this.teamCrowdFavor(0);
+    const favor1 = this.teamCrowdFavor(1);
+    for (const f of this.fighters) {
+      f.crowdFavor01 = f.team === 0 ? favor0 : favor1;
+    }
 
     if (this.tick >= combatTuning.maxFightTicks && this.result === 'ONGOING') {
       this.result = decideByHp(this.fighters);

@@ -68,6 +68,7 @@ export function generateVenatioTeams(
         beast,
         armatura: 'MURMILLO',
         name: def.name,
+        temperament: 'FEROX',
         pursueBiasAdd: 0.1,
       },
     });

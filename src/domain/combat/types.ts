@@ -1,5 +1,7 @@
 import type { ArmaturaId } from '../../content/armatura';
 import type { BeastId } from '../../content/beasts';
+import type { TraitId } from '../../content/identity';
+import type { TemperamentId } from '../../content/rpg';
 
 export type TeamId = 0 | 1;
 export type CombatantKind = 'gladiator' | 'beast';
@@ -89,6 +91,9 @@ export interface FighterSpawnSpec {
   partsOverride?: string[];
   /** Visual identity seed — threaded from career gladiator. */
   appearanceSeed?: number;
+  /** Personality — temperament + traits shape the AI's decision noise. */
+  temperament?: TemperamentId;
+  traits?: TraitId[];
   hpMul?: number;
   staminaMul?: number;
   poiseMul?: number;

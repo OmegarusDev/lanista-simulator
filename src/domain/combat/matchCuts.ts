@@ -102,18 +102,19 @@ export function resolveCuts(
 
     // Sidestep i-frames — the blade passes through the dodger: committed
     // throw eats whiff rhythm, dodger wins a tempo window to counter.
-    if (tgt.sidestepping) {
-      pushEvent('SIDESTEP', tgt, atk);
-      atk.hitConnected = true;
-      atk.markExchangeContact();
-      tgt.markExchangeContact();
-      assignIntention(atk, 'YIELD', tick);
-      atk.tempoUntil = Math.max(atk.tempoUntil, tick + combatTuning.tempoAfterCommit);
-      assignIntention(tgt, 'PRESS', tick);
-      tgt.tempoUntil = Math.max(tgt.tempoUntil, tick + 8);
-      setStareTicks(0);
-      continue;
-    }
+      if (tgt.sidestepping) {
+        pushEvent('SIDESTEP', tgt, atk);
+        atk.hitConnected = true;
+        atk.lostExchange = true;
+        atk.markExchangeContact();
+        tgt.markExchangeContact();
+        assignIntention(atk, 'YIELD', tick);
+        atk.tempoUntil = Math.max(atk.tempoUntil, tick + combatTuning.tempoAfterCommit);
+        assignIntention(tgt, 'PRESS', tick);
+        tgt.tempoUntil = Math.max(tgt.tempoUntil, tick + 8);
+        setStareTicks(0);
+        continue;
+      }
 
     const weaponDmg = atk.def().strength * d.damageMul * combatTuning.damageScale * band.hpMul;
     const poiseDmg = weaponDmg * d.poiseMul * combatTuning.poiseDamageScale * band.poiseMul;
@@ -128,14 +129,16 @@ export function resolveCuts(
     const nx = Math.cos(atk.facing);
     const ny = Math.sin(atk.facing);
 
-    // Poise always chips on contact — cannot be blocked
-    const broke = tgt.applyPoiseDamage(poiseDmg);
-    if (broke) {
-      // Encode blood quality in amount for FX (poise break is heavy)
-      pushEvent('POISE_BREAK', atk, tgt, band.bloodMul * 12);
-      applyPoiseBreakRhythm(atk, tgt, tick);
-      applyWoundShock(tgt, tick, true);
-    }
+      // Poise always chips on contact — cannot be blocked
+      const broke = tgt.applyPoiseDamage(poiseDmg);
+      if (broke) {
+        // Encode blood quality in amount for FX (poise break is heavy)
+        pushEvent('POISE_BREAK', atk, tgt, band.bloodMul * 12);
+        applyPoiseBreakRhythm(atk, tgt, tick);
+        applyWoundShock(tgt, tick, true);
+        tgt.lostExchange = true;
+        atk.lostExchange = false;
+      }
 
     // Soft-tier stumble threat invites PRESS, not stalemate
     if (
@@ -179,6 +182,8 @@ export function resolveCuts(
       atk.y -= ny * combatTuning.knockbackOnGuard * 0.6;
       pushEvent('GUARD', tgt, atk, absorbed);
       atk.hitConnected = true;
+      atk.lostExchange = true;
+      tgt.lostExchange = false;
       applyGuardRhythm(atk, tgt, tick, rng, setStareTicks);
       if (tgt.hp <= 0) pushEvent('KO', atk, tgt, band.bloodMul * 18);
       continue;
@@ -192,6 +197,8 @@ export function resolveCuts(
     // amount carries damage; FX layer also reads blood via amount scale
     pushEvent('HIT', atk, tgt, weaponDmg * (0.85 + band.bloodMul * 0.15));
     atk.hitConnected = true;
+    atk.lostExchange = false;
+    tgt.lostExchange = true;
     applyHitRhythm(atk, tgt, tick, rng, setStareTicks);
     applyWoundShock(tgt, tick, false);
 

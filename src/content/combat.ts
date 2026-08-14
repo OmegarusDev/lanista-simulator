@@ -168,6 +168,8 @@ export const combatTuning = {
   nerveUrgeScale: 0.4,
   nerveMeasureScale: 0.28,
   nerveAbortScale: 0.35,
+  /** Crowd momentum: riding a roar (favor 1.0) adds this to confidence. */
+  nerveCrowdConfidence: 0.22,
   nerveThreatFinishScale: 0.45,
 
   /**

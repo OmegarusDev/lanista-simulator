@@ -4,6 +4,7 @@ import { combatTuning } from '../../content/combat';
 import { assembleKitFromParts, type KitPartId } from '../../content/kitPieces';
 import { ARMATURA_LOOK } from '../../content/appearance';
 import { beastBulk, bodyCollisionCapsule } from '../../content/shapes';
+import { personalityOf, type Personality } from './personality';
 import type {
   ActionKind,
   CombatantKind,
@@ -52,6 +53,12 @@ export class Fighter {
   orbitSide: -1 | 1 = 1;
   /** Collision circle radius — derived from the body mesh, never hand-tuned. */
   collisionRadius: number;
+  /** Personality — temperament/traits shape the AI's decision noise. */
+  personality: Personality = personalityOf('FEROX', undefined);
+  /** Crowd favor for this fighter's team, 0..1 — updated by the match. */
+  crowdFavor01 = 0.5;
+  /** True after being hit/blocked/poise-broken until the fighter lands one. */
+  lostExchange = false;
 
   hp: number;
   maxHp: number;
@@ -170,6 +177,9 @@ export class Fighter {
     }
     if (spec.appearanceSeed != null) {
       this.appearanceSeed = spec.appearanceSeed >>> 0;
+    }
+    if (spec.temperament) {
+      this.personality = personalityOf(spec.temperament, spec.traits);
     }
     // Re-derive the collision capsule from the applied identity (seed, beast).
     if (this.kind === 'beast' && this.beastId) {

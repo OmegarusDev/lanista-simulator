@@ -3,6 +3,17 @@ import { combatTuning } from '../../content/combat';
 import type { SeededRNG } from '../rng';
 import { angleDelta, angleTo, dist, inCone } from './geometry';
 import type { Fighter } from './fighter';
+import {
+  assistBias,
+  crowdVolatility,
+  feintAllowed,
+  finishBoost,
+  fragilisShaken,
+  personalityChance,
+  prideMomentum,
+  punishWindowMul,
+  yieldAllowed,
+} from './personality';
 import type { Footwork, Intention } from './types';
 
 export type FootworkDecision = {
@@ -39,12 +50,26 @@ export type BoutNerve = {
 export function boutNerve(self: Fighter, enemy: Fighter): BoutNerve {
   const d = self.def();
   const t = combatTuning;
+  const p = self.personality;
   const ownHp = self.maxHp > 0 ? self.hp / self.maxHp : 0;
   const foeHp = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
 
   let confidence = Math.max(0, Math.min(1, ownHp * t.nerveOwnHpConfidence + (1 - t.nerveOwnHpConfidence) * 0.35));
   let caution = Math.max(0, Math.min(1, (1 - ownHp) * t.nerveOwnHpCaution));
   let finish = Math.max(0, Math.min(1, (1 - foeHp) * t.nerveFoeHpFinish));
+
+  // Momentum: riding the crowd's roar loosens a fighter up.
+  confidence += (self.crowdFavor01 - 0.5) * 2 * t.nerveCrowdConfidence;
+
+  // Exchange momentum: pride fights harder after a loss; fragile shakes.
+  const pride = prideMomentum(p, self.lostExchange);
+  const shaken = fragilisShaken(p, self.lostExchange);
+  confidence += pride - shaken;
+  caution += shaken;
+  finish += pride;
+
+  // Trait finish greed — AMBITIOUS/CRUEL push to kill, MERCIFUL pulls back.
+  finish += finishBoost(p, ownHp);
 
   // High pursueBias (Ferox / Press / Aggressive): resist caution when hurt; finish harder
   caution *= 1 - d.pursueBias * t.nervePursueCautionResist;
@@ -226,7 +251,8 @@ export function cutUrge(self: Fighter, tick: number, enemy: Fighter): number {
   if (et === 'SOFT') urge = Math.min(0.9, urge + 0.12);
   if (et === 'CRITICAL') urge = Math.min(0.95, urge + 0.22);
   if (et === 'BROKEN' || enemy.poiseBroken) {
-    if (self.brokenPunishContacts < combatTuning.brokenPunishMaxHits) {
+    const window = Math.round(combatTuning.brokenPunishMaxHits * punishWindowMul(self.personality));
+    if (self.brokenPunishContacts < window) {
       urge = Math.min(0.95, urge + 0.28);
     } else {
       urge *= 0.35;
@@ -270,6 +296,7 @@ export function decideFootwork(
   }
 
   const d = self.def();
+  const p = self.personality;
   const distance = dist(self.x, self.y, enemy.x, enemy.y);
   const toEnemy = angleTo(self.x, self.y, enemy.x, enemy.y);
   const bearingErr = Math.abs(angleDelta(self.facing, toEnemy));
@@ -278,7 +305,7 @@ export function decideFootwork(
   const lowStam = stamRatio < combatTuning.lowStamina;
   const intent = self.activeIntention(tick);
 
-  if (distance > d.measureMax * 1.2 && rng.chance(0.08)) {
+  if (distance > d.measureMax * 1.2 && personalityChance(rng, 0.08, p, 0.7)) {
     self.orbitSide = rng.chance(0.5) ? 1 : -1;
   }
   const side = self.orbitSide;
@@ -310,12 +337,12 @@ export function decideFootwork(
   } else if (intent === 'PRESS') {
     lateralBias = bearingErr > atkArc * 1.1 ? side : 0;
   } else if (intent === 'YIELD') {
-    lateralBias = rng.chance(selfBroken || selfCritical ? 0.72 : 0.35) ? side : 0;
+    lateralBias = personalityChance(rng, selfBroken || selfCritical ? 0.72 : 0.35, p, 0.8) ? side : 0;
   } else if (intent === 'FEINT' && self.feintStage === 'IN') {
     lateralBias = 0;
   } else {
     // Neutral: circle when offline or kit likes angles
-    if (bearingErr > atkArc * 1.35 || (d.circleArcBonus > 0.15 && rng.chance(0.2))) {
+    if (bearingErr > atkArc * 1.35 || (d.circleArcBonus > 0.15 && personalityChance(rng, 0.2, p, 0.7))) {
       lateralBias = side;
     }
   }
@@ -361,7 +388,7 @@ export function decideFootwork(
   // Broken stuck on PRESS → scramble; critical strongly prefers YIELD
   if (selfBroken && (intent === 'PRESS' || intent === 'NONE')) {
     intentionPick = 'YIELD';
-  } else if (selfCritical && intent === 'PRESS' && rng.chance(0.55)) {
+  } else if (selfCritical && intent === 'PRESS' && personalityChance(rng, 0.55, p, 0.8)) {
     intentionPick = 'YIELD';
   } else if (intent === 'NONE') {
     intentionPick = pickIdleIntention(self, enemy, distance, rng, tick);
@@ -385,6 +412,7 @@ function pickIdleIntention(
   tick: number,
 ): Intention | undefined {
   const d = self.def();
+  const p = self.personality;
   const mid = (d.measureMin + d.measureMax) * 0.5;
   const inMeasure = distance >= d.measureMin * 0.9 && distance <= d.measureMax * 1.1;
   const stamOk = self.stamina / self.maxStamina > 0.45;
@@ -395,19 +423,22 @@ function pickIdleIntention(
   const foeBroken = enemy.poiseBroken || enemy.poiseTier === 'BROKEN';
   const clinchDist = combatTuning.bodyRadius * combatTuning.clinchOrbitMul;
   const nerve = boutNerve(self, enemy);
+  const ownHp = self.maxHp > 0 ? self.hp / self.maxHp : 0;
 
   // Own posture cracked → scramble / breathe, never re-PRESS into the blade
   if (selfBroken) return 'YIELD';
-  if (selfCritical && rng.chance(0.62 + w.YIELD * 0.15)) return 'YIELD';
+  if (selfCritical && personalityChance(rng, 0.62 + w.YIELD * 0.15, p, 0.8)) return 'YIELD';
 
-  // Nerve: early YIELD / RESET when caution high and not finishing
+  // Nerve: early YIELD / RESET when caution high and not finishing.
+  // PROUD refuses to back off while healthy — only RESET is on the table.
   if (
     !selfBroken &&
     nerve.caution > 0.55 &&
     nerve.finish < 0.35 &&
-    rng.chance(0.12 + nerve.caution * 0.28)
+    personalityChance(rng, 0.12 + nerve.caution * 0.28, p, 0.9)
   ) {
-    return rng.chance(0.4) ? 'RESET' : 'YIELD';
+    const canYield = yieldAllowed(p, ownHp, false);
+    return canYield && rng.chance(0.4) ? 'YIELD' : 'RESET';
   }
 
   // Long quiet exchange → RESET (cooldown prevents the deterministic
@@ -420,24 +451,26 @@ function pickIdleIntention(
     return 'RESET';
   }
 
-  // Broken foe: short punish then ANGLE/RESET — do not farm the stun
+  // Broken foe: short punish then ANGLE/RESET — do not farm the stun.
+  // CRUEL drags the punishment out; MERCIFUL lets it go.
   if (foeBroken) {
-    if (self.brokenPunishContacts >= combatTuning.brokenPunishMaxHits || distance < clinchDist) {
+    const window = Math.round(combatTuning.brokenPunishMaxHits * punishWindowMul(p));
+    if (self.brokenPunishContacts >= window || distance < clinchDist) {
       return rng.chance(0.55) ? 'ANGLE' : 'RESET';
     }
-    if (rng.chance(0.55 + w.PRESS * 0.2 + nerve.finish * 0.15)) return 'PRESS';
+    if (personalityChance(rng, 0.55 + w.PRESS * 0.2 + nerve.finish * 0.15, p, 0.8)) return 'PRESS';
   }
 
   // Soft / critical foe → lean PRESS (recovering, still dangerous)
   if (enemy.poiseTier === 'SOFT' || enemy.poiseTier === 'CRITICAL') {
-    if (rng.chance(0.35 + w.PRESS * 0.25 + nerve.finish * 0.12)) return 'PRESS';
+    if (personalityChance(rng, 0.35 + w.PRESS * 0.25 + nerve.finish * 0.12, p, 0.8)) return 'PRESS';
   }
 
   // Low foe HP finish lean
-  if (nerve.finish > 0.45 && stamOk && rng.chance(0.18 + nerve.finish * 0.35 + w.PRESS * 0.15)) {
+  if (nerve.finish > 0.45 && stamOk && personalityChance(rng, 0.18 + nerve.finish * 0.35 + w.PRESS * 0.15, p, 0.9)) {
     return 'PRESS';
   }
-  if (nerve.finish > 0.5 && d.circleArcBonus > 0.12 && rng.chance(0.1 + nerve.finish * 0.2)) {
+  if (nerve.finish > 0.5 && d.circleArcBonus > 0.12 && personalityChance(rng, 0.1 + nerve.finish * 0.2, p, 0.9)) {
     return rng.chance(0.5) ? 'FEINT' : 'ANGLE';
   }
 
@@ -446,13 +479,13 @@ function pickIdleIntention(
     distance > d.attackRange &&
     enemy.action === 'ATTACK' &&
     (enemy.phase === 'RECOVER' || (enemy.phase === 'WINDUP' && perceivesEnemyCut(self, enemy))) &&
-    rng.chance(0.3 + w.PRESS * 0.35)
+    personalityChance(rng, 0.3 + w.PRESS * 0.35, p, 0.8)
   ) {
     return 'PRESS';
   }
 
   // After taking a hard stare without contact — ANGLE to break rhythm
-  if (self.ticksSinceContact > 70 && inMeasure && rng.chance(0.08 + w.ANGLE * 0.15)) {
+  if (self.ticksSinceContact > 70 && inMeasure && personalityChance(rng, 0.08 + w.ANGLE * 0.15, p, 0.8)) {
     return 'ANGLE';
   }
 
@@ -462,24 +495,26 @@ function pickIdleIntention(
     Math.abs(distance - mid) < (d.measureMax - d.measureMin) * 0.35 &&
     self.footwork === 'HOLD' &&
     enemy.footwork === 'HOLD' &&
-    rng.chance(0.12 + w.INVITE * 0.2)
+    personalityChance(rng, 0.12 + w.INVITE * 0.2, p, 0.8)
   ) {
     return 'INVITE';
   }
 
-  // FEINT when tempo clear + stam OK (uncommon — avoid fake-loop stalemates)
+  // FEINT when tempo clear + stam OK (uncommon — avoid fake-loop stalemates).
+  // STOIC never feints — no theatrics, only honest work.
   if (
+    feintAllowed(p) &&
     !onTempo &&
     stamOk &&
     inMeasure &&
     self.ticksSinceContact > 40 &&
-    rng.chance(0.025 + w.FEINT * 0.08)
+    personalityChance(rng, 0.025 + w.FEINT * 0.08, p, 0.8)
   ) {
     return 'FEINT';
   }
 
   // Occasional ANGLE for sica kits
-  if (inMeasure && rng.chance(0.04 + w.ANGLE * 0.12)) {
+  if (inMeasure && personalityChance(rng, 0.04 + w.ANGLE * 0.12, p, 0.8)) {
     return 'ANGLE';
   }
 
@@ -501,6 +536,9 @@ export function decideCommit(
   }
 
   const d = self.def();
+  const p = self.personality;
+  // SUPERSTITIOUS fighters ride the crowd: favor swings widen the envelope.
+  const pCrowd = { ...p, volatility: crowdVolatility(p, self.crowdFavor01) };
   const distance = dist(self.x, self.y, enemy.x, enemy.y);
   const toEnemy = angleTo(self.x, self.y, enemy.x, enemy.y);
   const bearingErr = Math.abs(angleDelta(self.facing, toEnemy));
@@ -528,7 +566,8 @@ export function decideCommit(
   const selfBroken = self.poiseBroken || self.poiseTier === 'BROKEN';
   const selfCritical = self.poiseTier === 'CRITICAL';
   const foeBroken = enemy.poiseBroken || enemy.poiseTier === 'BROKEN';
-  const punishOpen = foeBroken && self.brokenPunishContacts < combatTuning.brokenPunishMaxHits;
+  const punishWindow = Math.round(combatTuning.brokenPunishMaxHits * punishWindowMul(p));
+  const punishOpen = foeBroken && self.brokenPunishContacts < punishWindow;
 
   const canGuardThreat = inCone(self.facing, toEnemy, guardArc);
   const guard =
@@ -576,7 +615,7 @@ export function decideCommit(
     self.attackCd <= 0 &&
     self.canAfford(d.attackStamina) &&
     !enemyCuttingMe &&
-    !(enemyGuardingLine && rng.chance(0.55)) &&
+    !(enemyGuardingLine && personalityChance(rng, 0.55, pCrowd, 0.7)) &&
     !lowStam &&
     bearingErr < atkArc * 0.9 &&
     intent !== 'RESET' &&
@@ -592,7 +631,7 @@ export function decideCommit(
     self.attackCd <= 0 &&
     self.canAfford(d.attackStamina) &&
     !enemyCuttingMe &&
-    !(enemyGuardingLine && rng.chance(0.55)) &&
+    !(enemyGuardingLine && personalityChance(rng, 0.55, pCrowd, 0.7)) &&
     !lowStam &&
     bearingErr < atkArc * 0.9 &&
     intent !== 'RESET';
@@ -617,19 +656,23 @@ export function decideCommit(
   } else if (
     whiffPunish ||
     punishLegal ||
-    (enemy.poiseTier === 'CRITICAL' && canCut && rng.chance(0.75))
+    (enemy.poiseTier === 'CRITICAL' && canCut && personalityChance(rng, 0.75, pCrowd, 0.7))
   ) {
     cut = true;
   } else if (canCut && !onTempo) {
     let urge = cutUrge(self, tick, enemy);
     // INVITE suppresses own cuts but still allows tip-range opportunism for long kits
     if (intent === 'INVITE') urge *= distance <= d.attackRange * 0.92 ? 0.45 : 0.15;
-    // Micro-hesitation — reads as thought, not aimbot; caution raises hesitation
+    // Micro-hesitation — reads as thought, not aimbot; caution raises hesitation,
+    // and the personality envelope decides who hesitates and who commits.
     const nerve = boutNerve(self, enemy);
-    const hesitate = rng.chance(
+    const hesitate = personalityChance(
+      rng,
       combatTuning.cutHesitation * (1.15 - d.pursueBias * 0.5) * (1 + nerve.caution * 0.6),
+      pCrowd,
+      0.8,
     );
-    cut = !hesitate && rng.chance(urge);
+    cut = !hesitate && personalityChance(rng, urge, pCrowd, 0.9);
   }
 
   return { guard, cut, sidestep, feintCut };
@@ -691,11 +734,12 @@ export function pickThreat(self: Fighter, fighters: Fighter[]): Fighter | null {
     if (hpRatio < 0.25) score += 25 * finishScale;
     if (self.preferWeakest) score += (1 - hpRatio) * 48;
 
-    // Focus fire — if an ally is already close to this foe, join them
+    // Focus fire — if an ally is already close to this foe, join them.
+    // LOYAL fighters always pile on; others only when it's convenient.
     for (const a of allies) {
       if (a.id === self.id || !a.alive) continue;
       const allyToFoe = dist(a.x, a.y, f.x, f.y);
-      if (allyToFoe < 70) score += 22;
+      if (allyToFoe < 70) score += 22 + assistBias(self.personality);
       const toAlly = angleTo(f.x, f.y, a.x, a.y);
       const arc = effectiveAttackArc(f.def(), f.footwork);
       if (
