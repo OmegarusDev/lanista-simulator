@@ -211,6 +211,7 @@ export class LudusView {
   private vitalSubEl: HTMLElement | null = null;
   private contractEl: HTMLElement | null = null;
   private readonly tabBtns = new Map<Tab, HTMLButtonElement>();
+  private lastViewKey = '';
 
   private ensureChrome(): void {
     if (this.panel) return;
@@ -280,9 +281,12 @@ export class LudusView {
     this.contractEl!.textContent = contract ? `${contract.name} · ${contract.daysLeft}d` : '';
     for (const [id, b] of this.tabBtns) b.classList.toggle('is-active', this.tab === id);
 
-    // Rebuild only the body — preserving scroll position across mutations.
+    // Rebuild only the body — preserving scroll position within a tab,
+    // resetting when the view (tab / lineup) actually changes.
     const body = this.bodySlot!;
-    const scrollTop = body.scrollTop;
+    const viewKey = this.lineup ? 'lineup' : this.tab;
+    const scrollTop = viewKey === this.lastViewKey ? body.scrollTop : 0;
+    this.lastViewKey = viewKey;
     clear(body);
     if (this.lineup) this.renderLineup(body, state);
     else if (this.tab === 'roster') this.renderRoster(body, state);
