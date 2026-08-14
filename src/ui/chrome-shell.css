@@ -27,6 +27,10 @@ body {
   top: 0;
   display: grid;
   grid-template: 1fr / 1fr;
+  /* Belt-and-braces: even if the visual-viewport pin reports a bad size at
+     boot, the shell is never smaller than the viewport. */
+  min-width: 100dvw;
+  min-height: 100dvh;
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   /* Continuous dusk atmosphere — same language as canvas backdrop. */
   background:
@@ -49,10 +53,13 @@ body {
 #chrome {
   position: relative;
   z-index: 2;
+  /* Screens are flex children; the fight HUD / practice chrome are absolute
+     overlays and never participate in this flow. */
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
+  min-height: 100%;
   pointer-events: none;
 }
 

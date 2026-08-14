@@ -1,10 +1,8 @@
-/* Practice yard — same translucent rail language as fight HUD */
-
+/* Practice yard — same translucent rail language as fight HUD. Rails are
+   pinned absolutely — never via flex flow, so no child can displace them. */
 .practice-screen {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
   pointer-events: none;
   z-index: 3;
 }
@@ -12,6 +10,20 @@
 .practice-screen > .practice-top,
 .practice-screen > .practice-bottom {
   pointer-events: auto;
+}
+
+.practice-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.practice-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
 }
 
 .practice-top,
@@ -30,7 +42,6 @@
 }
 
 .practice-bottom {
-  margin-top: auto;
   border-top: 1.5px solid var(--rail-border);
   box-shadow: 0 -8px 24px rgba(8, 10, 14, 0.25);
 }

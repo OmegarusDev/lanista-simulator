@@ -3,11 +3,28 @@
 .hud {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   pointer-events: none;
   z-index: 3;
+}
+
+/*
+ * Rails are pinned EXPLICITLY with absolute positioning — the HUD must never
+ * rely on flex layout (space-between + flow children) to place them, because
+ * a single stray in-flow child would push a rail to mid-screen. Adding chrome
+ * to the HUD can only ever append to the absolute slots.
+ */
+.hud-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.hud-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
 }
 
 /* Only interactive chrome captures events — stage keeps wheel/pinch. */
