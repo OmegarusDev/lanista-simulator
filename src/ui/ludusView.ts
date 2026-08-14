@@ -280,13 +280,16 @@ export class LudusView {
     this.contractEl!.textContent = contract ? `${contract.name} · ${contract.daysLeft}d` : '';
     for (const [id, b] of this.tabBtns) b.classList.toggle('is-active', this.tab === id);
 
-    // Rebuild only the body.
-    clear(this.bodySlot!);
-    if (this.lineup) this.renderLineup(this.bodySlot!, state);
-    else if (this.tab === 'roster') this.renderRoster(this.bodySlot!, state);
-    else if (this.tab === 'munera') this.renderMunera(this.bodySlot!, state);
-    else if (this.tab === 'market') this.renderMarket(this.bodySlot!, state);
-    else this.renderSchool(this.bodySlot!, state);
+    // Rebuild only the body — preserving scroll position across mutations.
+    const body = this.bodySlot!;
+    const scrollTop = body.scrollTop;
+    clear(body);
+    if (this.lineup) this.renderLineup(body, state);
+    else if (this.tab === 'roster') this.renderRoster(body, state);
+    else if (this.tab === 'munera') this.renderMunera(body, state);
+    else if (this.tab === 'market') this.renderMarket(body, state);
+    else this.renderSchool(body, state);
+    body.scrollTop = scrollTop;
 
     // Rebuild only the actions.
     clear(this.actionsSlot!);

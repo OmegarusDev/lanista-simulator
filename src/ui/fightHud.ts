@@ -87,6 +87,7 @@ export class FightHud {
   private dockStateEl: HTMLElement | null = null;
   private chips: { root: HTMLButtonElement; bar: HTMLElement }[] = [];
   private speedBtn!: HTMLButtonElement;
+  private currentSpeed = 1;
   private pauseBtn!: HTMLButtonElement;
   private recenterBtn!: HTMLButtonElement;
   private overlaySlot!: HTMLElement;
@@ -204,7 +205,8 @@ export class FightHud {
       extraClass: 'speed-btn',
       title: 'Speed — tap to cycle, or press 1/2/4',
       onClick: () => {
-        const idx = SPEEDS.indexOf(opts.speed as (typeof SPEEDS)[number]);
+        // Read the LIVE speed — keyboard (1/2/4) can change it any time.
+        const idx = SPEEDS.indexOf(this.currentSpeed as (typeof SPEEDS)[number]);
         this.emit({ type: 'SPEED', speed: SPEEDS[(idx + 1) % SPEEDS.length]! });
       },
     });
@@ -270,6 +272,7 @@ export class FightHud {
       chip.root.classList.toggle('is-muted', !f.alive);
     }
 
+    this.currentSpeed = opts.speed;
     this.speedBtn.textContent = `${opts.speed}×`;
     this.pauseBtn.classList.toggle('is-active', opts.paused);
     // Recenter only matters when the camera is manually held.
