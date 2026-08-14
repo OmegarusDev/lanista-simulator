@@ -4,7 +4,17 @@
  */
 import { colors } from '../content/palette';
 import { crowdStripDataUrl, noiseDataUrl } from '../gfx/pattern';
-import { fontStack, radius, space, touchTarget, typeScale } from '../view/theme';
+import {
+  elevation,
+  easing,
+  fontStack,
+  motion,
+  radius,
+  space,
+  touchTarget,
+  typeScale,
+  zIndex,
+} from '../view/theme';
 
 export function applyCssTokens(root: HTMLElement = document.documentElement): void {
   const set = (k: string, v: string) => root.style.setProperty(k, v);
@@ -57,6 +67,30 @@ export function applyCssTokens(root: HTMLElement = document.documentElement): vo
   set('--type-title', `${typeScale.title}px`);
   set('--type-display', `${typeScale.display}px`);
   set('--type-banner', `${typeScale.banner}px`);
+  set('--type-micro', `${typeScale.micro}px`);
+
+  // Elevation ladder + layer ladder + motion — the only values chrome may use.
+  set('--shadow-rail', elevation.rail);
+  set('--shadow-card', elevation.card);
+  set('--shadow-panel', elevation.panel);
+  set('--shadow-modal', elevation.modal);
+  set('--z-stage', `${zIndex.stage}`);
+  set('--z-chrome', `${zIndex.chrome}`);
+  set('--z-hud', `${zIndex.hud}`);
+  set('--z-ticker', `${zIndex.ticker}`);
+  set('--z-overlay', `${zIndex.overlay}`);
+  set('--z-sheet', `${zIndex.sheet}`);
+  set('--z-modal', `${zIndex.modal}`);
+  set('--z-toast', `${zIndex.toast}`);
+  set('--dur-fast', `${motion.fast}s`);
+  set('--dur-snap', `${motion.snap}s`);
+  set('--dur-smooth', `${motion.smooth}s`);
+  set('--dur-slow', `${motion.slow}s`);
+  set('--ease-ui', easing);
+
+  // Bronze alpha tints — the shared hairlines/borders.
+  set('--bronze-faint', 'rgba(184, 149, 74, 0.16)');
+  set('--bronze-soft', 'rgba(184, 149, 74, 0.35)');
 
   set('--safe-top', 'env(safe-area-inset-top, 0px)');
   set('--safe-right', 'env(safe-area-inset-right, 0px)');

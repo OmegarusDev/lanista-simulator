@@ -4,7 +4,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 3;
+  z-index: var(--z-hud);
 }
 
 .practice-screen > .practice-top,
@@ -38,12 +38,12 @@
 
 .practice-top {
   border-bottom: 1.5px solid var(--rail-border);
-  box-shadow: 0 8px 24px rgba(8, 10, 14, 0.25);
+  box-shadow: var(--shadow-rail);
 }
 
 .practice-bottom {
   border-top: 1.5px solid var(--rail-border);
-  box-shadow: 0 -8px 24px rgba(8, 10, 14, 0.25);
+  box-shadow: var(--shadow-rail);
 }
 
 .practice-top .title-row {
@@ -112,7 +112,7 @@
 .sheet {
   position: absolute;
   inset: 0;
-  z-index: 6;
+  z-index: var(--z-sheet);
   display: flex;
   flex-direction: column;
   padding: var(--space-lg);
@@ -244,7 +244,7 @@
 }
 
 .pick-grid .pick-name {
-  font-size: 11px;
+  font-size: var(--type-micro);
   color: var(--parchment);
   opacity: 0.85;
 }
@@ -267,12 +267,9 @@
   border: 1px solid var(--debug-border);
   background: var(--debug);
   color: var(--debug-text);
-  font-size: 11px;
+  font-size: var(--type-micro);
   border-radius: var(--radius-sm);
   pointer-events: none;
   letter-spacing: 0.04em;
 }
 
-.is-hidden {
-  display: none !important;
-}

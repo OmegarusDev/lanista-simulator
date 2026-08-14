@@ -200,28 +200,22 @@ export class LudusView {
     return this.queries!;
   }
 
-  private render(): void {
-    const state = this.state!;
-    const q = this.q();
-    clear(this.root);
+  // Stable chrome: the board, bar, tabs, and slots are built ONCE; only the
+  // body/actions/overlays rebuild per mutation — no full-panel flash.
+  private panel: HTMLElement | null = null;
+  private bodySlot: HTMLElement | null = null;
+  private actionsSlot: HTMLElement | null = null;
+  private overlaySlot: HTMLElement | null = null;
+  private vitalDayEl: HTMLElement | null = null;
+  private vitalMoneyEl: HTMLElement | null = null;
+  private vitalSubEl: HTMLElement | null = null;
+  private contractEl: HTMLElement | null = null;
+  private readonly tabBtns = new Map<Tab, HTMLButtonElement>();
 
-    // One floating board over the live arena — the sand stays visible around it.
+  private ensureChrome(): void {
+    if (this.panel) return;
     const panel = el('div', { className: 'hub-panel' });
-    panel.append(this.buildHubBar(state, q));
-    panel.append(this.buildTabs());
-    const body = el('div', { className: 'hub-body' });
-    if (this.lineup) this.renderLineup(body, state);
-    else if (this.tab === 'roster') this.renderRoster(body, state);
-    else if (this.tab === 'munera') this.renderMunera(body, state);
-    else if (this.tab === 'market') this.renderMarket(body, state);
-    else this.renderSchool(body, state);
-    panel.append(body);
-    if (!this.lineup) panel.append(this.buildHubActions(state));
-    this.root.append(panel);
-    this.renderOverlays();
-  }
 
-  private buildHubBar(state: SeasonState, q: LudusQueries): HTMLElement {
     const bar = el('div', { className: 'hub-bar' });
     bar.append(
       btn('←', {
@@ -231,30 +225,15 @@ export class LudusView {
       }),
     );
     const vitals = el('div', { className: 'hub-vitals' });
-    vitals.append(
-      el('span', { className: 'vital', text: `Day ${state.day}/${economy.seasonDays}` }),
-    );
-    vitals.append(el('span', { className: 'vital', text: `${state.denarii}d` }));
-    vitals.append(
-      el('span', {
-        className: 'vital-sub',
-        text: `${state.virtus}v · ${q.fightableCount()} fit · ${state.roster.filter((g) => !g.retired).length}/${q.rosterCap()}`,
-      }),
-    );
+    this.vitalDayEl = el('span', { className: 'vital' });
+    this.vitalMoneyEl = el('span', { className: 'vital' });
+    this.vitalSubEl = el('span', { className: 'vital-sub' });
+    vitals.append(this.vitalDayEl, this.vitalMoneyEl, this.vitalSubEl);
     bar.append(vitals);
-    const contract = state.contracts.find((c) => !c.completed && !c.failed);
-    if (contract) {
-      bar.append(
-        el('span', {
-          className: 'eyebrow hub-contract',
-          text: `${contract.name} · ${contract.daysLeft}d`,
-        }),
-      );
-    }
-    return bar;
-  }
+    this.contractEl = el('span', { className: 'eyebrow hub-contract' });
+    bar.append(this.contractEl);
+    panel.append(bar);
 
-  private buildTabs(): HTMLElement {
     const tabs = el('div', { className: 'tabs hub-tabs' });
     (
       [
@@ -264,18 +243,59 @@ export class LudusView {
         ['school', 'School'],
       ] as const
     ).forEach(([id, lab]) => {
-      tabs.append(
-        btn(lab, {
-          active: this.tab === id,
-          onClick: () => {
-            this.tab = id;
-            this.onUi();
-            this.render();
-          },
-        }),
-      );
+      const b = btn(lab, {
+        onClick: () => {
+          this.tab = id;
+          this.onUi();
+          this.render();
+        },
+      });
+      this.tabBtns.set(id, b);
+      tabs.append(b);
     });
-    return tabs;
+    panel.append(tabs);
+
+    this.bodySlot = el('div', { className: 'hub-body' });
+    panel.append(this.bodySlot);
+    this.actionsSlot = el('div', { className: 'footer-actions hub-actions' });
+    panel.append(this.actionsSlot);
+
+    // Overlays must cover the whole screen — the panel clips (overflow hidden),
+    // so the overlay host lives beside it.
+    this.overlaySlot = el('div');
+    this.root.append(panel, this.overlaySlot);
+    this.panel = panel;
+  }
+
+  private render(): void {
+    this.ensureChrome();
+    const state = this.state!;
+    const q = this.q();
+
+    // Patch the chrome — the board, bar, and tabs never rebuild.
+    this.vitalDayEl!.textContent = `Day ${state.day}/${economy.seasonDays}`;
+    this.vitalMoneyEl!.textContent = `${state.denarii}d`;
+    this.vitalSubEl!.textContent = `${state.virtus}v · ${q.fightableCount()} fit · ${state.roster.filter((g) => !g.retired).length}/${q.rosterCap()}`;
+    const contract = state.contracts.find((c) => !c.completed && !c.failed);
+    this.contractEl!.textContent = contract ? `${contract.name} · ${contract.daysLeft}d` : '';
+    for (const [id, b] of this.tabBtns) b.classList.toggle('is-active', this.tab === id);
+
+    // Rebuild only the body.
+    clear(this.bodySlot!);
+    if (this.lineup) this.renderLineup(this.bodySlot!, state);
+    else if (this.tab === 'roster') this.renderRoster(this.bodySlot!, state);
+    else if (this.tab === 'munera') this.renderMunera(this.bodySlot!, state);
+    else if (this.tab === 'market') this.renderMarket(this.bodySlot!, state);
+    else this.renderSchool(this.bodySlot!, state);
+
+    // Rebuild only the actions.
+    clear(this.actionsSlot!);
+    if (!this.lineup) this.actionsSlot!.append(this.buildHubActions(state));
+
+    // Rebuild only the overlays.
+    clear(this.overlaySlot!);
+    if (this.terminal) this.overlaySlot!.append(this.seasonEndOverlay(state));
+    else if (this.aftermath) this.overlaySlot!.append(this.aftermathOverlay(state, this.aftermath));
   }
 
   private buildHubActions(state: SeasonState): HTMLElement {
@@ -310,14 +330,6 @@ export class LudusView {
       }),
     );
     return foot;
-  }
-
-  private renderOverlays(): void {
-    if (this.terminal) {
-      this.root.append(this.seasonEndOverlay(this.state!));
-    } else if (this.aftermath) {
-      this.root.append(this.aftermathOverlay(this.state!, this.aftermath));
-    }
   }
 
   // ————— Roster —————

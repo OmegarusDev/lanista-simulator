@@ -10,6 +10,7 @@ import type { Input } from '../../shell/input';
 import { applyCombatEvents, fightCombatFxHooks } from '../../view/combatFx';
 import type { Synth } from '../../view/audio';
 import { FightHud, type FightHudAction } from '../../ui/fightHud';
+import { confirmModal } from '../../ui/modal';
 import type { SandboxConfig } from '../../domain/combat/types';
 import type { GlFrame } from '../../gl/index';
 import { defaultStageDolly } from '../../gl/camera';
@@ -70,6 +71,7 @@ export class FightScene {
   private framedOnce = false;
   private lastCssW = 0;
   private lastCssH = 0;
+  private pendingForfeit = false;
   private story: string[] = [];
   private firstBlood = false;
 
@@ -113,6 +115,13 @@ export class FightScene {
   }
 
   update(input: Input): FightAction {
+    if (this.pendingForfeit) {
+      // Confirmed via the modal — the leave resolves on the next tick.
+      this.pendingForfeit = false;
+      this.paused = false;
+      this.hudDirty = true;
+      return this.careerLeave();
+    }
     const key = this.handleKeys(input);
     if (key.type !== 'NONE') return key;
 
@@ -399,7 +408,22 @@ export class FightScene {
   }
 
   private handleKeys(input: Input): FightAction {
-    if (input.wasKeyPressed('KeyQ')) return this.careerLeave();
+    if (input.wasKeyPressed('KeyQ')) {
+      // Q is a hard leave — career forfeits ask first, like the pause menu.
+      if (this.career && !this.finished) {
+        this.paused = true;
+        this.hudDirty = true;
+        confirmModal({
+          title: 'Forfeit',
+          body: 'Abandon this bout? Your fighters take the loss and any entry fee is lost.',
+          confirmLabel: 'Forfeit',
+          danger: true,
+          onConfirm: () => this.finishForfeit(),
+        });
+        return { type: 'NONE' };
+      }
+      return this.careerLeave();
+    }
     if (input.wasKeyPressed('Escape')) {
       if (this.selectedId !== null) {
         this.selectedId = null;
@@ -498,8 +522,12 @@ export class FightScene {
     }
   }
 
-  private careerLeave(): FightAction {
-    if (!this.career) return { type: 'EXIT' };
+  /** Runs once the forfeit modal confirms — resolves on the next update. */
+  private finishForfeit(): void {
+    this.pendingForfeit = true;
+  }
+
+  private careerLeave(): FightAction {    if (!this.career) return { type: 'EXIT' };
     if (this.finished) {
       return {
         type: 'CAREER_DONE',

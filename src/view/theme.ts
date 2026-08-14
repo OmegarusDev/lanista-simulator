@@ -41,9 +41,10 @@ export const space = {
 
 /**
  * Palatino type scale (design px) — use with fontStack.
- * Hierarchy: banner > display > title > label > body > meta > eyebrow.
+ * Hierarchy: banner > display > title > label > body > meta > eyebrow > micro.
  */
 export const typeScale = {
+  micro: 11,
   eyebrow: 12,
   meta: 13,
   body: 15,
@@ -64,3 +65,43 @@ export const radius = {
   md: 5,
   lg: 7,
 } as const;
+
+/**
+ * Elevation ladder — the ONLY shadows chrome may use. One rung per surface:
+ * rail (floating bars) < card (tiles) < panel (hub board) < modal (above all).
+ */
+export const elevation = {
+  rail: '0 8px 24px rgba(8, 10, 14, 0.25)',
+  card: '0 18px 48px rgba(0, 0, 0, 0.45)',
+  panel: '0 24px 64px rgba(0, 0, 0, 0.45)',
+  modal: '0 18px 48px rgba(0, 0, 0, 0.5)',
+} as const;
+
+/**
+ * Layer ladder — the ONLY z-index values chrome may use. Keep them in the
+ * shell contract so overlays can never be shadowed by future additions.
+ */
+export const zIndex = {
+  stage: 1,
+  chrome: 2,
+  hud: 3,
+  ticker: 4,
+  overlay: 5,
+  sheet: 6,
+  modal: 60,
+  toast: 70,
+} as const;
+
+/**
+ * Motion — durations (s) + easing. The ONLY motion tokens chrome may use.
+ * fast: micro feedback (press), snap: hover/cursor-follow, smooth: surface
+ * transitions, slow: major entrances.
+ */
+export const motion = {
+  fast: 0.05,
+  snap: 0.15,
+  smooth: 0.22,
+  slow: 0.3,
+} as const;
+
+export const easing = 'ease' as const;

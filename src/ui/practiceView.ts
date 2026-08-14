@@ -15,7 +15,8 @@ import type {
 import type { Input } from '../shell/input';
 import type { Synth } from '../view/audio';
 import { placePreviewInWorld, posedCardsToSnapshots } from '../view/posedPreview';
-import { btn, clear, el, segment } from './dom';
+import { btn, clear, el } from './dom';
+import { segControl } from './components';
 
 export type SandboxAction =
   | { type: 'START'; config: SandboxConfig }
@@ -132,6 +133,8 @@ export class PracticeView {
 
   /** Keyboard shortcuts while Practice is active. */
   handleKeys(input: Input): SandboxAction {
+    // The custom sheet owns the keyboard — stray Enter/Space must not launch.
+    if (this.mode === 'custom') return { type: 'NONE' };
     if (input.wasKeyPressed('Space') || input.wasKeyPressed('Enter')) {
       return { type: 'START', config: this.makeConfig() };
     }
@@ -328,14 +331,14 @@ export class PracticeView {
 
     const strip = el('div', { className: 'setup-row' });
     strip.append(
-      segment(['Match', 'Venatio'], this.matchKind === 'matchup' ? 0 : 1, (i) => {
+      segControl(['Match', 'Venatio'], this.matchKind === 'matchup' ? 0 : 1, (i) => {
         this.setMatchKind(i === 0 ? 'matchup' : 'venatio');
         this.synth.play('ui');
         this.renderChrome();
       }),
     );
     strip.append(
-      segment(['1v1', '2v2', '3v3'], this.teamSize - 1, (i) => {
+      segControl(['1v1', '2v2', '3v3'], this.teamSize - 1, (i) => {
         this.setTeamSize((i + 1) as TeamSize);
         this.synth.play('ui');
         this.renderChrome();
@@ -447,14 +450,14 @@ export class PracticeView {
 
     const setup = el('div', { className: 'setup-row' });
     setup.append(
-      segment(['Match', 'Venatio'], this.matchKind === 'matchup' ? 0 : 1, (i) => {
+      segControl(['Match', 'Venatio'], this.matchKind === 'matchup' ? 0 : 1, (i) => {
         this.setMatchKind(i === 0 ? 'matchup' : 'venatio');
         this.synth.play('ui');
         this.renderSheet();
       }),
     );
     setup.append(
-      segment(['1v1', '2v2', '3v3'], this.teamSize - 1, (i) => {
+      segControl(['1v1', '2v2', '3v3'], this.teamSize - 1, (i) => {
         this.setTeamSize((i + 1) as TeamSize);
         this.synth.play('ui');
         this.renderSheet();

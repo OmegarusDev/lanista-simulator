@@ -46,24 +46,3 @@ export function btn(
   });
   return b;
 }
-
-export function setActive(button: HTMLElement, active: boolean): void {
-  button.classList.toggle('is-active', active);
-}
-
-export function segment(
-  labels: string[],
-  selected: number,
-  onPick: (i: number) => void,
-): HTMLDivElement {
-  const row = el('div', { className: 'seg' });
-  labels.forEach((lab, i) => {
-    row.append(
-      btn(lab, {
-        active: i === selected,
-        onClick: () => onPick(i),
-      }),
-    );
-  });
-  return row;
-}

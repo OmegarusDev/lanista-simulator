@@ -1,7 +1,8 @@
 import { ARMATURAE } from '../content/armatura';
 import { BEASTS } from '../content/beasts';
 import type { FighterSnapshot } from '../domain/combat/types';
-import { btn, clear, el } from './dom';
+import { clear, el } from './dom';
+import { button } from './components';
 import { openHelp } from './help';
 import { confirmModal } from './modal';
 
@@ -94,6 +95,7 @@ export class FightHud {
   private lastSelectedId: number | null = null;
   private lastTickerKey = '';
   private lastDebug = false;
+  private lastDockDebugKey = '';
 
   constructor(private readonly onUi: () => void) {
     this.root = el('div', { className: 'hud fight-hud is-hidden' });
@@ -173,8 +175,9 @@ export class FightHud {
     const bottom = el('div', { className: 'hud-rail hud-bottom' });
     const roster = el('div', { className: 'roster-band' });
     roster.append(
-      btn('Blue', {
-        className: 'team-cap blue',
+      button('Blue', {
+        variant: 'quiet',
+        extraClass: 'team-cap blue',
         onClick: () => this.emit({ type: 'FOCUS_TEAM', team: 0 }),
       }),
     );
@@ -189,15 +192,16 @@ export class FightHud {
     rowR.append(sideB, el('div', { className: 'divider' }), sideR);
     roster.append(rowR);
     roster.append(
-      btn('Red', {
-        className: 'team-cap red',
+      button('Red', {
+        variant: 'quiet',
+        extraClass: 'team-cap red',
         onClick: () => this.emit({ type: 'FOCUS_TEAM', team: 1 }),
       }),
     );
 
     const cluster = el('div', { className: 'controls-cluster' });
-    this.speedBtn = btn('1×', {
-      className: 'speed-btn',
+    this.speedBtn = button('1×', {
+      extraClass: 'speed-btn',
       title: 'Speed — tap to cycle, or press 1/2/4',
       onClick: () => {
         const idx = SPEEDS.indexOf(opts.speed as (typeof SPEEDS)[number]);
@@ -205,14 +209,14 @@ export class FightHud {
       },
     });
     cluster.append(this.speedBtn);
-    this.pauseBtn = btn('Pause', {
-      className: 'pause-btn',
+    this.pauseBtn = button('Pause', {
+      extraClass: 'pause-btn',
       active: opts.paused,
       onClick: () => this.emit({ type: 'PAUSE_TOGGLE' }),
     });
     cluster.append(this.pauseBtn);
-    this.recenterBtn = btn('Recenter', {
-      className: 'quiet',
+    this.recenterBtn = button('Recenter', {
+      variant: 'quiet',
       onClick: () => this.emit({ type: 'RECENTER' }),
     });
     cluster.append(this.recenterBtn);
@@ -282,11 +286,16 @@ export class FightHud {
     }
 
     if (opts.inspect) {
-      if (opts.selectedId !== this.lastSelectedId) {
+      const debugKey = opts.inspect.debugLines?.join('|') ?? '';
+      if (
+        opts.selectedId !== this.lastSelectedId ||
+        debugKey !== this.lastDockDebugKey
+      ) {
         this.dockEl?.remove();
         this.dockValueEls = [];
         this.dockEl = this.buildDock(opts.inspect);
         this.dockSlot.append(this.dockEl);
+        this.lastDockDebugKey = debugKey;
       } else {
         this.dockStateEl!.textContent = opts.inspect.stateLine;
         for (let i = 0; i < this.dockValueEls.length; i++) {
@@ -351,16 +360,16 @@ export class FightHud {
     panel.append(el('h2', { text: 'Paused' }));
     const stack = el('div', { className: 'stack' });
     stack.append(
-      btn('Resume', {
-        className: 'cta',
+      button('Resume', {
+        variant: 'cta',
         onClick: () => this.emit({ type: 'RESUME' }),
       }),
     );
     stack.append(
-      btn(muted ? 'Unmute' : 'Mute', { onClick: () => this.emit({ type: 'MUTE' }) }),
+      button(muted ? 'Unmute' : 'Mute', { onClick: () => this.emit({ type: 'MUTE' }) }),
     );
     stack.append(
-      btn('How to Play', {
+      button('How to Play', {
         onClick: () => {
           this.onUi();
           openHelp();
@@ -368,12 +377,12 @@ export class FightHud {
       }),
     );
     if (!career) {
-      stack.append(btn('Restart', { onClick: () => this.emit({ type: 'RESTART' }) }));
-      stack.append(btn('Reroll', { onClick: () => this.emit({ type: 'REROLL' }) }));
+      stack.append(button('Restart', { onClick: () => this.emit({ type: 'RESTART' }) }));
+      stack.append(button('Reroll', { onClick: () => this.emit({ type: 'REROLL' }) }));
     }
     stack.append(
-      btn(career ? 'Forfeit & Leave' : 'Leave', {
-        className: 'quiet',
+      button(career ? 'Forfeit & Leave' : 'Leave', {
+        variant: 'quiet',
         onClick: () => {
           this.onUi();
           if (career) {
@@ -419,22 +428,22 @@ export class FightHud {
     const stack = el('div', { className: 'stack' });
     if (career) {
       stack.append(
-        btn('Continue', {
-          className: 'cta',
+        button('Continue', {
+          variant: 'cta',
           onClick: () => this.emit({ type: 'CONTINUE' }),
         }),
       );
     } else {
       stack.append(
-        btn('Restart', {
-          className: 'cta',
+        button('Restart', {
+          variant: 'cta',
           onClick: () => this.emit({ type: 'RESTART' }),
         }),
       );
-      stack.append(btn('Reroll', { onClick: () => this.emit({ type: 'REROLL' }) }));
+      stack.append(button('Reroll', { onClick: () => this.emit({ type: 'REROLL' }) }));
       stack.append(
-        btn('Leave', {
-          className: 'quiet',
+        button('Leave', {
+          variant: 'quiet',
           onClick: () => this.emit({ type: 'LEAVE' }),
         }),
       );

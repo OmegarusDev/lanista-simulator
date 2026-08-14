@@ -4,7 +4,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 3;
+  z-index: var(--z-hud);
 }
 
 /*
@@ -56,12 +56,12 @@
 
 .hud-top {
   border-bottom: 1.5px solid var(--rail-border);
-  box-shadow: 0 8px 24px rgba(8, 10, 14, 0.25);
+  box-shadow: var(--shadow-rail);
 }
 
 .hud-bottom {
   border-top: 1.5px solid var(--rail-border);
-  box-shadow: 0 -8px 24px rgba(8, 10, 14, 0.25);
+  box-shadow: var(--shadow-rail);
 }
 
 .hud-top-row {
@@ -93,7 +93,7 @@
 
 .hud-seed {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--type-micro);
   letter-spacing: 0.04em;
   color: var(--debug-text);
   opacity: 0.75;
@@ -168,14 +168,14 @@
   flex-direction: column;
   gap: 2px;
   pointer-events: none;
-  z-index: 4;
+  z-index: var(--z-ticker);
 }
 
 .fight-ticker .ticker-line {
   align-self: flex-start;
   max-width: min(24rem, 72%);
   padding: 0.2rem 0.6rem;
-  border: 1px solid rgba(184, 149, 74, 0.35);
+  border: 1px solid var(--bronze-soft);
   border-left: 3px solid var(--bronze-hot);
   border-radius: var(--radius-sm);
   background:
@@ -301,7 +301,7 @@
   align-items: center;
   gap: 6px;
   padding-left: 4px;
-  border-left: 1px solid rgba(184, 149, 74, 0.16);
+  border-left: 1px solid var(--bronze-faint);
 }
 
 .controls-cluster .speed-btn {
@@ -360,7 +360,7 @@
 .inspect-dock .debug-line {
   margin-top: 0.35rem;
   color: var(--debug-text);
-  font-size: 11px;
+  font-size: var(--type-micro);
   letter-spacing: 0.02em;
 }
 
@@ -372,7 +372,7 @@
   justify-content: center;
   padding: var(--space-xl);
   background: rgba(8, 10, 14, 0.68);
-  z-index: 5;
+  z-index: var(--z-overlay);
   pointer-events: auto;
 }
 
@@ -436,7 +436,7 @@
 
   .crowd-caption {
     min-height: 1rem;
-    font-size: 11px;
+    font-size: var(--type-micro);
   }
 
   /* Compact single-row bar: chips swipe, controls hug the right. */
@@ -448,7 +448,7 @@
   .team-cap {
     min-height: 28px;
     padding: 0.1rem 0.3rem;
-    font-size: 10px;
+    font-size: var(--type-micro);
   }
 
   .roster-row {
@@ -478,14 +478,14 @@
   .roster-chip .name {
     display: inline-block;
     max-width: 62%;
-    font-size: 12px;
+    font-size: var(--type-micro);
     vertical-align: baseline;
   }
 
   .roster-chip .tag {
     display: inline;
     margin-left: 0.35rem;
-    font-size: 10px;
+    font-size: var(--type-micro);
   }
 
   .roster-chip .hp-bar {

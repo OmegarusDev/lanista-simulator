@@ -52,7 +52,7 @@ body {
 
 #chrome {
   position: relative;
-  z-index: 2;
+  z-index: var(--z-chrome);
   /* Screens are flex children; the fight HUD / practice chrome are absolute
      overlays and never participate in this flow. */
   display: flex;
@@ -75,7 +75,7 @@ body {
 /* Full-bleed canvas — NEVER pad the stage; chrome floats over atmosphere. */
 #stage-wrap {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-stage);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -111,7 +111,7 @@ body {
 
 .screen,
 .hud {
-  animation: ui-fade-in 0.22s ease;
+  animation: ui-fade-in var(--dur-smooth) var(--ease-ui);
 }
 
 @media (prefers-reduced-motion: reduce) {
