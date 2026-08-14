@@ -654,6 +654,9 @@ export class SceneFighters {
 
       // --- Procedural anatomy: the skeleton poses from state, never glides.
       // Hands reach the grips via IK, feet plant on the stride, beasts trot.
+      // The last fighter standing raises the weapon — the victor's salute.
+      const victor = f.alive && !fighters.some((o) => o.alive && o.team !== f.team);
+      const victoryLift = victor ? 8 : 0;
       const isBeastKind = f.kind === 'beast';
       const bulk = isBeastKind
         ? beastBulk(f.beastId ?? 'LION', f.appearanceSeed)
@@ -755,7 +758,7 @@ export class SceneFighters {
           continue;
         }
         ox = p.ox * phaseReach + (inActive && (isWeapon || surge) ? partLunge : 0) + hitch * 4;
-        oy = p.oy * height + lean * 3 + shuffle * 0.4 + moveLean * 14 * height;
+        oy = (p.oy + (isWeapon ? victoryLift : 0)) * height + lean * 3 + shuffle * 0.4 + moveLean * 14 * height;
         oz = p.oz + tell.lateral * 4 + tell.guardOpen * (p.kind.includes('shield') ? -3 : 0);
         // Guarded off-hand raises to meet the threat: shields lift and tilt
         // up around their rim (the rim itself stays planted).

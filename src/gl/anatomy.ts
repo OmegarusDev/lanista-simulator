@@ -172,41 +172,57 @@ export function poseHuman(opts: HumanPoseOpts): HumanPose {
 }
 
 /**
- * Fall: the fighter collapses forward onto the sand — torso and head lying
- * flat, arms sprawled ahead, legs planted with the knees bent. A fallen
- * fighter, not a hovering squashed blob.
+ * Fall: the fighter collapses in combat — the torso listing, the head turned
+ * and thrown back, one leg bent under, arms flung. A violent death, not a
+ * body lying down to sleep.
  */
 export function fallPose(pose: HumanPose): HumanPose {
   const b = pose.bulk;
   const ankles = 1.5 * b;
   const hips = v3(0, ankles, 0);
-  const torso: Bone = { from: hips, to: v3(8.5 * b, ankles, 0), thick: 12.5 * b };
-  const neck: Bone = { from: torso.to, to: v3(10.5 * b, ankles + 0.4 * b, 0), thick: 2.8 * b };
-  const head = v3(12.2 * b, ankles + 0.6 * b, 0);
-  const arms: LimbPose[] = [];
-  for (const side of [-1, 1] as const) {
-    const shoulder = v3(7.6 * b, ankles + 1.2 * b, side * 3 * b);
-    const elbow = v3(12.6 * b, ankles + 1.0 * b, side * 4 * b);
-    const hand = v3(17.6 * b, ankles + 0.9 * b, side * 4.6 * b);
-    arms.push({
-      side,
-      upper: { from: shoulder, to: elbow, thick: 3.2 * b },
-      lower: { from: elbow, to: hand, thick: 2.6 * b },
-      end: hand,
-    });
-  }
-  const legs: LimbPose[] = [];
-  for (const side of [-1, 1] as const) {
-    const hip = v3(0.4 * b, ankles + 1.2 * b, side * 2.6 * b);
-    const foot = v3(side * 1.5 * b, 0.9 * b, side * 2.6 * b);
-    const knee = twoBoneIK(hip, foot, 5.4 * b, 5.2 * b, v3(0.6, 0, 0));
-    legs.push({
-      side,
-      upper: { from: hip, to: knee, thick: 3.6 * b },
-      lower: { from: knee, to: foot, thick: 2.8 * b },
-      end: foot,
-    });
-  }
+  const torso: Bone = {
+    from: hips,
+    to: v3(7.6 * b, ankles + 0.7 * b, -1.6 * b),
+    thick: 12.5 * b,
+  };
+  const neck: Bone = {
+    from: torso.to,
+    to: v3(9.4 * b, ankles + 0.5 * b, -2.6 * b),
+    thick: 2.8 * b,
+  };
+  const head = v3(10.6 * b, ankles + 0.2 * b, -3.4 * b);
+  const arms: LimbPose[] = [
+    // The weapon arm flung forward across the sand.
+    {
+      side: 1,
+      upper: { from: v3(6.8 * b, ankles + 1.3 * b, 1.2 * b), to: v3(13 * b, ankles + 1 * b, 2.2 * b), thick: 3.2 * b },
+      lower: { from: v3(13 * b, ankles + 1 * b, 2.2 * b), to: v3(18.2 * b, ankles + 0.8 * b, 2.8 * b), thick: 2.6 * b },
+      end: v3(18.2 * b, ankles + 0.8 * b, 2.8 * b),
+    },
+    // The shield arm crumpled out to the side.
+    {
+      side: -1,
+      upper: { from: v3(6.6 * b, ankles + 1.2 * b, -3.6 * b), to: v3(3 * b, ankles + 1.4 * b, -6.4 * b), thick: 3.2 * b },
+      lower: { from: v3(3 * b, ankles + 1.4 * b, -6.4 * b), to: v3(4.6 * b, ankles + 1 * b, -9.4 * b), thick: 2.6 * b },
+      end: v3(4.6 * b, ankles + 1 * b, -9.4 * b),
+    },
+  ];
+  const legs: LimbPose[] = [
+    // The trailing leg straight out behind.
+    {
+      side: 1,
+      upper: { from: v3(0.2 * b, ankles + 1.4 * b, -1.2 * b), to: v3(-3.4 * b, ankles + 1.1 * b, -2.6 * b), thick: 3.6 * b },
+      lower: { from: v3(-3.4 * b, ankles + 1.1 * b, -2.6 * b), to: v3(-7.4 * b, ankles + 0.9 * b, -3.4 * b), thick: 2.8 * b },
+      end: v3(-7.4 * b, ankles + 0.9 * b, -3.4 * b),
+    },
+    // The near leg folded under the body.
+    {
+      side: -1,
+      upper: { from: v3(0.4 * b, ankles + 1.6 * b, 1.6 * b), to: v3(2.2 * b, ankles + 2.4 * b, 0.6 * b), thick: 3.6 * b },
+      lower: { from: v3(2.2 * b, ankles + 2.4 * b, 0.6 * b), to: v3(2.6 * b, ankles + 0.9 * b, 2.4 * b), thick: 2.8 * b },
+      end: v3(2.6 * b, ankles + 0.9 * b, 2.4 * b),
+    },
+  ];
   return { bulk: b, height: 1, hips, torso, neck, head, arms, legs };
 }
 
