@@ -15,6 +15,18 @@ import type { GlFrame } from '../../gl/index';
 import { defaultStageDolly } from '../../gl/camera';
 import { toStageDrawModel } from '../../gl/drawModel';
 import { pickFromScreen } from '../../gl/pick';
+import type { Intention } from '../../domain/combat/types';
+
+/** Diegetic reading of the AI's intentions — the editor reads the fighter. */
+const INTENTION_PHRASE: Record<Intention, string> = {
+  NONE: 'Watching',
+  PRESS: 'Presses the attack',
+  YIELD: 'Backing off',
+  ANGLE: 'Circling for an angle',
+  INVITE: 'Baiting a lunge',
+  FEINT: 'Feinting',
+  RESET: 'Catching his breath',
+};
 
 export type FightAction =
   | { type: 'NONE' }
@@ -300,7 +312,9 @@ export class FightScene {
           { label: 'Range', value: `${def.attackRange}` },
           { label: 'Guard', value: `${(def.guardArc * (180 / Math.PI)).toFixed(0)}°` },
           { label: 'Mass', value: def.mass.toFixed(2) },
-          { label: 'Intent', value: f.intention },
+          // Diegetic: the AI's intention reads as a readable motivation,
+          // not a state code — the editor reads the fighter's body.
+          { label: 'Intent', value: INTENTION_PHRASE[f.intention] ?? f.intention },
         ];
         if (def.tipCatchRatio > 0) {
           lines.push({
@@ -348,6 +362,7 @@ export class FightScene {
       ticker: this.story,
       mvp,
       crowdLean,
+      cameraManual: this.glFrame.camera.mode === 'manual',
       entertainment: this.match.fighters.reduce(
         (sum, f) => sum + this.match.entertainment.score(f.id),
         0,
@@ -372,6 +387,7 @@ export class FightScene {
       mvp ?? '',
       Math.round(this.match.teamCrowdFavor(0) * 100),
       Math.round(this.match.teamCrowdFavor(1) * 100),
+      this.glFrame.camera.mode,
       this.story.join('|'),
       snaps
         .map(

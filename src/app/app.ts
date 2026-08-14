@@ -47,6 +47,8 @@ export class App {
   private previewPtrWasDown = false;
   private ambientSeed = 0x51a11;
   private frozenAftermath: StageDrawModel | null = null;
+  private lastPadTop = -1;
+  private lastPadBottom = -1;
 
   private last = 0;
   private acc = 0;
@@ -169,6 +171,11 @@ export class App {
   }
 
   private applyStagePads(top: number, bottom: number): void {
+    // Only touch the DOM when the pads actually change — setProperty every
+    // frame invalidates styles on the whole HUD tree.
+    if (top === this.lastPadTop && bottom === this.lastPadBottom) return;
+    this.lastPadTop = top;
+    this.lastPadBottom = bottom;
     this.shell.app.style.setProperty('--stage-pad-top', `${top}px`);
     this.shell.app.style.setProperty('--stage-pad-bottom', `${bottom}px`);
   }

@@ -50,6 +50,8 @@ export interface FightHudRender {
   entertainment?: number;
   /** Strong crowd lean ('blue' | 'red') tints the caption. */
   crowdLean?: 'blue' | 'red' | null;
+  /** Camera is manually held — only then does Recenter appear. */
+  cameraManual?: boolean;
 }
 
 function fighterTag(f: FighterSnapshot): string {
@@ -85,6 +87,7 @@ export class FightHud {
   private chips: { root: HTMLButtonElement; bar: HTMLElement }[] = [];
   private segBtns: HTMLButtonElement[] = [];
   private pauseBtn!: HTMLButtonElement;
+  private recenterBtn!: HTMLButtonElement;
   private overlaySlot!: HTMLElement;
   private overlayEl: HTMLElement | null = null;
 
@@ -207,12 +210,11 @@ export class FightHud {
       onClick: () => this.emit({ type: 'PAUSE_TOGGLE' }),
     });
     controls.append(this.pauseBtn);
-    controls.append(
-      btn('Recenter', {
-        className: 'quiet',
-        onClick: () => this.emit({ type: 'RECENTER' }),
-      }),
-    );
+    this.recenterBtn = btn('Recenter', {
+      className: 'quiet',
+      onClick: () => this.emit({ type: 'RECENTER' }),
+    });
+    controls.append(this.recenterBtn);
     bottom.append(controls);
     this.root.append(bottom);
 
@@ -264,6 +266,8 @@ export class FightHud {
       b.classList.toggle('is-active', SPEEDS[i] === opts.speed);
     });
     this.pauseBtn.classList.toggle('is-active', opts.paused);
+    // Recenter only matters when the camera is manually held.
+    this.recenterBtn.classList.toggle('is-hidden', !opts.cameraManual);
 
     const tk = opts.ticker?.slice(-2).join('\n') ?? '';
     if (tk !== this.lastTickerKey) {

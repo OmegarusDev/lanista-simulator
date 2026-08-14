@@ -3,7 +3,7 @@
  * Bakes procedural noise tiles into data-URL backgrounds (zero assets).
  */
 import { colors } from '../content/palette';
-import { noiseDataUrl } from '../gfx/pattern';
+import { crowdStripDataUrl, noiseDataUrl } from '../gfx/pattern';
 import { fontStack, radius, space, touchTarget, typeScale } from '../view/theme';
 
 export function applyCssTokens(root: HTMLElement = document.documentElement): void {
@@ -92,9 +92,17 @@ export function applyCssTokens(root: HTMLElement = document.documentElement): vo
       size: 64,
       tag: 'css-stone',
     });
+    const crowd = crowdStripDataUrl({
+      seed: 0x2b7a,
+      tones: ['#5c554b', '#6a6258', '#7a7266', '#8a8173', '#4a453d', '#b8954a'],
+      width: 256,
+      height: 48,
+      tag: 'css-crowd',
+    });
     if (parchment) set('--tex-parchment', `url(${parchment})`);
     if (wood) set('--tex-wood', `url(${wood})`);
     if (stone) set('--tex-stone', `url(${stone})`);
+    if (crowd) set('--tex-crowd', `url(${crowd})`);
   } catch {
     // Headless / missing canvas — skip texture tokens
   }

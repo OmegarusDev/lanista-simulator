@@ -122,6 +122,26 @@ button:focus-visible,
   outline-offset: 2px;
 }
 
+/* Modern motion: gradient backgrounds can't interpolate, but filter can —
+   hover/active glow through brightness instead of a dead color transition. */
+button:not(:disabled),
+.btn:not(:disabled) {
+  transition:
+    filter 0.15s ease,
+    transform 0.05s ease;
+}
+
+button:hover:not(:disabled),
+.btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+button:active:not(:disabled),
+.btn:active:not(:disabled) {
+  filter: brightness(0.92);
+  transform: translateY(1px);
+}
+
 button:hover:not(:disabled),
 .btn:hover:not(:disabled) {
   background:
@@ -776,10 +796,23 @@ button.quiet:hover:not(:disabled),
   flex: 1 1 8rem;
 }
 
-/* Overlay panels shared with the fight HUD — max height for tall content. */
+/* Overlay panels shared with the fight HUD — max height for tall content.
+   The CTA stays pinned; only the card scrolls. */
 .ludus-screen .overlay-panel {
   max-height: min(88dvh, 40rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.ludus-screen .overlay-panel .center-card {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
+  margin-bottom: var(--space-md);
+}
+
+.ludus-screen .overlay-panel .cta {
+  flex: 0 0 auto;
 }
 
 button.danger,
