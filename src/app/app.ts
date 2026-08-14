@@ -287,6 +287,7 @@ export class App {
       mood: 'preview',
     });
     cam.updateDirector(model.fighters, { selectedId: this.practice.selectedPreviewId });
+    cam.frameStage();
     // Selecting a fighter cuts the camera to them — the chips feel alive.
     if (this.practice.selectedPreviewId !== this.lastPracticeSel) {
       this.lastPracticeSel = this.practice.selectedPreviewId;

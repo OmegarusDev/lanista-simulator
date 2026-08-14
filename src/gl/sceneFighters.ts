@@ -94,6 +94,8 @@ interface PoseCtx {
   lean: number;
   guarding: number;
   bob: number;
+  sway: number;
+  guardBreathe: number;
   dims?: QuadrupedDims;
 }
 
@@ -124,7 +126,7 @@ function sphereResult(pt: Vec3, r: number): AnatResult {
 /** Tell squash + movement lean for the body chain (legs keep ground contact). */
 function squash(pt: Vec3, ctx: PoseCtx): Vec3 {
   return {
-    x: pt.x + ctx.lean * Math.max(0, pt.y - 8.5 * ctx.bulk) * 0.35,
+    x: pt.x + ctx.lean * Math.max(0, pt.y - 8.5 * ctx.bulk) * 0.35 + ctx.sway,
     y: pt.y * ctx.height + ctx.bob,
     z: pt.z,
   };
@@ -663,9 +665,11 @@ export class SceneFighters {
         height,
         lean: moveLean,
         guarding: f.guarding || tell.guardOpen > 0.3 ? 1 : 0,
+        guardBreathe: (Math.sin(st.t * 0.04) + 1) / 2 * 0.35,
         bob:
           Math.sin(st.step * 2) * 0.35 * moveK +
-          Math.sin(st.t * 0.05) * 0.14 * (1 - Math.min(1, moveK * 5)),
+          Math.sin(st.t * 0.05) * 0.18 * (1 - Math.min(1, moveK * 5)),
+        sway: Math.sin(st.t * 0.045) * 0.9 * (1 - Math.min(1, moveK * 5)),
       };
       let pose: HumanPose | QuadrupedPose;
       if (isBeastKind) {
@@ -679,7 +683,7 @@ export class SceneFighters {
           bulk,
           stepPhase: st.step,
           speed: moveK,
-          guard: ctx.guarding,
+          guard: Math.max(ctx.guarding, ctx.guardBreathe),
           mainGrip: {
             x: Math.cos(look.mainHandAngle) * look.mainHandDist + gripLunge,
             y: 13,

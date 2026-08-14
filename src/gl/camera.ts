@@ -404,6 +404,15 @@ export class StageCamera {
     return clamp(Math.max(dollyW, dollyD), CAMERA_DOLLY_MIN, CAMERA_DOLLY_MAX);
   }
 
+  /**
+   * Tight staging framing: the director pulls in close to the fighters so
+   * they read as standing figures, not specks in the arena. Manual orbits
+   * and zooms keep the user's framing.
+   */
+  frameStage(): void {
+    if (this.mode === 'director') this.dolly = Math.min(this.dolly, 350);
+  }
+
   /** Hand back to the director immediately (Recenter button / rotation reframe). */
   recenter(): void {
     this.mode = 'director';
