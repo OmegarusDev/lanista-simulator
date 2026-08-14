@@ -45,6 +45,7 @@ export class App {
   private labReturn: 'title' | 'ludus' = 'title';
 
   private previewPtrWasDown = false;
+  private lastPracticeSel: number | null = null;
   private ambientSeed = 0x51a11;
   private frozenAftermath: StageDrawModel | null = null;
   private lastPadTop = -1;
@@ -286,6 +287,12 @@ export class App {
       mood: 'preview',
     });
     cam.updateDirector(model.fighters, { selectedId: this.practice.selectedPreviewId });
+    // Selecting a fighter cuts the camera to them — the chips feel alive.
+    if (this.practice.selectedPreviewId !== this.lastPracticeSel) {
+      this.lastPracticeSel = this.practice.selectedPreviewId;
+      const sel = model.fighters.find((f) => f.id === this.practice.selectedPreviewId);
+      if (sel) cam.setInterest(sel.x, sel.y, 34);
+    }
     this.shell.frame.render(model);
 
     if (this.practice.mode === 'custom') {

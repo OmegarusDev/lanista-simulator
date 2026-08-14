@@ -72,42 +72,83 @@
   flex: 1 1 10rem;
 }
 
-.practice-focus {
+/* Roster band — the same language as the fight HUD: team caps, chip-style
+   fighter buttons, swipeable on narrow screens. */
+.practice-band {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
   align-items: center;
-  margin-bottom: 0.55rem;
+  gap: 6px;
 }
 
-.practice-focus button {
-  min-height: 40px;
-  padding: 0.3rem 0.55rem;
-  font-size: var(--type-eyebrow);
+.practice-sides {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.practice-sides::-webkit-scrollbar {
+  display: none;
+}
+
+.focus-chip {
+  flex: 0 0 auto;
+  min-width: 5.2rem;
+  min-height: 44px;
+  padding: 0.3rem 0.5rem;
+  border: 1.5px solid var(--bronze);
+  border-radius: var(--radius-md);
+  background: rgba(18, 22, 28, 0.78);
+  color: var(--parchment);
+  font: 600 var(--type-eyebrow) / 1.15 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+  box-shadow: inset 0 1px 0 rgba(200, 180, 140, 0.08);
+}
+
+.focus-chip.is-blue {
+  border-left: 3px solid var(--ally);
+}
+
+.focus-chip.is-red {
+  border-left: 3px solid var(--foe);
+}
+
+.focus-chip.is-selected {
+  border-color: var(--bronze-hot);
+  box-shadow: inset 0 0 0 1px var(--bronze-soft);
+}
+
+.focus-chip .name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-chip .tag {
+  display: block;
+  color: var(--muted);
+  font-size: var(--type-micro);
 }
 
 .practice-actions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm);
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--bronze-faint);
 }
 
 .practice-actions .cta {
-  flex: 1 1 8rem;
-  min-width: 7rem;
-}
-
-.practice-actions .secondary-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  flex: 1 1 auto;
-}
-
-.practice-actions .secondary-actions button {
-  flex: 1 1 5rem;
-  min-height: 44px;
+  min-width: 8rem;
 }
 
 .sheet {
@@ -119,8 +160,10 @@
   padding: var(--space-lg);
   background:
     var(--tex-stone, none),
-    linear-gradient(180deg, rgba(20, 24, 30, 0.94), rgba(12, 16, 20, 0.96));
+    linear-gradient(180deg, rgba(16, 20, 26, 0.82), rgba(10, 14, 18, 0.9));
   background-blend-mode: soft-light, normal;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   overflow: auto;
   pointer-events: auto;
 }
