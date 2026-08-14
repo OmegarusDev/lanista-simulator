@@ -4,7 +4,7 @@ import type { GlContext } from './context';
 import { clearSky } from './context';
 import type { SandStainDraw, StageDrawModel } from './drawModel';
 import { mat4Identity } from './math';
-import { createDisk, createRing, createFullscreenQuad, drawMesh, type Mesh } from './mesh';
+import { createCrowdRing, createDisk, createRing, createFullscreenQuad, drawMesh, type Mesh } from './mesh';
 import { beginNoiseBakeFrame, getSandNoiseTex } from './noiseTex';
 import { PALETTE_RGB } from './paletteRgb';
 import { caveaSteps, gfxQuality, bakeBudgetPerFrame, shadowsEnabled } from './quality';
@@ -22,6 +22,7 @@ export class SceneArena {
   private quad: Mesh;
   private sand: Mesh;
   private rings: Mesh[] = [];
+  private crowdRings: Mesh[] = [];
   private lip: Mesh;
   private stainDisk: Mesh;
   private model = mat4Identity();
@@ -41,12 +42,22 @@ export class SceneArena {
   private rebuildCavea(): void {
     const gl = this.ctx.gl;
     for (const r of this.rings) r.dispose();
+    for (const c of this.crowdRings) c.dispose();
     this.rings = [];
+    this.crowdRings = [];
     const steps = caveaSteps(gfxQuality());
     for (let i = 0; i < steps; i++) {
       const inner = SAND_R * (1.08 + i * 0.07);
       const outer = inner + SAND_R * 0.055;
       this.rings.push(createRing(gl, inner, outer, 48));
+    }
+    // The top stands hold the sea of spectators — one mesh per step.
+    for (let i = steps - 2; i < steps; i++) {
+      const inner = SAND_R * (1.08 + i * 0.07);
+      const outer = inner + SAND_R * 0.055;
+      this.crowdRings.push(
+        createCrowdRing(gl, inner * 1.02, outer * 0.9, 2, 90, 1.5, 0x51a7 + i * 97),
+      );
     }
   }
 
@@ -123,6 +134,30 @@ export class SceneArena {
       drawMesh(gl, this.rings[i]!);
     }
 
+    // The crowd — a sea of heads mottled by the noise texture, warm tones
+    // against the stone, picking up the favor's cool/warm ambient.
+    const crowdCol = PALETTE_RGB.sandMid;
+    for (let i = 0; i < this.crowdRings.length; i++) {
+      const shade = 1.05 + i * 0.08;
+      gl.uniform3f(
+        this.litProg.uniform('u_albedo'),
+        crowdCol[0]! * shade,
+        crowdCol[1]! * shade,
+        crowdCol[2]! * shade,
+      );
+      gl.uniform1i(this.litProg.uniform('u_useNoise'), 1);
+      gl.uniform1f(this.litProg.uniform('u_noiseAmt'), 0.3);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, noise);
+      gl.uniform1i(this.litProg.uniform('u_noise'), 0);
+      gl.uniformMatrix4fv(
+        this.litProg.uniform('u_model'),
+        false,
+        this.setModelTranslate(CX, 0.5 + (this.rings.length - this.crowdRings.length + i) * 2.2, CZ),
+      );
+      drawMesh(gl, this.crowdRings[i]!);
+    }
+
     // Stone lip
     const lipCol = PALETTE_RGB.stoneLit;
     gl.uniform3f(this.litProg.uniform('u_albedo'), lipCol[0]!, lipCol[1]!, lipCol[2]!);
@@ -181,6 +216,7 @@ export class SceneArena {
     this.lip.dispose();
     this.stainDisk.dispose();
     for (const r of this.rings) r.dispose();
+    for (const c of this.crowdRings) c.dispose();
     this.skyProg.dispose();
     this.litProg.dispose();
   }

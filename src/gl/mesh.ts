@@ -272,6 +272,88 @@ export function createSphere(gl: GlHandle, slices = 12, stacks = 10): Mesh {
   );
 }
 
+/**
+ * A ring of spectator heads for the cavea — ONE mesh holding hundreds of
+ * small spheres, with seeded per-head UV jitter so the arena noise texture
+ * mottles them into a varied sea of onlookers. A single draw call.
+ */
+export function createCrowdRing(
+  gl: GlHandle,
+  innerR: number,
+  outerR: number,
+  rows = 2,
+  segments = 90,
+  headSize = 1.6,
+  seed = 1,
+): Mesh {
+  let s = (seed >>> 0) || 7;
+  const rnd = (): number => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+
+  // Unit-sphere template (slices × stacks).
+  const slices = 10;
+  const stacks = 6;
+  const sPos: number[] = [];
+  const sNrm: number[] = [];
+  const sIdx: number[] = [];
+  for (let i = 0; i <= stacks; i++) {
+    const v = i / stacks;
+    const phi = v * Math.PI;
+    const y = Math.cos(phi) * 0.5;
+    const ring = Math.sin(phi) * 0.5;
+    for (let j = 0; j <= slices; j++) {
+      const theta = (j / slices) * Math.PI * 2;
+      sPos.push(Math.cos(theta) * ring, y, Math.sin(theta) * ring);
+      sNrm.push(Math.cos(theta) * ring * 2, y * 2, Math.sin(theta) * ring * 2);
+    }
+  }
+  const stride = slices + 1;
+  for (let i = 0; i < stacks; i++) {
+    for (let j = 0; j < slices; j++) {
+      const a = i * stride + j;
+      const b = a + stride;
+      sIdx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const templateVerts = sPos.length / 3;
+
+  const pos: number[] = [];
+  const nrm: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  for (let row = 0; row < rows; row++) {
+    const rFrac = rows === 1 ? 0 : row / (rows - 1);
+    const radius = innerR + (outerR - innerR) * rFrac;
+    const count = Math.round(segments * (0.75 + rFrac * 0.55));
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2 + rnd() * 0.02;
+      const jr = (rnd() - 0.5) * (outerR - innerR) * 0.6;
+      const x = Math.cos(ang) * (radius + jr);
+      const z = Math.sin(ang) * (radius + jr);
+      const hs = headSize * (0.8 + rnd() * 0.45);
+      const u0 = rnd() * 100;
+      const v0 = rnd() * 100;
+      for (let k = 0; k < sPos.length; k += 3) {
+        pos.push(x + sPos[k]! * hs, sPos[k + 1]! * hs, z + sPos[k + 2]! * hs);
+        nrm.push(sNrm[k]!, sNrm[k + 1]!, sNrm[k + 2]!);
+        uv.push(u0 + sPos[k]! * 1.4, v0 + sPos[k + 1]! * 1.4);
+      }
+      const base = pos.length / 3 - templateVerts;
+      for (const ix of sIdx) idx.push(base + ix);
+    }
+  }
+  return createMesh(
+    gl,
+    new Float32Array(pos),
+    new Float32Array(nrm),
+    new Float32Array(uv),
+    new Uint16Array(idx),
+    gl.TRIANGLES,
+  );
+}
+
 export function drawMesh(gl: GlHandle, mesh: Mesh): void {
   gl.bindVertexArray(mesh.vao);
   if (mesh.ibo) gl.drawElements(mesh.mode, mesh.count, gl.UNSIGNED_SHORT, 0);
