@@ -65,6 +65,44 @@ describe('kitMesh', () => {
     expect(kitPartsForFighter(d).some((p) => p.kind === 'beastBody')).toBe(true);
   });
 
+  it('humans carry a skeleton: head, two arms, two legs, hands on the grips', () => {
+    const parts = kitPartsForFighter(toFighterDraw(stub({ armatura: 'MURMILLO' })));
+    expect(parts.some((p) => p.kind === 'head')).toBe(true);
+    expect(parts.some((p) => p.kind === 'neck')).toBe(true);
+    expect(parts.filter((p) => p.kind === 'armUpper').length).toBe(2);
+    expect(parts.filter((p) => p.kind === 'armLower').length).toBe(2);
+    expect(parts.filter((p) => p.kind === 'legUpper').length).toBe(2);
+    expect(parts.filter((p) => p.kind === 'legLower').length).toBe(2);
+    // Sides mirror: one +1, one −1 per limb.
+    for (const kind of ['armUpper', 'armLower', 'legUpper', 'legLower'] as const) {
+      const sides = parts.filter((p) => p.kind === kind).map((p) => p.side);
+      expect(sides).toContain(1);
+      expect(sides).toContain(-1);
+    }
+    // Hands close over the weapon grips (the blades start at the hand).
+    const hands = parts.filter((p) => p.kind === 'hand');
+    expect(hands.length).toBe(2);
+    const mainHand = hands.find((p) => p.side === 1)!;
+    const blade = parts.find((p) => p.kind === 'gladius')!;
+    expect(blade.ox - mainHand.ox).toBeGreaterThan(-1);
+  });
+
+  it('beast families carry their own anatomy parts', () => {
+    const parts = (id: 'LION' | 'LEOPARD' | 'BEAR' | 'BOAR') =>
+      kitPartsForFighter(toFighterDraw(stub({ kind: 'beast', beastId: id, armatura: 'MURMILLO' })));
+    const kinds = (id: 'LION' | 'LEOPARD' | 'BEAR' | 'BOAR') => parts(id).map((p) => p.kind);
+    expect(kinds('LION')).toContain('mane');
+    expect(kinds('LION')).toContain('tailTuft');
+    expect(kinds('LEOPARD')).toContain('spot');
+    expect(kinds('LEOPARD')).toContain('tailTuft');
+    expect(kinds('BEAR')).toContain('ear');
+    expect(kinds('BOAR')).toContain('tusk');
+    expect(parts('LION').filter((p) => p.kind === 'quadLegUpper').length).toBe(4);
+    expect(parts('LION').filter((p) => p.kind === 'quadPaw').length).toBe(4);
+    expect(parts('LION').some((p) => p.kind === 'quadHead')).toBe(true);
+    expect(parts('LION').some((p) => p.kind === 'quadTail')).toBe(true);
+  });
+
   it('shape-driven: blades are tapered frustums, helms are lathe bowls', () => {
     const m = kitPartsForFighter(toFighterDraw(stub({ armatura: 'MURMILLO' })));
     const blade = m.find((p) => p.kind === 'gladius' && p.geo.kind === 'frustum');

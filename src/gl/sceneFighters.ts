@@ -2,6 +2,17 @@ import type { StageCamera } from './camera';
 import type { GlContext } from './context';
 import type { FighterDraw } from './drawModel';
 import { kitPartsForFighter, type KitPartDraw } from './kitMesh';
+import {
+  aimAngles,
+  beastDims,
+  poseHuman,
+  poseQuadruped,
+  type Bone,
+  type HumanPose,
+  type QuadrupedDims,
+  type QuadrupedPose,
+  type Vec3,
+} from './anatomy';
 import { mat4Identity } from './math';
 import {
   createBentBlade,
@@ -19,8 +30,8 @@ import { createProgram, type GlProgram } from './shader';
 import { SOLID_FS, SOLID_VS } from './shaders';
 import { tellPose } from './tells';
 import { strikeParams } from '../content/strike';
-import { lungeOffset, swingAngleRad } from '../content/shapes';
-import { fightStyleOf } from '../content/appearance';
+import { beastBulk, bodyBulk, lungeOffset, swingAngleRad } from '../content/shapes';
+import { ARMATURA_LOOK, fightStyleOf } from '../content/appearance';
 import type { ArmaturaId } from '../content/armatura';
 
 /**
@@ -33,6 +44,304 @@ export function simFacingToYaw(facing: number): number {
 }
 
 const D2R = Math.PI / 180;
+
+/** Parts that surge with the beast's lunge (body parts, not planted legs). */
+const BEAST_SURGE = new Set([
+  'beastBody',
+  'quadNeck',
+  'quadHead',
+  'mane',
+  'tusk',
+  'ear',
+  'spot',
+  'tailTuft',
+]);
+
+interface AnatResult {
+  ox: number;
+  oy: number;
+  oz: number;
+  sx: number;
+  sy: number;
+  sz: number;
+  ry: number;
+  rz: number;
+}
+
+interface PoseCtx {
+  isBeast: boolean;
+  bulk: number;
+  family: string;
+  height: number;
+  lean: number;
+  guarding: number;
+  bob: number;
+  dims?: QuadrupedDims;
+}
+
+function boneResult(bone: Bone): AnatResult {
+  const d = {
+    x: bone.to.x - bone.from.x,
+    y: bone.to.y - bone.from.y,
+    z: bone.to.z - bone.from.z,
+  };
+  const l = Math.hypot(d.x, d.y, d.z) || 1;
+  const a = aimAngles(d);
+  return {
+    ox: (bone.from.x + bone.to.x) / 2,
+    oy: (bone.from.y + bone.to.y) / 2,
+    oz: (bone.from.z + bone.to.z) / 2,
+    sx: bone.thick * 0.5,
+    sy: l,
+    sz: bone.thick * 0.5,
+    ry: a.ry,
+    rz: a.rz,
+  };
+}
+
+function sphereResult(pt: Vec3, r: number): AnatResult {
+  return { ox: pt.x, oy: pt.y, oz: pt.z, sx: r, sy: r, sz: r, ry: 0, rz: 0 };
+}
+
+/** Tell squash + movement lean for the body chain (legs keep ground contact). */
+function squash(pt: Vec3, ctx: PoseCtx): Vec3 {
+  return {
+    x: pt.x + ctx.lean * Math.max(0, pt.y - 8.5 * ctx.bulk) * 0.35,
+    y: pt.y * ctx.height + ctx.bob,
+    z: pt.z,
+  };
+}
+
+function headDir(pose: QuadrupedPose): Vec3 {
+  const d = {
+    x: pose.neck.to.x - pose.neck.from.x,
+    y: pose.neck.to.y - pose.neck.from.y,
+    z: 0,
+  };
+  const l = Math.hypot(d.x, d.y) || 1;
+  return { x: d.x / l, y: d.y / l, z: 0 };
+}
+
+/**
+ * Anatomy pose override — the skeleton takes over the part's transform.
+ * Returns null for parts the kit poses itself (weapons, shields anchored
+ * elsewhere, static spots).
+ */
+function anatomyTransform(
+  p: KitPartDraw,
+  pose: HumanPose | QuadrupedPose,
+  ctx: PoseCtx,
+): AnatResult | null {
+  if (ctx.isBeast) {
+    const q = pose as QuadrupedPose;
+    const dims = ctx.dims!;
+    const leg = (s: number) => q.legs.find((l) => l.side === s)!;
+    switch (p.kind) {
+      case 'beastBody':
+        return boneResult(q.torso);
+      case 'quadNeck':
+        return boneResult(q.neck);
+      case 'quadHead':
+        return sphereResult(q.head, dims.headSize * 0.55);
+      case 'quadTail':
+        return boneResult(q.tail);
+      case 'quadLegUpper':
+        return boneResult(leg(p.side ?? 1).upper);
+      case 'quadLegLower':
+        return boneResult(leg(p.side ?? 1).lower);
+      case 'quadPaw': {
+        const end = leg(p.side ?? 1).end;
+        return {
+          ox: end.x,
+          oy: end.y,
+          oz: end.z,
+          sx: 2.4 * ctx.bulk,
+          sy: 1.3 * ctx.bulk,
+          sz: 2.8 * ctx.bulk,
+          ry: 0,
+          rz: 0,
+        };
+      }
+      case 'mane': {
+        const n = 10;
+        const i = Math.round(p.oz);
+        const ang = (i / n) * Math.PI * 2;
+        const mid = {
+          x: (q.neck.from.x + q.neck.to.x) / 2,
+          y: (q.neck.from.y + q.neck.to.y) / 2,
+          z: 0,
+        };
+        const r = dims.headSize * 1.0;
+        const radial = { x: Math.sin(ang), z: Math.cos(ang) };
+        const a = aimAngles({ x: radial.x, y: 0.45, z: radial.z });
+        return {
+          ox: mid.x + radial.x * r,
+          oy: mid.y,
+          oz: radial.z * r,
+          sx: dims.headSize * 0.55,
+          sy: dims.headSize * 1.15,
+          sz: dims.headSize * 0.55,
+          ry: a.ry,
+          rz: a.rz,
+        };
+      }
+      case 'tusk': {
+        const side = p.oz > 0 ? 1 : -1;
+        const dir = headDir(q);
+        const hs = dims.headSize;
+        const a = aimAngles({ x: dir.x, y: dir.y - 0.35, z: 0 });
+        return {
+          ox: q.head.x + dir.x * 0.55 * hs,
+          oy: q.head.y + dir.y * 0.55 * hs - 0.15 * hs,
+          oz: side * 0.42 * hs,
+          sx: hs * 0.32,
+          sy: hs * 0.9,
+          sz: hs * 0.32,
+          ry: a.ry,
+          rz: a.rz,
+        };
+      }
+      case 'ear': {
+        if (ctx.family !== 'BEAR') return null; // the boar's ridge stays put
+        const side = p.oz > 0 ? 1 : -1;
+        const dir = headDir(q);
+        const hs = dims.headSize;
+        return sphereResult(
+          {
+            x: q.head.x + dir.x * 0.3 * hs,
+            y: q.head.y + dir.y * 0.3 * hs + 0.5 * hs,
+            z: side * 0.62 * hs,
+          },
+          1.1 * ctx.bulk,
+        );
+      }
+      case 'tailTuft':
+        return sphereResult(q.tail.to, 1.6 * ctx.bulk);
+      default:
+        return null; // spots ride the torso; kit-pose keeps them
+    }
+  }
+
+  const h = pose as HumanPose;
+  const sq = (pt: Vec3): Vec3 => squash(pt, ctx);
+  const armOf = (s: -1 | 1) => h.arms.find((a) => a.side === s)!;
+  const legOf = (s: -1 | 1) => h.legs.find((l) => l.side === s)!;
+  switch (p.kind) {
+    case 'hips':
+      return sphereResult(sq(h.hips), 4.6 * ctx.bulk);
+    case 'body':
+      return boneResult({ from: sq(h.torso.from), to: sq(h.torso.to), thick: h.torso.thick });
+    case 'neck':
+      return boneResult({ from: sq(h.neck.from), to: sq(h.neck.to), thick: h.neck.thick });
+    case 'head':
+      return sphereResult(sq(h.head), 3.2 * ctx.bulk);
+    case 'armUpper':
+      return boneResult({ from: sq(armOf(p.side ?? 1).upper.from), to: sq(armOf(p.side ?? 1).upper.to), thick: 3.2 * ctx.bulk });
+    case 'armLower':
+      return boneResult({ from: sq(armOf(p.side ?? 1).lower.from), to: sq(armOf(p.side ?? 1).lower.to), thick: 2.6 * ctx.bulk });
+    case 'hand':
+      return sphereResult(sq(armOf(p.side ?? 1).end), 1.5 * ctx.bulk);
+    case 'legUpper':
+      return boneResult(legOf(p.side ?? 1).upper);
+    case 'legLower':
+      return boneResult(legOf(p.side ?? 1).lower);
+    case 'foot': {
+      const end = legOf(p.side ?? 1).end;
+      return {
+        ox: end.x + 1.4 * ctx.bulk,
+        oy: end.y,
+        oz: end.z,
+        sx: 3.4 * ctx.bulk,
+        sy: 1.4 * ctx.bulk,
+        sz: 2.6 * ctx.bulk,
+        ry: 0,
+        rz: 0,
+      };
+    }
+    case 'helm':
+      return {
+        ox: p.ox,
+        oy: sq(h.head).y + (p.oy - 24 * ctx.bulk),
+        oz: p.oz,
+        sx: p.sx,
+        sy: p.sy,
+        sz: p.sz,
+        ry: p.ry,
+        rz: p.rz,
+      };
+    case 'crest':
+      return {
+        ox: p.ox,
+        oy: sq(h.head).y + (p.oy - 24 * ctx.bulk),
+        oz: p.oz,
+        sx: p.sx,
+        sy: p.sy,
+        sz: p.sz,
+        ry: p.ry,
+        rz: p.rz,
+      };
+    case 'greaves':
+      return boneResult({
+        from: legOf(p.side ?? 1).lower.from,
+        to: legOf(p.side ?? 1).lower.to,
+        thick: 5.5 * ctx.bulk,
+      });
+    case 'manica':
+      return boneResult({
+        from: armOf(1).upper.from,
+        to: armOf(1).upper.to,
+        thick: 5 * ctx.bulk,
+      });
+    case 'breastplate': {
+      const mid = {
+        x: (h.torso.from.x + h.torso.to.x) / 2,
+        y: (h.torso.from.y + h.torso.to.y) / 2,
+      };
+      return {
+        ox: mid.x + 4.5 * ctx.bulk,
+        oy: mid.y * ctx.height + ctx.bob,
+        oz: 0,
+        sx: p.sx,
+        sy: p.sy,
+        sz: p.sz,
+        ry: 0,
+        rz: 0,
+      };
+    }
+    case 'shield':
+    case 'roundShield':
+    case 'shieldRim':
+    case 'shieldBoss': {
+      const off = armOf(-1);
+      const raise = ctx.guarding > 0.2 ? 1 : 0;
+      return {
+        ox: off.end.x + 3,
+        oy: off.end.y + raise * 2,
+        oz: off.end.z,
+        sx: p.sx,
+        sy: p.sy,
+        sz: p.sz,
+        ry: 0,
+        rz: p.rz + raise * -16,
+      };
+    }
+    case 'net': {
+      const off = armOf(-1);
+      return {
+        ox: off.end.x,
+        oy: off.end.y - 1.5,
+        oz: off.end.z,
+        sx: p.sx,
+        sy: p.sy,
+        sz: p.sz,
+        ry: 0,
+        rz: 0,
+      };
+    }
+    default:
+      return null;
+  }
+}
 
 /**
  * Parse a geometry cache key back into builder arguments (hundredths encoding,
@@ -322,6 +631,47 @@ export class SceneFighters {
       st.lean += (speed * 0.012 - st.lean) * 0.25;
       const moveLean = st.lean;
 
+      // --- Procedural anatomy: the skeleton poses from state, never glides.
+      // Hands reach the grips via IK, feet plant on the stride, beasts trot.
+      const isBeastKind = f.kind === 'beast';
+      const bulk = isBeastKind
+        ? beastBulk(f.beastId ?? 'LION', f.appearanceSeed)
+        : bodyBulk(f.appearanceSeed);
+      const ctx: PoseCtx = {
+        isBeast: isBeastKind,
+        bulk,
+        family: isBeastKind ? (f.beastId ?? 'LION') : 'HUMAN',
+        height,
+        lean: moveLean,
+        guarding: f.guarding || tell.guardOpen > 0.3 ? 1 : 0,
+        bob: Math.sin(st.step * 2) * 0.35 * moveK,
+      };
+      let pose: HumanPose | QuadrupedPose;
+      if (isBeastKind) {
+        ctx.dims = beastDims(f.beastId ?? 'LION', bulk);
+        pose = poseQuadruped(f.beastId ?? 'LION', ctx.dims, st.step, moveK);
+      } else {
+        const look = ARMATURA_LOOK[f.armatura as ArmaturaId] ?? ARMATURA_LOOK.MURMILLO;
+        const gripLunge = inActive ? lunge * 0.5 : 0;
+        const offLunge = inActive ? lungeOffset(lungeUnits, (frac + 0.5) % 1) * 0.5 : 0;
+        pose = poseHuman({
+          bulk,
+          stepPhase: st.step,
+          speed: moveK,
+          guard: ctx.guarding,
+          mainGrip: {
+            x: Math.cos(look.mainHandAngle) * look.mainHandDist + gripLunge,
+            y: 13,
+            z: Math.sin(look.mainHandAngle) * look.mainHandDist,
+          },
+          offGrip: {
+            x: Math.cos(look.offHandAngle) * look.offHandDist + offLunge,
+            y: 12,
+            z: Math.sin(look.offHandAngle) * look.offHandDist,
+          },
+        });
+      }
+
       for (const p of parts) {
         // Team livery: every blue unit is a shade of blue, every red unit a
         // shade of red — identity by shape, allegiance by color. Shields are
@@ -340,8 +690,7 @@ export class SceneFighters {
         const phaseReach =
           f.actionPhase === 'ACTIVE' ? 1.15 : f.actionPhase === 'WINDUP' ? 0.9 : 1;
         const isWeapon = WEAPON_KINDS.has(p.kind);
-        const isBeast = p.kind === 'beastBody';
-        const isBody = p.kind === 'body';
+        const surge = BEAST_SURGE.has(p.kind);
         // Independent hands: the off-hand weapon strikes on the return stroke —
         // its OWN lunge and swing, so the two daggers work in alternation.
         let partSwing = p.ry;
@@ -356,17 +705,38 @@ export class SceneFighters {
             partSwing = -swing * (180 / Math.PI);
           }
         }
-        const ox =
-          p.ox * phaseReach + (inActive && (isWeapon || isBeast) ? partLunge : 0) + hitch * 4;
-        const oy = p.oy * height + lean * 3 + (isBody ? shuffle : shuffle * 0.4) + moveLean * 14 * height;
-        const oz = p.oz + tell.lateral * 4 + tell.guardOpen * (p.kind.includes('shield') ? -3 : 0);
+        // The skeleton poses the anatomy; everything else uses the kit pose.
+        const anat = anatomyTransform(p, pose, ctx);
+        let ox: number;
+        let oy: number;
+        let oz: number;
+        let sy = p.sy * height;
+        let ry: number;
+        let rz: number;
+        if (anat) {
+          ox = anat.ox + (inActive && surge ? partLunge : 0) + hitch * 4;
+          oy = anat.oy;
+          oz = anat.oz;
+          sy = anat.sy;
+          ry = anat.ry;
+          rz = anat.rz;
+          this.writeModel(
+            gl, f.x, baseY, f.y, yaw,
+            ox, oy, oz, anat.sx, sy, anat.sz, ry, rz,
+          );
+          drawMesh(gl, this.geo.resolve(p.geo));
+          continue;
+        }
+        ox = p.ox * phaseReach + (inActive && (isWeapon || surge) ? partLunge : 0) + hitch * 4;
+        oy = p.oy * height + lean * 3 + shuffle * 0.4 + moveLean * 14 * height;
+        oz = p.oz + tell.lateral * 4 + tell.guardOpen * (p.kind.includes('shield') ? -3 : 0);
         // Guarded off-hand raises to meet the threat: shields lift and tilt
         // up around their rim (the rim itself stays planted).
         const isOffShield =
           p.hand === 'off' && (p.kind === 'shield' || p.kind === 'roundShield' || p.kind === 'shieldBoss');
         const guardRaise = f.guarding || tell.guardOpen > 0.3 ? 1 : 0;
-        const ry = isOffShield ? 0 : partSwing;
-        const rz = isOffShield ? p.rz + guardRaise * -16 : p.rz;
+        ry = isOffShield ? 0 : partSwing;
+        rz = isOffShield ? p.rz + guardRaise * -16 : p.rz;
         this.writeModel(
           gl,
           f.x,
@@ -377,7 +747,7 @@ export class SceneFighters {
           isOffShield ? oy + guardRaise * 3 : oy,
           oz,
           p.sx,
-          p.sy * height,
+          sy,
           p.sz,
           ry,
           rz,
