@@ -285,16 +285,19 @@ export function poseQuadruped(
   const rear = v3(-dims.bodyL * 0.35, dims.bodyH * 0.82 + bob, 0);
   const shoulders = v3(dims.bodyL * 0.55, dims.bodyH + bob, 0);
   const torso: Bone = { from: rear, to: shoulders, thick: dims.bodyW * 0.95 };
-  const neckEnd = v3(shoulders.x + dims.neckL * 0.7, dims.bodyH * 0.92 + bob, 0);
+  // The head rides HIGH — an alert animal. A low horizontal head and body
+  // reads as a fallen human from the arena camera.
+  const neckEnd = v3(shoulders.x + dims.neckL * 0.5, dims.bodyH * 1.12 + bob, 0);
   const neck: Bone = { from: shoulders, to: neckEnd, thick: dims.headSize * 0.62 };
-  const head = v3(neckEnd.x + dims.headSize * 0.55, neckEnd.y + dims.headSize * 0.12, 0);
+  const head = v3(neckEnd.x + dims.headSize * 0.55, neckEnd.y + dims.headSize * 0.25, 0);
   const tail: Bone = {
     from: rear,
-    to: v3(rear.x - 4 * b, rear.y - 1.5 * b, 0),
+    to: v3(rear.x - 4 * b, rear.y + 1.2 * b, 0),
     thick: 1.1 * b,
   };
 
-  // Four legs: front pair at the shoulders, rear pair at the hips.
+  // Four legs: front pair at the shoulders, rear pair at the hips. The paws
+  // splay wider than the body — the animal's stance reads from above.
   const stride = speed * 3.2 * b;
   const lift = speed * 1.8 * b;
   const phase = stepPhase;
@@ -309,7 +312,7 @@ export function poseQuadruped(
     const hip = v3(a.x, dims.bodyH * 0.8, a.side * dims.bodyW * 0.42);
     const fx = Math.sin(phase + a.phaseOff) * stride;
     const fy = dims.bodyH * 0.08 + Math.max(0, Math.sin(phase + a.phaseOff)) * lift;
-    const paw = v3(a.x + fx, fy, a.side * dims.bodyW * 0.4);
+    const paw = v3(a.x + fx, fy, a.side * dims.bodyW * 0.52);
     const knee = twoBoneIK(hip, paw, dims.legUpper, dims.legLower, v3(0.5, 0, a.side));
     legs.push({
       side: a.side,

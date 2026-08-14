@@ -162,7 +162,7 @@ function anatomyTransform(
       case 'quadNeck':
         return boneResult(q.neck);
       case 'quadHead':
-        return sphereResult(q.head, dims.headSize * 0.55);
+        return sphereResult(q.head, dims.headSize * 0.62);
       case 'quadTail':
         return boneResult(q.tail);
       case 'quadLegUpper':
@@ -191,16 +191,16 @@ function anatomyTransform(
           y: (q.neck.from.y + q.neck.to.y) / 2,
           z: 0,
         };
-        const r = dims.headSize * 1.0;
+        const r = dims.headSize * 1.25;
         const radial = { x: Math.sin(ang), z: Math.cos(ang) };
         const a = aimAngles({ x: radial.x, y: 0.45, z: radial.z });
         return {
           ox: mid.x + radial.x * r,
           oy: mid.y,
           oz: radial.z * r,
-          sx: dims.headSize * 0.55,
-          sy: dims.headSize * 1.15,
-          sz: dims.headSize * 0.55,
+          sx: dims.headSize * 0.7,
+          sy: dims.headSize * 1.5,
+          sz: dims.headSize * 0.7,
           ry: a.ry,
           rz: a.rz,
         };
@@ -236,7 +236,7 @@ function anatomyTransform(
         );
       }
       case 'tailTuft':
-        return sphereResult(q.tail.to, 1.6 * ctx.bulk);
+        return sphereResult(q.tail.to, 2.2 * ctx.bulk);
       default:
         return null; // spots ride the torso; kit-pose keeps them
     }
