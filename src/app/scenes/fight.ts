@@ -111,6 +111,8 @@ export class FightScene {
       ARENA_WORLD_H,
       config.team0Specs,
       config.team1Specs,
+      config.team0Size,
+      config.team1Size,
     );
   }
 
@@ -354,6 +356,7 @@ export class FightScene {
 
     this.hud.render({
       teamSize: this.config.teamSize,
+      formatLabel: `${this.config.team0Size ?? this.config.teamSize}v${this.config.team1Size ?? this.config.teamSize}`,
       seed: this.config.seed,
       career: this.career,
       speed: this.speed,

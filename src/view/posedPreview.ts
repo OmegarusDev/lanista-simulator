@@ -2,7 +2,7 @@ import { ARMATURAE } from '../content/armatura';
 import { BEASTS } from '../content/beasts';
 import { combatTuning } from '../content/combat';
 import type { QuickCard } from '../domain/combat/quickGen';
-import type { FighterSnapshot, TeamSize } from '../domain/combat/types';
+import type { FighterSnapshot } from '../domain/combat/types';
 
 /**
  * Build FighterSnapshots for Instant Match preview.
@@ -11,12 +11,12 @@ import type { FighterSnapshot, TeamSize } from '../domain/combat/types';
 export function posedCardsToSnapshots(
   team0: QuickCard[],
   team1: QuickCard[],
-  teamSize: TeamSize,
+  sizes: [number, number],
 ): FighterSnapshot[] {
   const snaps: FighterSnapshot[] = [];
   let id = 1;
-  const pushTeam = (cards: QuickCard[], team: 0 | 1) => {
-    for (let i = 0; i < teamSize; i++) {
+  const pushTeam = (cards: QuickCard[], team: 0 | 1, count: number) => {
+    for (let i = 0; i < count; i++) {
       const c = cards[i];
       if (!c) continue;
       const beast = c.beastId ? BEASTS[c.beastId] : null;
@@ -55,28 +55,29 @@ export function posedCardsToSnapshots(
       });
     }
   };
-  pushTeam(team0, 0);
-  pushTeam(team1, 1);
+  pushTeam(team0, 0, sizes[0]);
+  pushTeam(team1, 1, sizes[1]);
   return snaps;
 }
 
-/** Spread preview fighters into arena-plane formation. */
+/** Spread preview fighters into arena-plane formation (per-team spreads). */
 export function placePreviewInWorld(
   snaps: FighterSnapshot[],
-  teamSize: number,
+  sizes: [number, number],
 ): FighterSnapshot[] {
   const cx = combatTuning.arenaCX;
   const cy = combatTuning.arenaCY;
   const rx = combatTuning.arenaRX;
   const ry = combatTuning.arenaRY;
-  const spread = teamSize >= 3 ? Math.min(52, ry * 0.22) : Math.min(44, ry * 0.2);
   const out: FighterSnapshot[] = [];
   let i0 = 0;
   let i1 = 0;
   for (const f of snaps) {
+    const teamCount = f.team === 0 ? sizes[0] : sizes[1];
+    const spread = teamCount >= 3 ? Math.min(52, ry * 0.22) : Math.min(44, ry * 0.2);
     const i = f.team === 0 ? i0++ : i1++;
     const baseX = cx + (f.team === 0 ? -rx * 0.38 : rx * 0.38);
-    const y = cy + (i - (teamSize - 1) / 2) * spread;
+    const y = cy + (i - (teamCount - 1) / 2) * spread;
     out.push({
       ...f,
       x: baseX,

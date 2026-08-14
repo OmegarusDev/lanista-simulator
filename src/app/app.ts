@@ -295,7 +295,7 @@ export class App {
     }
     this.shell.frame.render(model);
 
-    if (this.practice.mode === 'custom') {
+    if (this.practice.editing) {
       this.previewPtrWasDown = this.input.pointer.down;
       return;
     }
@@ -316,8 +316,8 @@ export class App {
       if (!dragged && inStage) {
         const hit = pickFromScreen(cam, model.fighters, p.x, p.y, cssW, cssH, 42);
         if (hit) {
-          this.practice.selectedPreviewId = hit.id;
-          this.synth.play('ui');
+          // Tapping a fighter on the sand opens their unit chooser.
+          this.practice.selectById(hit.id);
         } else {
           this.practice.selectedPreviewId = null;
         }

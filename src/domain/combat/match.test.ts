@@ -54,8 +54,41 @@ describe('Match', () => {
     expect(['TEAM0', 'TEAM1', 'DRAW']).toContain(result);
   });
 
-  it('a single swing connects once — never multi-hits every foe in range', () => {
-    resetFighterIds();
+    it('mismatched squads work: a lone gladiator can face a 3v1', () => {
+    const m = createQuickMatch(
+      3,
+      55,
+      ['MURMILLO'],
+      ['THRAEX', 'THRAEX', 'THRAEX'],
+      960,
+      540,
+      undefined,
+      undefined,
+      1,
+      3,
+    );
+    const result = m.runToEnd();
+    expect(['TEAM0', 'TEAM1', 'DRAW']).toContain(result);
+    const snaps = m.snapshots();
+    const blue = snaps.filter((f) => f.team === 0);
+    const red = snaps.filter((f) => f.team === 1);
+    expect(blue.length).toBe(1);
+    expect(red.length).toBe(3);
+  });
+
+  it('four per side is supported (the sandbox cap)', () => {
+    const m = createQuickMatch(
+      4,
+      66,
+      ['MURMILLO', 'RETIARIUS', 'SECUTOR', 'DIMACHAERUS'],
+      ['THRAEX', 'HOPLOMACHUS', 'PROVOCATOR', 'SCISSOR'],
+    );
+    const result = m.runToEnd();
+    expect(['TEAM0', 'TEAM1', 'DRAW']).toContain(result);
+    expect(m.snapshots().length).toBe(8);
+  });
+
+  it('a single swing connects once — never multi-hits every foe in range', () => {    resetFighterIds();
     const atk = new Fighter(0, 'MURMILLO', 'A', 0, 0, 0);
     const foe1 = new Fighter(1, 'THRAEX', 'B', 30, 0, Math.PI);
     const foe2 = new Fighter(1, 'THRAEX', 'C', 30, 6, Math.PI);

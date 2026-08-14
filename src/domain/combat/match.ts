@@ -50,18 +50,20 @@ export class Match {
     this.arenaHeight = config.arenaHeight;
     this.rng = new SeededRNG(config.seed);
 
+    const t0Size = config.team0Size ?? config.teamSize;
+    const t1Size = config.team1Size ?? config.teamSize;
     const raw0 =
       config.team0Specs ??
       (config.team0 ?? this.rollTeam()).map((a) => ({ armatura: a }) satisfies FighterSpawnSpec);
     const raw1 =
       config.team1Specs ??
       (config.team1 ?? this.rollTeam()).map((a) => ({ armatura: a }) satisfies FighterSpawnSpec);
-    const t0Specs = raw0.slice(0, this.teamSize);
-    const t1Specs = raw1.slice(0, this.teamSize);
-    while (t0Specs.length < this.teamSize) {
+    const t0Specs = raw0.slice(0, t0Size);
+    const t1Specs = raw1.slice(0, t1Size);
+    while (t0Specs.length < t0Size) {
       t0Specs.push({ armatura: this.rng.pick(ARMATURA_LIST) });
     }
-    while (t1Specs.length < this.teamSize) {
+    while (t1Specs.length < t1Size) {
       t1Specs.push({ armatura: this.rng.pick(ARMATURA_LIST) });
     }
     this.spawnTeam(0, t0Specs);
@@ -239,6 +241,8 @@ export function createQuickMatch(
   arenaHeight = 540,
   team0Specs?: FighterSpawnSpec[],
   team1Specs?: FighterSpawnSpec[],
+  team0Size?: number,
+  team1Size?: number,
 ): Match {
   return new Match({
     teamSize,
@@ -247,6 +251,8 @@ export function createQuickMatch(
     team1,
     team0Specs,
     team1Specs,
+    team0Size,
+    team1Size,
     arenaWidth,
     arenaHeight,
   });

@@ -319,3 +319,39 @@
   letter-spacing: 0.04em;
 }
 
+
+/* ————— Sandbox squad chrome ————— */
+
+.practice-sides.red {
+  flex-direction: row-reverse;
+}
+
+.slot-add {
+  flex: 0 0 auto;
+  min-width: 2.4rem;
+  font-size: var(--type-title);
+  color: var(--bronze-hot);
+}
+
+.format-tag {
+  flex: 0 0 auto;
+  padding: 0 0.25rem;
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--bronze-hot);
+  white-space: nowrap;
+}
+
+.editor-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--bronze-faint);
+  border-radius: var(--radius-md);
+  background: rgba(12, 16, 20, 0.45);
+}

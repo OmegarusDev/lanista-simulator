@@ -24,6 +24,8 @@ export type FightHudAction =
 
 export interface FightHudRender {
   teamSize: number;
+  /** Bout identity, e.g. "3v2" — mismatched squads show their true shape. */
+  formatLabel?: string;
   seed: number;
   career: boolean;
   speed: number;
@@ -145,7 +147,10 @@ export class FightHud {
 
     const top = el('div', { className: 'hud-rail hud-top' });
     const row = el('div', { className: 'hud-top-row' });
-    this.formatEl = el('span', { className: 'hud-format', text: `${opts.teamSize}v${opts.teamSize}` });
+    this.formatEl = el('span', {
+      className: 'hud-format',
+      text: opts.formatLabel ?? `${opts.teamSize}v${opts.teamSize}`,
+    });
     const lineup = opts.snaps
       .map((f) => `${f.team === 0 ? 'B' : 'R'}:${fighterTag(f)}`)
       .join('  ·  ');

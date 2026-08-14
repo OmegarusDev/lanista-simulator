@@ -75,7 +75,7 @@ export interface FighterSnapshot {
 }
 
 /** Campaign supports up to 3v3; Instant Match supports 1–3 as well. */
-export type TeamSize = 1 | 2 | 3;
+export type TeamSize = 1 | 2 | 3 | 4;
 
 /** Lab / career bout flavor — drives team generation, not Match.step. */
 export type MatchKind = 'matchup' | 'venatio';
@@ -118,6 +118,9 @@ export interface MatchConfig {
   /** When set, overrides team0 kits + names + career mods. */
   team0Specs?: FighterSpawnSpec[];
   team1Specs?: FighterSpawnSpec[];
+  /** Independent squad sizes — mismatched fights (1v3 etc.). Default: teamSize. */
+  team0Size?: number;
+  team1Size?: number;
   arenaWidth: number;
   arenaHeight: number;
 }
@@ -133,6 +136,9 @@ export interface SandboxConfig {
   team1: ArmaturaId[];
   team0Specs?: FighterSpawnSpec[];
   team1Specs?: FighterSpawnSpec[];
+  /** Independent squad sizes — the true 1v3 (or 3v2) counts. */
+  team0Size?: number;
+  team1Size?: number;
 }
 
 export type MatchResult = 'ONGOING' | 'TEAM0' | 'TEAM1' | 'DRAW';

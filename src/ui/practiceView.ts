@@ -1,56 +1,35 @@
 import { ARMATURA_LIST, ARMATURAE, type ArmaturaId } from '../content/armatura';
 import { BEAST_LIST, BEASTS, type BeastId } from '../content/beasts';
 import { PAIRING_PRESETS } from '../content/pairings';
-import {
-  generateQuickTeam,
-  generateVenatioTeams,
-  type QuickCard,
-} from '../domain/combat/quickGen';
-import type {
-  FighterSpawnSpec,
-  MatchKind,
-  SandboxConfig,
-  TeamSize,
-} from '../domain/combat/types';
+import type { QuickCard } from '../domain/combat/quickGen';
+import type { FighterSpawnSpec, SandboxConfig, TeamSize } from '../domain/combat/types';
 import type { Input } from '../shell/input';
 import type { Synth } from '../view/audio';
 import { placePreviewInWorld, posedCardsToSnapshots } from '../view/posedPreview';
 import { clear, el } from './dom';
-import { button, segControl } from './components';
+import { button } from './components';
 
 export type SandboxAction =
   | { type: 'START'; config: SandboxConfig }
   | { type: 'BACK' }
   | { type: 'NONE' };
 
-/** Human kit or random. */
-type HumanPick = ArmaturaId | 'RANDOM';
-/** Beast kit or random — Red side in venatio. */
-type BeastPick = BeastId | 'RANDOM';
-type SlotPick = HumanPick | BeastPick;
+/** One slot can be a kit, a beast, or a roll of the dice. */
+type SlotPick = ArmaturaId | BeastId | 'RANDOM';
 
-type Mode = 'quick' | 'custom';
+/** Sandbox squad cap — a sensible upper bound for team sizes. */
+export const MAX_SQUAD = 4;
 
-const HUMAN_PICKS: HumanPick[] = ['RANDOM', ...ARMATURA_LIST];
-/** Full beast roster — never hardcode a subset. */
-const BEAST_PICKS: BeastPick[] = ['RANDOM', ...BEAST_LIST];
+const KIT_PICKS: SlotPick[] = ['RANDOM', ...ARMATURA_LIST];
+const BEAST_PICKS: (BeastId | 'RANDOM')[] = ['RANDOM', ...BEAST_LIST];
 
 function isBeastId(id: string): id is BeastId {
   return (BEAST_LIST as readonly string[]).includes(id);
 }
 
-function isArmaturaId(id: string): id is ArmaturaId {
-  return (ARMATURA_LIST as readonly string[]).includes(id);
-}
-
-function resolveHuman(pick: HumanPick, salt: number): ArmaturaId {
-  if (pick !== 'RANDOM') return pick;
+function resolveArmatura(pick: SlotPick, salt: number): ArmaturaId {
+  if (pick !== 'RANDOM' && !isBeastId(pick)) return pick;
   return ARMATURA_LIST[salt % ARMATURA_LIST.length]!;
-}
-
-function resolveBeast(pick: BeastPick, salt: number): BeastId {
-  if (pick !== 'RANDOM') return pick;
-  return BEAST_LIST[salt % BEAST_LIST.length]!;
 }
 
 function beastSpec(beast: BeastId): FighterSpawnSpec {
@@ -60,6 +39,7 @@ function beastSpec(beast: BeastId): FighterSpawnSpec {
     beast,
     armatura: 'MURMILLO',
     name: def.name,
+    temperament: 'FEROX',
     pursueBiasAdd: 0.1,
   };
 }
@@ -76,24 +56,30 @@ function pickTitle(pick: SlotPick): string {
   return `${ARMATURAE[pick].name} (${ARMATURAE[pick].short})`;
 }
 
-/** Skirmish Yard — instant fights: DOM chrome + shared stage preview pipeline. */
+/**
+ * The Sandbox — direct-manipulation squad building.
+ *
+ * The arena IS the interface: tap a fighter (on the sand or in the squad
+ * rows) and the unit chooser opens for exactly that slot — kits, beasts,
+ * dice, or removal. Sides are independent, so mismatched fights (1v3, beasts
+ * anywhere, whatever mix) are natural. Selecting IS choosing.
+ */
 export class PracticeView {
   readonly root: HTMLElement;
+  /** The unit chooser — a translucent panel over the live arena. */
   readonly sheet: HTMLElement;
-  mode: Mode = 'quick';
-  matchKind: MatchKind = 'matchup';
-  teamSize: TeamSize = 1;
   seed = (Math.random() * 0xffffffff) >>> 0;
-  /** Blue always human kits. */
-  slots0: HumanPick[] = ['RANDOM', 'RANDOM', 'RANDOM'];
-  /** Red: armaturae in matchup, beasts in venatio. */
-  slots1: SlotPick[] = ['RANDOM', 'RANDOM', 'RANDOM'];
-  editSlot0 = 0;
-  editSlot1 = 0;
-  private cards0: QuickCard[] = [];
-  private cards1: QuickCard[] = [];
+  /** Independent squads — each slot is a kit, a beast, or RANDOM. */
+  squad0: SlotPick[] = ['RANDOM'];
+  squad1: SlotPick[] = ['RANDOM'];
+  /** Which slot the chooser is editing (null = closed). */
+  editSide: 0 | 1 = 0;
+  editSlot = 0;
+  editing = false;
   selectedPreviewId: number | null = null;
   private pending: SandboxAction = { type: 'NONE' };
+  /** Preview snapshot id → squad position, for tapping fighters on the sand. */
+  private readonly slotMap = new Map<number, { side: 0 | 1; slot: number }>();
 
   constructor(
     private readonly synth: Synth,
@@ -101,12 +87,11 @@ export class PracticeView {
   ) {
     this.root = el('div', { className: 'practice-screen is-hidden' });
     this.sheet = el('div', { className: 'sheet is-hidden' });
-    this.rerollQuick();
   }
 
   mount(host: HTMLElement): void {
     host.append(this.root, this.sheet);
-    this.renderChrome();
+    this.render();
   }
 
   show(visible: boolean): void {
@@ -115,14 +100,8 @@ export class PracticeView {
       this.sheet.classList.add('is-hidden');
       return;
     }
-    if (this.mode === 'custom') {
-      this.root.classList.add('is-hidden');
-      this.renderSheet();
-    } else {
-      this.root.classList.remove('is-hidden');
-      this.sheet.classList.add('is-hidden');
-      this.renderChrome();
-    }
+    this.root.classList.remove('is-hidden');
+    this.render();
   }
 
   poll(): SandboxAction {
@@ -131,42 +110,50 @@ export class PracticeView {
     return a;
   }
 
-  /** Keyboard shortcuts while Practice is active. */
+  /** Keyboard while the sandbox is up — the chooser owns the keys. */
   handleKeys(input: Input): SandboxAction {
-    // The custom sheet owns the keyboard — stray Enter/Space must not launch.
-    if (this.mode === 'custom') return { type: 'NONE' };
+    if (this.editing) return { type: 'NONE' };
     if (input.wasKeyPressed('Space') || input.wasKeyPressed('Enter')) {
       return { type: 'START', config: this.makeConfig() };
     }
     if (input.wasKeyPressed('KeyR')) {
       this.seed = (this.seed * 1103515245 + 12345) >>> 0;
-      if (this.mode === 'quick') this.rerollQuick();
       this.synth.play('ui');
-      this.renderChrome();
+      this.render();
     }
     return { type: 'NONE' };
   }
 
   previewSnapshots() {
-    // Custom sheet keeps cards in sync so Fight still uses makeCustomConfig;
-    // Quick (and venatio) use live cards for the shared stage preview.
-    if (this.mode === 'custom') {
-      const { team0, team1 } = this.cardsFromCustomSlots();
-      return placePreviewInWorld(
-        posedCardsToSnapshots(team0, team1, this.teamSize),
-        this.teamSize,
-      );
-    }
-    const raw = posedCardsToSnapshots(this.cards0, this.cards1, this.teamSize);
-    return placePreviewInWorld(raw, this.teamSize);
+    const c0 = this.cardsFor(0);
+    const c1 = this.cardsFor(1);
+    const snaps = posedCardsToSnapshots(c0, c1, [c0.length, c1.length]);
+    this.slotMap.clear();
+    let id = 1;
+    for (let i = 0; i < c0.length; i++) this.slotMap.set(id++, { side: 0, slot: i });
+    for (let i = 0; i < c1.length; i++) this.slotMap.set(id++, { side: 1, slot: i });
+    return placePreviewInWorld(snaps, [c0.length, c1.length]);
   }
 
-  makeQuickConfig(): SandboxConfig {
-    const n = this.teamSize;
-    const c0 = this.cards0.slice(0, n);
-    const c1 = this.cards1.slice(0, n);
+  /** A fighter on the sand was tapped — open the chooser on their slot. */
+  selectById(id: number): void {
+    const at = this.slotMap.get(id);
+    if (!at) return;
+    this.selectedPreviewId = id;
+    this.editSide = at.side;
+    this.editSlot = at.slot;
+    this.editing = true;
+    this.synth.play('ui');
+    this.render();
+  }
+
+  makeConfig(): SandboxConfig {
+    const c0 = this.cardsFor(0);
+    const c1 = this.cardsFor(1);
     return {
-      teamSize: n,
+      teamSize: Math.max(c0.length, c1.length) as TeamSize,
+      team0Size: c0.length,
+      team1Size: c1.length,
       seed: this.seed,
       team0: c0.map((c) => c.armatura),
       team1: c1.map((c) => c.armatura),
@@ -175,121 +162,39 @@ export class PracticeView {
     };
   }
 
-  makeCustomConfig(): SandboxConfig {
-    const n = this.teamSize;
-    const team0 = this.slots0.slice(0, n).map((p, i) => resolveHuman(p, this.seed + i * 3));
-    if (this.matchKind === 'venatio') {
-      const beasts = this.slots1
-        .slice(0, n)
-        .map((p, i) => resolveBeast(p as BeastPick, this.seed + 7 + i * 5));
-      return {
-        teamSize: n,
-        seed: this.seed,
-        team0,
-        team1: beasts.map(() => 'MURMILLO' as ArmaturaId),
-        team0Specs: undefined,
-        team1Specs: beasts.map((b) => beastSpec(b)),
-      };
-    }
-    const team1 = this.slots1
-      .slice(0, n)
-      .map((p, i) => resolveHuman(p as HumanPick, this.seed + 7 + i * 5));
-    return {
-      teamSize: n,
-      seed: this.seed,
-      team0,
-      team1,
-    };
-  }
-
-  makeConfig(): SandboxConfig {
-    return this.mode === 'quick' ? this.makeQuickConfig() : this.makeCustomConfig();
-  }
-
   rerollLab(): SandboxConfig {
     this.seed = (Math.random() * 0xffffffff) >>> 0;
-    if (this.mode === 'quick') this.rerollQuick();
-    this.renderChrome();
+    this.render();
     return this.makeConfig();
   }
 
-  private cardsFromCustomSlots(): { team0: QuickCard[]; team1: QuickCard[] } {
-    const n = this.teamSize;
-    const team0: QuickCard[] = [];
-    for (let i = 0; i < n; i++) {
-      const arm = resolveHuman(this.slots0[i]!, this.seed + i * 3);
+  private cardsFor(side: 0 | 1): QuickCard[] {
+    const picks = side === 0 ? this.squad0 : this.squad1;
+    return picks.map((pick, i) => {
+      const salt = this.seed + (side === 0 ? i * 3 : 7 + i * 5);
+      if (pick !== 'RANDOM' && isBeastId(pick)) {
+        const def = BEASTS[pick];
+        return {
+          name: def.name,
+          armatura: 'MURMILLO',
+          temperament: 'FEROX',
+          grade: 'ORDINARIUS',
+          age: 0,
+          beastId: pick,
+          spec: beastSpec(pick),
+        };
+      }
+      const arm = resolveArmatura(pick, salt);
       const def = ARMATURAE[arm];
-      team0.push({
+      return {
         name: def.name,
         armatura: arm,
         temperament: 'CAUTUS',
         grade: 'ORDINARIUS',
         age: 25,
         spec: { armatura: arm, name: def.name },
-      });
-    }
-    const team1: QuickCard[] = [];
-    for (let i = 0; i < n; i++) {
-      if (this.matchKind === 'venatio') {
-        const beast = resolveBeast(this.slots1[i]! as BeastPick, this.seed + 7 + i * 5);
-        const def = BEASTS[beast];
-        team1.push({
-          name: def.name,
-          armatura: 'MURMILLO',
-          temperament: 'FEROX',
-          grade: 'ORDINARIUS',
-          age: 0,
-          beastId: beast,
-          spec: beastSpec(beast),
-        });
-      } else {
-        const arm = resolveHuman(this.slots1[i]! as HumanPick, this.seed + 7 + i * 5);
-        const def = ARMATURAE[arm];
-        team1.push({
-          name: def.name,
-          armatura: arm,
-          temperament: 'CAUTUS',
-          grade: 'ORDINARIUS',
-          age: 25,
-          spec: { armatura: arm, name: def.name },
-        });
-      }
-    }
-    return { team0, team1 };
-  }
-
-  private rerollQuick(): void {
-    if (this.matchKind === 'venatio') {
-      const v = generateVenatioTeams(this.seed, this.teamSize);
-      this.cards0 = v.team0;
-      this.cards1 = v.team1;
-    } else {
-      this.cards0 = generateQuickTeam(this.seed, this.teamSize, 1);
-      this.cards1 = generateQuickTeam(this.seed, this.teamSize, 2);
-    }
-    this.selectedPreviewId = null;
-  }
-
-  private setMatchKind(kind: MatchKind): void {
-    this.matchKind = kind;
-    // Keep Red slots valid for the format.
-    if (kind === 'venatio') {
-      this.slots1 = this.slots1.map((p) => (isBeastId(p) || p === 'RANDOM' ? p : 'RANDOM'));
-      while (this.slots1.length < 3) this.slots1.push('RANDOM');
-    } else {
-      this.slots1 = this.slots1.map((p) => (isArmaturaId(p) || p === 'RANDOM' ? p : 'RANDOM'));
-      while (this.slots1.length < 3) this.slots1.push('RANDOM');
-    }
-    if (this.mode === 'quick') this.rerollQuick();
-  }
-
-  private setTeamSize(n: TeamSize): void {
-    this.teamSize = n;
-    while (this.slots0.length < 3) this.slots0.push('RANDOM');
-    while (this.slots1.length < 3) this.slots1.push('RANDOM');
-    this.editSlot0 = Math.min(this.editSlot0, n - 1);
-    this.editSlot1 = Math.min(this.editSlot1, n - 1);
-    if (this.mode === 'quick') this.rerollQuick();
+      };
+    });
   }
 
   private emit(action: SandboxAction): void {
@@ -297,31 +202,74 @@ export class PracticeView {
     this.pending = action;
   }
 
-  private focusLabel(f: {
-    name: string;
-    kind: string;
-    beastId: BeastId | null;
-  }): string {
-    if (f.beastId) {
-      const b = BEASTS[f.beastId];
-      return `${b.short}·${b.name}`;
-    }
-    return f.name.slice(0, 10);
+  private sidePicks(side: 0 | 1): SlotPick[] {
+    return side === 0 ? this.squad0 : this.squad1;
   }
 
-  private fighterShort(f: { beastId: BeastId | null; armatura: ArmaturaId }): string {
-    if (f.beastId) return BEASTS[f.beastId].short;
-    return ARMATURAE[f.armatura].short;
+  private setPick(side: 0 | 1, slot: number, pick: SlotPick): void {
+    this.sidePicks(side)[slot] = pick;
+    this.selectedPreviewId = null;
+    this.synth.play('ui');
+    this.render();
   }
 
-  private renderChrome(): void {
-    if (this.mode === 'custom') {
-      this.root.classList.add('is-hidden');
-      this.renderSheet();
+  private addSlot(side: 0 | 1): void {
+    const picks = this.sidePicks(side);
+    if (picks.length >= MAX_SQUAD) return;
+    picks.push('RANDOM');
+    this.synth.play('ui');
+    this.render();
+  }
+
+  private removeSlot(side: 0 | 1, slot: number): void {
+    const picks = this.sidePicks(side);
+    if (picks.length <= 1) return;
+    picks.splice(slot, 1);
+    this.editSlot = Math.min(this.editSlot, picks.length - 1);
+    this.synth.play('ui');
+    this.render();
+  }
+
+  private rollSlot(side: 0 | 1, slot: number): void {
+    this.seed = (this.seed * 1103515245 + 12345) >>> 0;
+    this.sidePicks(side)[slot] = 'RANDOM';
+    this.synth.play('ui');
+    this.render();
+  }
+
+  private applyPreset(): void {
+    const p = PAIRING_PRESETS[(this.seed >>> 4) % PAIRING_PRESETS.length]!;
+    this.squad0 = [p.team0[0]!, 'RANDOM'];
+    this.squad1 = [p.team1[0]!, 'RANDOM'];
+    this.editSide = 0;
+    this.editSlot = 0;
+    this.editing = false;
+    this.selectedPreviewId = null;
+    this.synth.play('ui');
+    this.render();
+  }
+
+  private closeEditor(): void {
+    this.editing = false;
+    this.synth.play('ui');
+    this.render();
+  }
+
+  // ————— Render —————
+
+  private render(): void {
+    if (this.editing) {
+      this.renderEditor();
       return;
     }
     this.sheet.classList.add('is-hidden');
+    this.renderChrome();
+  }
+
+  private renderChrome(): void {
     clear(this.root);
+    const c0 = this.cardsFor(0);
+    const c1 = this.cardsFor(1);
 
     const top = el('div', { className: 'practice-top' });
     const titleRow = el('div', { className: 'title-row' });
@@ -332,245 +280,212 @@ export class PracticeView {
       }),
     );
     titleRow.append(el('h1', { text: 'Skirmish' }));
+    titleRow.append(
+      button('🎲', {
+        variant: 'ghost',
+        title: 'Reroll everything',
+        onClick: () => {
+          this.seed = (Math.random() * 0xffffffff) >>> 0;
+          this.synth.play('ui');
+          this.render();
+        },
+      }),
+    );
+    titleRow.append(
+      button('Presets', {
+        variant: 'quiet',
+        title: 'A classic historical pairing',
+        onClick: () => this.applyPreset(),
+      }),
+    );
     top.append(titleRow);
-
-    const strip = el('div', { className: 'setup-row' });
-    strip.append(
-      segControl(['Match', 'Venatio'], this.matchKind === 'matchup' ? 0 : 1, (i) => {
-        this.setMatchKind(i === 0 ? 'matchup' : 'venatio');
-        this.synth.play('ui');
-        this.renderChrome();
-      }),
-    );
-    strip.append(
-      segControl(['1v1', '2v2', '3v3'], this.teamSize - 1, (i) => {
-        this.setTeamSize((i + 1) as TeamSize);
-        this.synth.play('ui');
-        this.renderChrome();
-      }),
-    );
-    top.append(strip);
     this.root.append(top);
 
     const bottom = el('div', { className: 'practice-bottom' });
-    const snaps = this.previewSnapshots();
-    // Same roster language as the fight HUD: team caps, chip-style fighter
-    // buttons, swipeable on narrow screens.
     const band = el('div', { className: 'practice-band' });
+
+    // Blue squad
     band.append(
       button('Blue', {
         variant: 'quiet',
         extraClass: 'team-cap blue',
-        active: snaps.some((f) => f.team === 0 && f.id === this.selectedPreviewId),
-        onClick: () => {
-          this.selectedPreviewId = snaps.find((f) => f.team === 0)?.id ?? null;
-          this.synth.play('ui');
-          this.renderChrome();
-        },
+        active: this.selectedPreviewId != null && c0.some((_, i) => this.previewIdFor(0, i) === this.selectedPreviewId),
+        onClick: () => this.openSide(0, 0),
       }),
     );
-    const sides = el('div', { className: 'practice-sides' });
-    for (const f of snaps) {
-      const foe = f.team === 1;
-      const chip = el('button', {
-        className: `focus-chip${foe ? ' is-red' : ' is-blue'}${this.selectedPreviewId === f.id ? ' is-selected' : ''}`,
-        attrs: { title: f.name },
-      });
-      chip.append(el('span', { className: 'name', text: this.focusLabel(f) }));
-      chip.append(el('span', { className: 'tag', text: this.fighterShort(f) }));
-      chip.addEventListener('click', () => {
-        this.selectedPreviewId = f.id;
-        this.synth.play('ui');
-        this.renderChrome();
-      });
-      sides.append(chip);
+    const sidesB = el('div', { className: 'practice-sides' });
+    for (let i = 0; i < c0.length; i++) {
+      sidesB.append(this.slotChip(0, i, c0[i]!));
     }
-    band.append(sides);
+    sidesB.append(
+      button('+', {
+        variant: 'quiet',
+        extraClass: 'slot-add',
+        title: 'Add a fighter (max ' + MAX_SQUAD + ')',
+        disabled: c0.length >= MAX_SQUAD,
+        onClick: () => this.addSlot(0),
+      }),
+    );
+    band.append(sidesB);
+
+    const format = el('span', { className: 'format-tag', text: `${c0.length}v${c1.length}` });
+    band.append(format);
+
+    // Red squad
+    const sidesR = el('div', { className: 'practice-sides red' });
+    sidesR.append(
+      button('+', {
+        variant: 'quiet',
+        extraClass: 'slot-add',
+        title: 'Add a fighter (max ' + MAX_SQUAD + ')',
+        disabled: c1.length >= MAX_SQUAD,
+        onClick: () => this.addSlot(1),
+      }),
+    );
+    for (let i = 0; i < c1.length; i++) {
+      sidesR.append(this.slotChip(1, i, c1[i]!));
+    }
+    band.append(sidesR);
     band.append(
-      button(this.matchKind === 'venatio' ? 'Beasts' : 'Red', {
+      button('Red', {
         variant: 'quiet',
         extraClass: 'team-cap red',
-        active: snaps.some((f) => f.team === 1 && f.id === this.selectedPreviewId),
-        onClick: () => {
-          this.selectedPreviewId = snaps.find((f) => f.team === 1)?.id ?? null;
-          this.synth.play('ui');
-          this.renderChrome();
-        },
+        active: this.selectedPreviewId != null && c1.some((_, i) => this.previewIdFor(1, i) === this.selectedPreviewId),
+        onClick: () => this.openSide(1, 0),
       }),
     );
     bottom.append(band);
 
     const actions = el('div', { className: 'practice-actions' });
     actions.append(
-      button('Reroll', {
-        onClick: () => {
-          this.seed = (Math.random() * 0xffffffff) >>> 0;
-          this.rerollQuick();
-          this.synth.play('ui');
-          this.renderChrome();
-        },
-      }),
-    );
-    actions.append(
-      button('Custom', {
-        variant: 'ghost',
-        onClick: () => {
-          this.mode = 'custom';
-          this.synth.play('ui');
-          this.renderChrome();
-        },
-      }),
-    );
-    actions.append(
-      button('Fight', {
+      button('FIGHT', {
         variant: 'cta',
-        onClick: () => this.emit({ type: 'START', config: this.makeQuickConfig() }),
+        title: 'Launch the bout',
+        onClick: () => this.emit({ type: 'START', config: this.makeConfig() }),
       }),
     );
     bottom.append(actions);
     this.root.append(bottom);
   }
 
-  private renderSheet(): void {
+  /** Stable preview id for a squad slot (kept in sync with previewSnapshots). */
+  private previewIdFor(side: 0 | 1, slot: number): number {
+    return side === 0 ? slot + 1 : this.squad0.length + slot + 1;
+  }
+
+  private openSide(side: 0 | 1, slot: number): void {
+    this.editSide = side;
+    this.editSlot = slot;
+    this.editing = true;
+    this.synth.play('ui');
+    this.render();
+  }
+
+  private slotChip(side: 0 | 1, slot: number, card: QuickCard): HTMLButtonElement {
+    const id = this.previewIdFor(side, slot);
+    const beast = card.beastId ? BEASTS[card.beastId] : null;
+    const chip = el('button', {
+      className: `focus-chip${side === 1 ? ' is-red' : ' is-blue'}${this.selectedPreviewId === id ? ' is-selected' : ''}`,
+      attrs: { title: beast ? `${card.name} (${beast.short})` : card.name },
+    });
+    chip.append(el('span', { className: 'name', text: card.name.slice(0, 10) }));
+    chip.append(
+      el('span', {
+        className: 'tag',
+        text: beast ? beast.short : ARMATURAE[card.armatura].short,
+      }),
+    );
+    chip.addEventListener('click', () => this.openSide(side, slot));
+    return chip;
+  }
+
+  // ————— The unit chooser —————
+
+  private renderEditor(): void {
     this.sheet.classList.remove('is-hidden');
     clear(this.sheet);
+    const picks = this.sidePicks(this.editSide);
+    const current = picks[this.editSlot] ?? 'RANDOM';
 
     const header = el('div', { className: 'sheet-header' });
     header.append(
       button('←', {
         variant: 'ghost',
-        onClick: () => {
-          this.mode = 'quick';
-          this.rerollQuick();
-          this.synth.play('ui');
-          this.root.classList.remove('is-hidden');
-          this.renderChrome();
-        },
+        onClick: () => this.closeEditor(),
       }),
     );
-    header.append(el('h1', { text: 'Custom' }));
-    // balance spacer for centered title
+    header.append(
+      el('h1', {
+        text: `${this.editSide === 0 ? 'Blue' : 'Red'} · Fighter ${this.editSlot + 1}`,
+      }),
+    );
     header.append(el('span', { attrs: { style: 'width:3rem' } }));
     this.sheet.append(header);
-    this.sheet.append(
-      el('p', {
-        className: 'subhead',
-        text:
-          this.matchKind === 'venatio'
-            ? 'Blue kits · Red beasts'
-            : 'Pick kits for each side',
-      }),
-    );
 
-    const setup = el('div', { className: 'setup-row' });
-    setup.append(
-      segControl(['Match', 'Venatio'], this.matchKind === 'matchup' ? 0 : 1, (i) => {
-        this.setMatchKind(i === 0 ? 'matchup' : 'venatio');
-        this.synth.play('ui');
-        this.renderSheet();
+    const currentLine = el('div', { className: 'editor-current' });
+    currentLine.append(
+      el('span', { className: 'meta', text: `Now: ${pickTitle(current)}` }),
+    );
+    currentLine.append(
+      button('🎲', {
+        variant: 'quiet',
+        title: 'Roll a random unit for this slot',
+        onClick: () => this.rollSlot(this.editSide, this.editSlot),
       }),
     );
-    setup.append(
-      segControl(['1v1', '2v2', '3v3'], this.teamSize - 1, (i) => {
-        this.setTeamSize((i + 1) as TeamSize);
-        this.synth.play('ui');
-        this.renderSheet();
-      }),
-    );
-    this.sheet.append(setup);
-
-    if (this.matchKind !== 'venatio') {
-      const presets = el('div', { className: 'preset-block' });
-      presets.append(el('p', { className: 'section-label', text: 'Historical' }));
-      const grid = el('div', { className: 'preset-grid' });
-      for (const p of PAIRING_PRESETS) {
-        grid.append(
-          button(p.label, {
-            variant: 'quiet',
-            title: `${p.team0[0]} vs ${p.team1[0]} — sets the lineup, Fight launches`,
-            onClick: () => {
-              // Presets SET the matchup on the sand — the arena preview updates
-              // live; the player launches with Fight. No surprise instant start.
-              this.teamSize = 1;
-              this.slots0 = [p.team0[0]!, 'RANDOM', 'RANDOM'];
-              this.slots1 = [p.team1[0]!, 'RANDOM', 'RANDOM'];
-              this.matchKind = 'matchup';
-              this.editSlot0 = 0;
-              this.editSlot1 = 0;
-              this.synth.play('ui');
-              this.renderSheet();
-            },
-          }),
-        );
-      }
-      presets.append(grid);
-      this.sheet.append(presets);
+    if (picks.length > 1) {
+      currentLine.append(
+        button('Remove', {
+          variant: 'quiet',
+          onClick: () => this.removeSlot(this.editSide, this.editSlot),
+        }),
+      );
     }
+    this.sheet.append(currentLine);
 
-    const sides = el('div', { className: 'custom-sides' });
-    sides.append(this.buildSide(0));
-    sides.append(this.buildSide(1));
-    this.sheet.append(sides);
+    this.sheet.append(
+      el('p', { className: 'section-label', text: 'Kits' }),
+    );
+    const kitGrid = el('div', { className: 'pick-grid' });
+    for (const opt of KIT_PICKS) {
+      const b = button(opt === 'RANDOM' ? '?' : pickShort(opt), {
+        active: current === opt,
+        onClick: () => this.setPick(this.editSide, this.editSlot, opt),
+      });
+      b.title = pickTitle(opt);
+      kitGrid.append(b);
+    }
+    this.sheet.append(kitGrid);
+
+    this.sheet.append(
+      el('p', { className: 'section-label', text: 'Beasts' }),
+    );
+    const beastGrid = el('div', { className: 'pick-grid beast-picks' });
+    for (const opt of BEAST_PICKS) {
+      const b = button('', {
+        active: current === opt,
+        onClick: () => this.setPick(this.editSide, this.editSlot, opt),
+      });
+      b.title = pickTitle(opt);
+      if (opt === 'RANDOM') {
+        b.textContent = '?';
+      } else {
+        const def = BEASTS[opt];
+        b.append(el('span', { className: 'pick-short', text: def.short }));
+        b.append(el('span', { className: 'pick-name', text: def.name }));
+      }
+      beastGrid.append(b);
+    }
+    this.sheet.append(beastGrid);
 
     const foot = el('div', { className: 'sheet-footer' });
     foot.append(
-      button('Fight', {
+      button('Done', {
         variant: 'cta',
-        onClick: () => this.emit({ type: 'START', config: this.makeCustomConfig() }),
+        onClick: () => this.closeEditor(),
       }),
     );
     this.sheet.append(foot);
-  }
-
-  private buildSide(team: 0 | 1): HTMLElement {
-    const beastSide = team === 1 && this.matchKind === 'venatio';
-    const slots = team === 0 ? this.slots0 : this.slots1;
-    let edit = team === 0 ? this.editSlot0 : this.editSlot1;
-    const panel = el('div', { className: 'side-panel' });
-    const title = team === 0 ? 'Blue' : beastSide ? 'Beasts' : 'Red';
-    panel.append(el('h3', { text: title }));
-
-    const slotRow = el('div', { className: 'row-btns' });
-    for (let s = 0; s < this.teamSize; s++) {
-      const pick = slots[s]!;
-      const b = button(pickShort(pick), {
-        active: edit === s,
-        onClick: () => {
-          if (team === 0) this.editSlot0 = s;
-          else this.editSlot1 = s;
-          this.synth.play('ui');
-          this.renderSheet();
-        },
-      });
-      b.title = pickTitle(pick);
-      slotRow.append(b);
-    }
-    panel.append(slotRow);
-
-    edit = team === 0 ? this.editSlot0 : this.editSlot1;
-    const current = slots[edit]!;
-    const opts: readonly SlotPick[] = beastSide ? BEAST_PICKS : HUMAN_PICKS;
-    const grid = el('div', { className: `pick-grid${beastSide ? ' beast-picks' : ''}` });
-    for (const opt of opts) {
-      const lab = opt === 'RANDOM' ? '?' : pickShort(opt);
-      const b = button(lab, {
-        active: current === opt,
-        onClick: () => {
-          slots[edit] = opt as never;
-          this.synth.play('ui');
-          this.renderSheet();
-        },
-      });
-      b.title = pickTitle(opt);
-      if (opt !== 'RANDOM' && isBeastId(opt)) {
-        b.textContent = '';
-        b.append(el('span', { className: 'pick-short', text: BEASTS[opt].short }));
-        b.append(el('span', { className: 'pick-name', text: BEASTS[opt].name }));
-      }
-      grid.append(b);
-    }
-    panel.append(grid);
-    return panel;
   }
 }
 
