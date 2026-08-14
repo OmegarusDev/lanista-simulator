@@ -7,6 +7,7 @@ import { crowdStripDataUrl, noiseDataUrl } from '../gfx/pattern';
 import {
   elevation,
   easing,
+  fontDisplay,
   fontStack,
   motion,
   radius,
@@ -49,7 +50,7 @@ export function applyCssTokens(root: HTMLElement = document.documentElement): vo
   set('--sky-mid', colors.skyMid);
   set('--sky-low', colors.skyLow);
 
-  set('--font-display', fontStack);
+  set('--font-display', fontDisplay);
   set('--font-ui', fontStack);
   set('--touch', `${touchTarget}px`);
   set('--radius-sm', `${radius.sm}px`);
@@ -91,6 +92,11 @@ export function applyCssTokens(root: HTMLElement = document.documentElement): vo
   // Bronze alpha tints — the shared hairlines/borders.
   set('--bronze-faint', 'rgba(184, 149, 74, 0.16)');
   set('--bronze-soft', 'rgba(184, 149, 74, 0.35)');
+
+  // Roman accents — laurel (victory) and cinnabar (defeat), structural only.
+  set('--laurel', '#96a86e');
+  set('--laurel-soft', 'rgba(150, 168, 110, 0.35)');
+  set('--cinnabar', '#a8482c');
 
   set('--safe-top', 'env(safe-area-inset-top, 0px)');
   set('--safe-right', 'env(safe-area-inset-right, 0px)');

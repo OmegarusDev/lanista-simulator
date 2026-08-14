@@ -372,6 +372,8 @@ export class FightScene {
       mvp,
       crowdLean,
       cameraManual: this.glFrame.camera.mode === 'manual',
+      result:
+        this.match.result === 'ONGOING' ? null : this.match.result,
       entertainment: this.match.fighters.reduce(
         (sum, f) => sum + this.match.entertainment.score(f.id),
         0,

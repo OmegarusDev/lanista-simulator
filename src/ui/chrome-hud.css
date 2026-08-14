@@ -73,9 +73,10 @@
 }
 
 .hud-format {
+  font-family: var(--font-display);
   font-size: var(--type-meta);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   color: var(--parchment);
   flex: 0 0 auto;
 }
@@ -132,6 +133,11 @@
   opacity: 0.55;
 }
 
+.crowd-caption::before {
+  content: '❦ ';
+  color: var(--bronze);
+}
+
 .crowd-caption {
   text-align: center;
   font-size: var(--type-meta);
@@ -171,6 +177,11 @@
   z-index: var(--z-ticker);
 }
 
+.fight-ticker .ticker-line::before {
+  content: '❦ ';
+  color: var(--bronze);
+}
+
 .fight-ticker .ticker-line {
   align-self: flex-start;
   max-width: min(24rem, 72%);
@@ -186,14 +197,6 @@
   font-size: var(--type-eyebrow);
   letter-spacing: 0.02em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-}
-
-.overlay-panel .banner-sub {
-  margin: -0.5rem 0 var(--space-lg);
-  text-align: center;
-  color: var(--bronze-hot);
-  font-size: var(--type-meta);
-  letter-spacing: 0.04em;
 }
 
 /* Bottom bar — one compact row: team caps · roster chips · controls. */
@@ -381,6 +384,8 @@
 }
 
 .overlay-panel {
+  outline: 1px solid var(--bronze-soft);
+  outline-offset: 3px;
   width: min(20rem, 100%);
   padding: var(--space-lg);
   border: 1.5px solid var(--bronze);
@@ -394,6 +399,7 @@
 
 .overlay-panel h2 {
   margin: 0 0 var(--space-md);
+  font-family: var(--font-display);
   font-size: var(--type-title);
   text-align: center;
   letter-spacing: 0.06em;
@@ -406,9 +412,23 @@
 .overlay-panel .banner {
   margin: 0 0 var(--space-lg);
   text-align: center;
+  font-family: var(--font-display);
   font-size: var(--type-banner);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
+}
+
+.overlay-panel .banner.is-laurel {
+  color: var(--laurel);
+  text-shadow: 0 0 18px var(--laurel-soft);
+}
+
+.overlay-panel .banner-sub {
+  margin: -0.5rem 0 var(--space-lg);
+  text-align: center;
+  color: var(--bronze-hot);
+  font-size: var(--type-meta);
+  letter-spacing: 0.04em;
 }
 
 .overlay-panel .cta {

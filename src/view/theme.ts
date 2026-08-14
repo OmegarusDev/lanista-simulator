@@ -59,6 +59,13 @@ export const touchTarget = 48;
 
 export const fontStack = '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
 
+/**
+ * Display face — Roman inscriptional capitals (Cinzel, webfont with serif
+ * fallback). For headings, numbers, and carved labels; body stays Palatino.
+ */
+export const fontDisplay =
+  '"Cinzel", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
+
 /** Corner radii — carved tablet, not pills */
 export const radius = {
   sm: 3,

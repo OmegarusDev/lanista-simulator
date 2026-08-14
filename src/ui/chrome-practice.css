@@ -55,6 +55,7 @@
 
 .practice-top .title-row h1 {
   margin: 0;
+  font-family: var(--font-display);
   font-size: var(--type-title);
   letter-spacing: 0.06em;
   font-weight: 700;
@@ -139,6 +140,7 @@
   margin: 0;
   flex: 1;
   text-align: center;
+  font-family: var(--font-display);
   font-size: var(--type-display);
   letter-spacing: 0.06em;
 }
@@ -207,6 +209,7 @@
 
 .side-panel h3 {
   margin: 0 0 0.4rem;
+  font-family: var(--font-display);
   font-size: var(--type-label);
   letter-spacing: 0.04em;
 }

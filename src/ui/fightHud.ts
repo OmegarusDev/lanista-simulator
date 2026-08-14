@@ -53,6 +53,8 @@ export interface FightHudRender {
   crowdLean?: 'blue' | 'red' | null;
   /** Camera is manually held — only then does Recenter appear. */
   cameraManual?: boolean;
+  /** Match verdict — drives the Latin result banner. */
+  result?: 'TEAM0' | 'TEAM1' | 'DRAW' | null;
 }
 
 function fighterTag(f: FighterSnapshot): string {
@@ -324,7 +326,7 @@ export class FightHud {
       this.overlayEl =
         wantOverlay === 'pause'
           ? this.pauseOverlay(opts.career, opts.muted)
-          : this.endOverlay(opts.career, opts.resultLabel, opts.mvp, opts.entertainment);
+          : this.endOverlay(opts.career, opts.resultLabel, opts.mvp, opts.entertainment, opts.result);
       this.overlayEl.dataset.kind = wantOverlay;
       this.overlaySlot.append(this.overlayEl);
     } else if (!wantOverlay && this.overlayEl) {
@@ -412,11 +414,16 @@ export class FightHud {
     resultLabel: string,
     mvp?: string | null,
     entertainment?: number,
+    result?: 'TEAM0' | 'TEAM1' | 'DRAW' | null,
   ): HTMLElement {
     const ov = el('div', { className: 'overlay' });
     const panel = el('div', { className: 'overlay-panel' });
     panel.append(el('h2', { text: 'Bout over' }));
-    panel.append(el('div', { className: 'banner', text: resultLabel }));
+    // The verdict speaks Latin: Victoria (laurel) or Missio (drawn).
+    const banner = el('div', { className: `banner${result === 'DRAW' ? '' : ' is-laurel'}` });
+    banner.textContent = result === 'DRAW' ? 'MISSIO' : 'VICTORIA';
+    panel.append(banner);
+    panel.append(el('div', { className: 'banner-sub', text: resultLabel }));
     if (mvp) {
       panel.append(el('div', { className: 'banner-sub', text: mvp }));
     }
@@ -428,6 +435,7 @@ export class FightHud {
         }),
       );
     }
+    panel.append(el('div', { className: 'orn-divider' }));
     const stack = el('div', { className: 'stack' });
     if (career) {
       stack.append(

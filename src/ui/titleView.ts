@@ -2,6 +2,7 @@ import { hasSeasonSave, loadLegacy, loadSeason } from '../shell/save';
 import { btn, clear, el } from './dom';
 import { openHelp } from './help';
 import { confirmModal, farewellModal } from './modal';
+import { laurelEmblem } from './emblem';
 
 export type TitleAction =
   | { type: 'NONE' }
@@ -53,7 +54,9 @@ export class TitleView {
   private render(): void {
     clear(this.root);
     const brand = el('div', { className: 'brand' });
-    brand.append(el('div', { className: 'brand-mark', attrs: { 'aria-hidden': 'true' } }));
+    brand.append(
+      el('div', { className: 'brand-mark', html: laurelEmblem(), attrs: { 'aria-hidden': 'true' } }),
+    );
     brand.append(el('h1', { text: 'LANISTA' }));
     brand.append(el('p', { className: 'tagline', text: 'Amphitheatre · Ludus · Fame' }));
 
